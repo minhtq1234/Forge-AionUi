@@ -82,7 +82,7 @@ describe('MessageToolGroupSummary ACP image output', () => {
     };
 
     render(<MessageToolGroupSummary messages={[message]} />);
-    fireEvent.click(screen.getByText('View Steps · 1'));
+    fireEvent.click(screen.getByText('common.technical_details'));
 
     const image = screen.getByTestId('local-image');
     expect(image).toHaveAttribute('src', '/Users/test/.codex/generated_images/session/ig_test_image.png');
@@ -113,7 +113,7 @@ describe('MessageToolGroupSummary ACP image output', () => {
     };
 
     render(<MessageToolGroupSummary messages={[message]} />);
-    fireEvent.click(screen.getByText('View Steps · 1'));
+    fireEvent.click(screen.getByText('common.technical_details'));
     fireEvent.click(screen.getByLabelText('acp.image.download_aria'));
 
     expect(mockDownloadFileFromPath).toHaveBeenCalledWith(imagePath, 'ig_test_image.png');
@@ -145,7 +145,7 @@ describe('MessageToolGroupSummary ACP image output', () => {
     };
 
     render(<MessageToolGroupSummary messages={[message]} />);
-    fireEvent.click(screen.getByText('View Steps · 1'));
+    fireEvent.click(screen.getByText('common.technical_details'));
     fireEvent.click(screen.getByLabelText('acp.image.download_aria'));
 
     await waitFor(() => {
@@ -179,7 +179,7 @@ describe('MessageToolGroupSummary ACP image output', () => {
     };
 
     render(<MessageToolGroupSummary messages={[message]} />);
-    fireEvent.click(screen.getByText('View Steps · 1'));
+    fireEvent.click(screen.getByText('common.technical_details'));
 
     expect(screen.getByLabelText('acp.image.download_aria')).toBeInTheDocument();
   });
@@ -198,9 +198,56 @@ describe('MessageToolGroupSummary ACP image output', () => {
     };
 
     render(<MessageToolGroupSummary messages={[message]} />);
-    fireEvent.click(screen.getByText('View Steps · 1'));
+    fireEvent.click(screen.getByText('common.technical_details'));
 
     expect(screen.queryByTestId('local-image')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('acp.image.download_aria')).not.toBeInTheDocument();
+  });
+});
+
+describe('MessageToolGroupSummary plain-language activity', () => {
+  const acpStep = (status: string, toolCallId: string): IMessageAcpToolCall =>
+    ({
+      id: toolCallId,
+      conversation_id: 'conv-1',
+      type: 'acp_tool_call',
+      content: {
+        sessionId: 'sess-1',
+        update: {
+          sessionUpdate: 'tool_call_update',
+          tool_call_id: toolCallId,
+          status,
+          title: 'forge-reports_render_report',
+          kind: 'execute',
+        },
+      },
+    }) as unknown as IMessageAcpToolCall;
+
+  it('shows a single live line with the running label while working', () => {
+    render(<MessageToolGroupSummary messages={[acpStep('in_progress', 't1')]} />);
+    expect(screen.getByText('messages.toolActivity.tools.render_report.running')).toBeInTheDocument();
+    expect(screen.queryByText('common.technical_details')).not.toBeInTheDocument();
+  });
+
+  it('shows the done label and a technical-details toggle when settled', () => {
+    render(<MessageToolGroupSummary messages={[acpStep('completed', 't1')]} />);
+    expect(screen.getByText('messages.toolActivity.tools.render_report.done')).toBeInTheDocument();
+    expect(screen.getByText('common.technical_details')).toBeInTheDocument();
+  });
+
+  it('coalesces consecutive retries into one live line with an attempt count', () => {
+    render(
+      <MessageToolGroupSummary
+        messages={[acpStep('failed', 't1'), acpStep('failed', 't2'), acpStep('in_progress', 't3')]}
+      />
+    );
+    expect(screen.getByText(/messages\.toolActivity\.tools\.render_report\.running/)).toBeInTheDocument();
+    expect(screen.getByText(/messages\.toolActivity\.attempt/)).toBeInTheDocument();
+  });
+
+  it('renders a friendly error card for a final give-up', () => {
+    render(<MessageToolGroupSummary messages={[acpStep('failed', 't1')]} />);
+    expect(screen.getByText('messages.toolActivity.tools.render_report.failedTitle')).toBeInTheDocument();
+    expect(screen.getByText('messages.toolActivity.error.suggestion')).toBeInTheDocument();
   });
 });

@@ -1,15 +1,21 @@
 import type { BadgeProps } from '@arco-design/web-react';
-import { Badge, Button, Message, Spin, Tooltip } from '@arco-design/web-react';
+import { Badge, Button, Message, Tooltip } from '@arco-design/web-react';
 import { IconDown, IconRight } from '@arco-design/web-react/icon';
-import { Checklist, Download, Right } from '@icon-park/react';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Attention, CheckOne, Download, LoadingOne, Right } from '@icon-park/react';
+import { theme } from '@office-ai/platform';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ipcBridge } from '@/common';
 import { getAcpImageFileName } from '@/common/chat/acpToolCallOutput';
+import { coalesceToolCalls } from '@/common/chat/toolActivity/coalesceToolCalls';
+import type { CoalescedStep } from '@/common/chat/toolActivity/types';
 import type { NormalizedToolCall, NormalizedToolStatus, ToolMessage } from '@/common/chat/normalizeToolCall';
-import { normalizeToolMessages, hasRunningToolMessages } from '@/common/chat/normalizeToolCall';
+import { normalizeToolMessages } from '@/common/chat/normalizeToolCall';
 import LocalImageView from '@/renderer/components/media/LocalImageView';
+import { iconColors } from '@/renderer/styles/colors';
 import { downloadFileFromPath } from '@/renderer/utils/file/download';
+import ToolActivityError from './toolActivity/ToolActivityError';
+import { useToolActionText } from './toolActivity/useToolActionText';
 import './MessageToolGroupSummary.css';
 
 const statusToBadge = (status: NormalizedToolStatus): BadgeProps['status'] => {
@@ -140,28 +146,62 @@ const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
   );
 };
 
-const MessageToolGroupSummary: React.FC<{ messages: ToolMessage[] }> = ({ messages }) => {
-  const hasRunning = hasRunningToolMessages(messages);
-  const [showMore, setShowMore] = useState(hasRunning);
-
-  useEffect(() => {
-    if (hasRunning) setShowMore(true);
-  }, [hasRunning]);
-
-  const tools = useMemo(() => normalizeToolMessages(messages), [messages]);
-
+const StepRow: React.FC<{ label: string; status: NormalizedToolStatus }> = ({ label, status }) => {
+  const icon =
+    status === 'canceled' ? (
+      <Attention theme='filled' size='14' strokeLinejoin='bevel' fill={theme.Color.FunctionalColor.warn} />
+    ) : (
+      <CheckOne theme='filled' size='14' fill={theme.Color.FunctionalColor.success} />
+    );
   return (
-    <div className='tool-group-summary'>
-      <div className='tool-group-summary__header' onClick={() => setShowMore(!showMore)}>
-        <span className='tool-group-summary__icon'>
-          {hasRunning ? <Spin size={12} /> : <Checklist theme='outline' size='14' />}
-        </span>
-        <span className='tool-group-summary__label'>View Steps {tools.length > 0 ? `· ${tools.length}` : ''}</span>
-        <span className={`tool-group-summary__arrow${showMore ? ' tool-group-summary__arrow--open' : ''}`}>
+    <div className='flex flex-row items-center gap-8px color-#86909C'>
+      <span className='flex-shrink-0 flex items-center'>{icon}</span>
+      <span className='text-13px'>{label}</span>
+    </div>
+  );
+};
+
+const MessageToolGroupSummary: React.FC<{ messages: ToolMessage[] }> = ({ messages }) => {
+  const { t } = useTranslation();
+  const action = useToolActionText();
+  const tools = useMemo(() => normalizeToolMessages(messages), [messages]);
+  const steps = useMemo(() => coalesceToolCalls(tools), [tools]);
+  const hasRunning = useMemo(() => steps.some((s) => s.status === 'running' || s.status === 'pending'), [steps]);
+  const [showDetails, setShowDetails] = useState(false);
+
+  if (steps.length === 0) return null;
+
+  // While working: one evolving live line (the current running step).
+  if (hasRunning) {
+    const current =
+      [...steps].toReversed().find((s) => s.status === 'running' || s.status === 'pending') ?? steps[steps.length - 1];
+    return (
+      <div className='tool-group-summary'>
+        <div className='flex flex-row items-center gap-8px color-#86909C'>
+          <LoadingOne theme='outline' size='14' fill={iconColors.primary} className='loading' />
+          <span className='text-13px'>{action.label(current)}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Settled: a compact step list + one block-level Technical details toggle.
+  return (
+    <div className='tool-group-summary flex flex-col gap-6px'>
+      {steps.map((step) =>
+        step.status === 'error' ? (
+          <ToolActivityError key={step.key} step={step} />
+        ) : (
+          <StepRow key={step.key} label={action.label(step)} status={step.status} />
+        )
+      )}
+      <div className='tool-group-summary__header' onClick={() => setShowDetails(!showDetails)}>
+        <span className='tool-group-summary__label'>{t('common.technical_details')}</span>
+        <span className={`tool-group-summary__arrow${showDetails ? ' tool-group-summary__arrow--open' : ''}`}>
           <Right theme='outline' size='12' />
         </span>
       </div>
-      {showMore && (
+      {showDetails && (
         <div className='tool-group-summary__body'>
           {tools.map((item) => (
             <ToolItemDetail key={item.key} item={item} />
