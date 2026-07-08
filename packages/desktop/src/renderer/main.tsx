@@ -266,7 +266,9 @@ const Config: React.FC<PropsWithChildren> = ({ children }) => {
   } = useTranslation();
   const arcoLocale = arcoLocales[language] ?? enUS;
 
-  return React.createElement(ConfigProvider, { theme: { primaryColor: '#4E5969' }, locale: arcoLocale }, children);
+  // Forge orange primary — Arco generates the --primary-1..10 palette from this,
+  // so `type='primary'` actions render in the brand orange (DS: orange primary actions).
+  return React.createElement(ConfigProvider, { theme: { primaryColor: '#F05A22' }, locale: arcoLocale }, children);
 };
 
 const Main = () => {
