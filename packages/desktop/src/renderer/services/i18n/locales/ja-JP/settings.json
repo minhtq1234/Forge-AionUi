@@ -1243,5 +1243,21 @@
     }
   },
   "providerIdConflict": "Provider ID は既に存在します。もう一度お試しください。",
-  "autoInjectedSkillsHint": "すべての会話に自動的に読み込まれます。有効化は不要で、エージェントが使用するタイミングを判断します。"
+  "autoInjectedSkillsHint": "すべての会話に自動的に読み込まれます。有効化は不要で、エージェントが使用するタイミングを判断します。",
+  "capabilitiesSection": "Capabilities",
+  "capabilitiesSectionDesc": "Optional tools your agents can use. Add a key to enable each one.",
+  "capabilityWebSearch": "Web search (Tavily)",
+  "capabilityWebSearchDesc": "Search the web and read results. Requires a Tavily API key.",
+  "capabilityWebSearchPlaceholder": "Tavily API key (tvly-...)",
+  "capabilityGithub": "GitHub",
+  "capabilityGithubDesc": "Access repositories, issues and pull requests. Requires a personal access token.",
+  "capabilityGithubPlaceholder": "GitHub personal access token",
+  "capabilityPostgres": "Postgres database",
+  "capabilityPostgresDesc": "Query a Postgres database. Requires a connection string.",
+  "capabilityPostgresPlaceholder": "postgresql://user:pass@host:5432/dbname",
+  "capabilityMemory": "Long-term memory",
+  "capabilityMemoryDesc": "Remember facts across chats.",
+  "capabilitySaved": "Saved",
+  "capabilitySaveError": "Could not save. Check the value and try again.",
+  "capabilityMissingKey": "Add a key first to enable this capability."
 }

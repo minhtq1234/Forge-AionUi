@@ -5,6 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
+import { mergeCommodityMcpServerIds } from '@/common/config/builtinCapabilities';
 import type { IMcpServer, TProviderWithModel } from '@/common/config/storage';
 import { toSessionMcpServer } from '@/renderer/hooks/mcp/catalog';
 import { emitter } from '@/renderer/utils/emitter';
@@ -124,7 +125,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     const selectedSessionMcpServers = availableMcpServers
       .filter((server) => selectedMcpServerIdSet.has(server.id) && server.builtin === true)
       .map((server) => toSessionMcpServer(server));
-    const defaultSelectedMcpServerIds = assistantDefaultMcpIds;
+    const defaultSelectedMcpServerIds = mergeCommodityMcpServerIds(assistantDefaultMcpIds ?? [], availableMcpServers);
     const defaultSelectedUserMcpServerIds = availableMcpServers
       .filter((server) => (defaultSelectedMcpServerIds ?? []).includes(server.id) && server.builtin !== true)
       .map((server) => server.id);

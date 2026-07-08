@@ -246,6 +246,24 @@ describe('useGuidSend', () => {
     expect(payload.extra.backend).toBeUndefined();
   });
 
+  it('auto-attaches enabled commodity builtin servers when no explicit selection is made', async () => {
+    const deps = createDeps();
+    deps.selectedMcpServerIds = undefined;
+    deps.assistantDefaultMcpIds = [];
+    deps.availableMcpServers = [
+      { id: 'builtin-memory', name: 'aionui-memory', enabled: true, builtin: true } as IMcpServer,
+    ];
+
+    const { result } = renderHook(() => useGuidSend(deps));
+
+    await act(async () => {
+      await result.current.handleSend();
+    });
+
+    const payload = createConversationInvokeMock.mock.calls[0][0];
+    expect(payload.extra.selected_session_mcp_servers).toEqual([expect.objectContaining({ id: 'builtin-memory' })]);
+  });
+
   it('does not create a conversation without assistant identity', async () => {
     const deps = createDeps();
     deps.selectedAssistantId = null;

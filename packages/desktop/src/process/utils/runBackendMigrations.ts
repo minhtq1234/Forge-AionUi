@@ -8,6 +8,11 @@ import { execFile } from 'node:child_process';
 import { migrateConfigStorage, migrateLegacyMcpConfigToDb, migrateProviders } from '@/common/config/configMigration';
 import { httpRequest } from '@/common/adapter/httpBridge';
 import { mcpService } from '@/common/adapter/ipcBridge';
+import {
+  BUILTIN_CAPABILITIES,
+  buildBuiltinCapabilityServer,
+  BUILTIN_CHROME_DEVTOOLS_NAME,
+} from '@/common/config/builtinCapabilities';
 import type { ImageGenerationModelSetting } from '@/common/config/clientSettings';
 import {
   removeImageGenerationEnvKeys,
@@ -22,7 +27,6 @@ type ConfigFile = typeof ProcessConfigType;
 type MigrationStepResult = boolean;
 type McpImportServer = Partial<IMcpServer> & Pick<IMcpServer, 'name' | 'transport'>;
 type BackendClientPreferences = Record<string, unknown>;
-const BUILTIN_CHROME_DEVTOOLS_NAME = 'chrome-devtools';
 
 const LEGACY_BACKEND_CLIENT_PREFERENCE_KEYS = [
   'assistants',
@@ -160,17 +164,23 @@ function isSameStdioTransport(left: IMcpServer['transport'], right: IMcpServer['
   );
 }
 
-function buildDefaultMcpServers(): McpImportServer[] {
+export function buildDefaultMcpServers(): McpImportServer[] {
   const chromeConfig = {
     command: 'npx',
     args: ['-y', 'chrome-devtools-mcp@latest'],
   };
 
+  const capabilityServers: McpImportServer[] = BUILTIN_CAPABILITIES.map(
+    (descriptor) => buildBuiltinCapabilityServer(descriptor) as McpImportServer
+  );
+
   return [
     {
       name: BUILTIN_CHROME_DEVTOOLS_NAME,
       description: 'Default MCP server: chrome-devtools',
-      enabled: false,
+      // Tier-1 web browse: enabled by default on fresh installs. Existing installs
+      // already have this server and keep their prior choice (add-if-missing seeding).
+      enabled: true,
       builtin: true,
       transport: {
         type: 'stdio',
@@ -179,6 +189,7 @@ function buildDefaultMcpServers(): McpImportServer[] {
       },
       original_json: JSON.stringify({ mcpServers: { [BUILTIN_CHROME_DEVTOOLS_NAME]: chromeConfig } }, null, 2),
     },
+    ...capabilityServers,
   ];
 }
 
@@ -201,13 +212,8 @@ async function isCommandAvailable(command: string): Promise<boolean> {
   });
 }
 
-async function ensureBuiltinChromeDevtoolsAvailability(server?: IMcpServer): Promise<void> {
-  if (
-    !server ||
-    server.name !== BUILTIN_CHROME_DEVTOOLS_NAME ||
-    server.transport.type !== 'stdio' ||
-    server.transport.command !== 'npx'
-  ) {
+async function ensureBuiltinNpxServerAvailability(server?: IMcpServer): Promise<void> {
+  if (!server || !server.enabled || server.transport.type !== 'stdio' || server.transport.command !== 'npx') {
     return;
   }
 
@@ -219,7 +225,7 @@ async function ensureBuiltinChromeDevtoolsAvailability(server?: IMcpServer): Pro
   try {
     await mcpService.testMcpConnection.invoke(server);
   } catch (error) {
-    console.warn('[Migration] chrome-devtools MCP preflight failed', error);
+    console.warn(`[Migration] ${server.name} MCP preflight failed`, error);
   }
 }
 
@@ -293,8 +299,15 @@ async function ensureBootstrapMcpServersInDb(configFile: ConfigFile): Promise<vo
   }
 
   const refreshedServers = await mcpService.listServers.invoke();
-  const chromeDevtoolsServer = refreshedServers.find((server) => server.name === BUILTIN_CHROME_DEVTOOLS_NAME);
-  await ensureBuiltinChromeDevtoolsAvailability(chromeDevtoolsServer);
+  const npxBuiltinNames = new Set<string>([
+    BUILTIN_CHROME_DEVTOOLS_NAME,
+    ...BUILTIN_CAPABILITIES.map((descriptor) => descriptor.name),
+  ]);
+  await Promise.all(
+    refreshedServers
+      .filter((server) => server.builtin === true && npxBuiltinNames.has(server.name))
+      .map((server) => ensureBuiltinNpxServerAvailability(server))
+  );
 
   if (
     imageEnvResolution.ok === true &&
