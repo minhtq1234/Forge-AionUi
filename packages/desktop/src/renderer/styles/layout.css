@@ -31,17 +31,58 @@
   color: #9098a1;
 }
 
-/* Layout sider base styles */
+/* Layout sider base styles. position:relative anchors the ::before frost
+   overlay below; it does not change the opaque var(--bg-2) background. */
 .layout-sider {
+  position: relative;
   overflow-x: hidden;
   box-shadow: none !important;
   border-right: 1px solid var(--border-base);
 }
 
+/* "Top-lit depth" frost hint: a subtle warm-white lift catches light at the
+   top edge of the sidebar and fades to pure bg-2 by ~36% height, with a 1px
+   glass-edge highlight at the top and a faint warm seat at the very bottom.
+   The whole effect composites over the opaque bg-2 base (net result stays
+   fully opaque — no window/desktop transparency, no color drift), sits below
+   all real content, and does not scroll (scrolling happens in the child
+   .layout-sider-content). */
+.layout-sider::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* keep the overlay off the real 1px right border */
+  border-right: 1px solid transparent;
+  background-image:
+    linear-gradient(to bottom, rgba(255, 253, 247, 0.5) 0, rgba(255, 253, 247, 0.5) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 251, 242, 0.42) 0%, rgba(255, 251, 242, 0.16) 14%, rgba(255, 251, 242, 0) 36%),
+    linear-gradient(to top, rgba(120, 96, 60, 0.05) 0%, rgba(120, 96, 60, 0.018) 8%, rgba(120, 96, 60, 0) 20%);
+  background-repeat: no-repeat;
+}
+
+/* Dark mode: re-tuned, not a copy — a cooler, fainter top sheen and a soft
+   black bottom seat (a warm-white lift would look chalky on the dark ground). */
+[data-theme='dark'] .layout-sider::before {
+  background-image:
+    linear-gradient(to bottom, rgba(226, 232, 245, 0.1) 0, rgba(226, 232, 245, 0.1) 1px, transparent 1px),
+    linear-gradient(
+      to bottom,
+      rgba(226, 232, 245, 0.055) 0%,
+      rgba(226, 232, 245, 0.022) 14%,
+      rgba(226, 232, 245, 0) 34%
+    ),
+    linear-gradient(to top, rgba(0, 0, 0, 0.14) 0%, rgba(0, 0, 0, 0.05) 8%, rgba(0, 0, 0, 0) 20%);
+}
+
 /* Arco Layout inner container needs flex layout so Header + Content + Footer
    stack vertically and Content fills the remaining space (avoids a fixed
-   calc() that breaks when header height changes). */
+   calc() that breaks when header height changes). z-index lifts all real
+   sidebar content above the ::before frost overlay. */
 .layout-sider > .arco-layout-sider-children {
+  position: relative;
+  z-index: 1;
   display: flex !important;
   flex-direction: column !important;
   flex: 1 !important;
