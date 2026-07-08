@@ -167,7 +167,7 @@ const TeamSiderSection: React.FC<TeamSiderSectionProps> = ({
             <Tooltip content={t('team.sider.createTeam')} position='top'>
               <div
                 data-testid='team-create-btn'
-                className='ml-auto -mr-4px size-20px rd-4px flex items-center justify-center hover:bg-fill-4 transition-all shrink-0 cursor-pointer text-t-secondary hover:text-t-primary'
+                className='ml-auto -mr-4px size-20px rd-4px flex items-center justify-center hover:bg-fill-4 transition-all shrink-0 cursor-pointer text-primary'
                 onClick={(e) => {
                   e.stopPropagation();
                   setCreateTeamVisible(true);

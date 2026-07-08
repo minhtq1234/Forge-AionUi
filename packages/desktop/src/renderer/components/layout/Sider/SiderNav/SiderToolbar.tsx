@@ -66,7 +66,7 @@ const SiderToolbar: React.FC<SiderToolbarProps> = ({
           )}
           onClick={onNewChat}
         >
-          <span className='size-22px rd-6px bg-aou-2 border border-solid border-[var(--color-border-2)] group-hover:bg-fill-3 group-hover:border-transparent flex items-center justify-center shrink-0 transition-colors'>
+          <span className='size-22px rd-6px bg-[rgba(var(--primary-6),0.12)] border border-solid border-[rgba(var(--primary-6),0.24)] text-primary group-hover:bg-[rgba(var(--primary-6),0.2)] group-hover:border-[rgba(var(--primary-6),0.32)] flex items-center justify-center shrink-0 transition-colors'>
             <Plus
               theme='outline'
               size='14'
