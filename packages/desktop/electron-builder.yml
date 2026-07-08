@@ -1,10 +1,10 @@
 appId: com.aionui.app
-productName: AionUi
-executableName: AionUi
-copyright: Copyright © 2024 AionUi
+productName: Forge
+executableName: Forge
+copyright: Copyright © 2026 VNG Corporation
 
 protocols:
-  - name: AionUi Protocol
+  - name: Forge Protocol
     schemes:
       - aionui
 
@@ -177,9 +177,9 @@ linux:
   description: ${description}
   desktop:
     entry:
-      Name: AionUi
+      Name: Forge
       Comment: ${description}
-      Icon: AionUi
+      Icon: Forge
       Categories: Office;Utility;
       MimeType: x-scheme-handler/aionui;
 

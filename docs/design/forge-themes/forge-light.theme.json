@@ -1,0 +1,67 @@
+{
+  "id": "forge-light",
+  "name": "Forge",
+  "appearance": "light",
+  "builtin": false,
+  "created_at": 0,
+  "updated_at": 0,
+  "tokens": {
+    "--aou-1": "#f5f7fd",
+    "--aou-2": "#eef1fa",
+    "--aou-3": "#d8dff3",
+    "--aou-4": "#aebbeb",
+    "--aou-5": "#6e82d6",
+    "--aou-6": "#374ea2",
+    "--aou-7": "#2e3f82",
+    "--aou-8": "#253266",
+    "--aou-9": "#1b2549",
+    "--aou-10": "#12172e",
+
+    "--bg-base": "#faf6ee",
+    "--bg-1": "#f6f0e4",
+    "--bg-2": "#edeef1",
+    "--bg-3": "#dcdfe4",
+    "--bg-4": "#cbd0d8",
+    "--bg-5": "#c6cdd6",
+    "--bg-6": "#8a93a1",
+    "--bg-8": "#5b6472",
+    "--bg-9": "#2a303b",
+    "--bg-10": "#14181f",
+
+    "--bg-hover": "#f4f1ea",
+    "--bg-active": "#eae1d3",
+
+    "--text-primary": "#14181f",
+    "--color-text-1": "#14181f",
+    "--text-secondary": "#5b6472",
+    "--text-disabled": "#c6cdd6",
+
+    "--primary": "#f05a22",
+    "--success": "#058b57",
+    "--warning": "#e0a800",
+    "--danger": "#d64541",
+    "--info": "#29a7de",
+
+    "--border-base": "#dcdfe4",
+    "--border-light": "#eceef1",
+
+    "--brand": "#374ea2",
+    "--brand-light": "#eef1fa",
+    "--brand-hover": "#6e82d6",
+
+    "--message-user-bg": "#eef1fa",
+    "--message-tips-bg": "#f5f7fd",
+    "--workspace-btn-bg": "#f4f1ea",
+
+    "--fill": "#f4f1ea",
+    "--inverse": "#ffffff",
+
+    "--dialog-fill-0": "#ffffff",
+    "--text-0": "#14181f",
+    "--text-white": "#ffffff",
+    "--fill-0": "#ffffff",
+    "--fill-white-to-black": "#ffffff",
+    "--border-special": "#dcdfe4",
+    "--color-guid-agent-bar": "#eef1fa"
+  }
+}

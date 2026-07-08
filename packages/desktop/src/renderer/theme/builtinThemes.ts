@@ -40,14 +40,14 @@ const decorative = (id: string, name: string, appearance: Theme['appearance'], c
 export const BUILTIN_THEMES: Theme[] = [
   {
     id: LIGHT_THEME_ID,
-    name: 'Light',
+    name: 'Forge',
     appearance: 'light',
     cover: defaultThemeCover,
     builtin: true,
     created_at: T0,
     updated_at: T0,
   },
-  { id: DARK_THEME_ID, name: 'Dark', appearance: 'dark', builtin: true, created_at: T0, updated_at: T0 },
+  { id: DARK_THEME_ID, name: 'Forge Dark', appearance: 'dark', builtin: true, created_at: T0, updated_at: T0 },
   decorative('misaka-mikoto-theme', 'Misaka Mikoto Theme', 'light', misakaMikotoCss, misakaMikotoCover),
   decorative('hello-kitty', 'Hello Kitty', 'light', helloKittyCss, helloKittyCover),
   decorative('retro-windows', 'Retro Windows', 'light', retroWindowsCss, retroWindowsCover),

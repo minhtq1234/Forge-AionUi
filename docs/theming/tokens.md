@@ -1,5 +1,13 @@
 # Theme Tokens Reference / 主题语义 Token 参考
 
+> **Forge rebrand (Phase 4).** Token _values_ now carry the Forge design system
+> (orange `--primary` `#F05A22`, navy `--brand`/`--aou-*`, cream/dark-ground surfaces).
+> The **authoritative current values** live in
+> `packages/desktop/src/renderer/styles/themes/default-color-scheme.css` (which also
+> overrides Arco's `--arcoblue/red/green/orange/cyan-*` palettes). Some illustrative
+> value columns below still show pre-Forge neutrals — treat the CSS file and
+> [docs/design/forge-rebrand-brief.md](../design/forge-rebrand-brief.md) §6 as the source of truth.
+
 This is the canonical list of semantic design tokens used by AionUi's theming system.
 A **Theme** (`packages/desktop/src/common/theme/types.ts`) can override any of these via its
 optional `tokens` map, or via raw `css`. Built-in `Light`/`Dark` rely on the base stylesheet
@@ -29,16 +37,16 @@ A 10-step brand ramp (light→dark in light mode; the ramp **inverts** in dark m
 
 | Token      | Light     | Dark      | Purpose / 用途                        |
 | ---------- | --------- | --------- | ------------------------------------- |
-| `--aou-1`  | `#eff0f6` | `#2a2a2a` | Lightest brand tint / surface wash    |
-| `--aou-2`  | `#e5e7f0` | `#3d4150` | Brand tint (home Agent bar dark base) |
-| `--aou-3`  | `#d1d5e5` | `#525a77` | Brand tint                            |
-| `--aou-4`  | `#b5bcd6` | `#6a749b` | Brand tint                            |
-| `--aou-5`  | `#97a0c5` | `#838fba` | Brand mid                             |
-| `--aou-6`  | `#7583b2` | `#a1aacb` | Brand base (= `--brand` light)        |
-| `--aou-7`  | `#596590` | `#b5bcd6` | Brand strong                          |
-| `--aou-8`  | `#3f4868` | `#d1d5e5` | Brand strong                          |
-| `--aou-9`  | `#262c41` | `#e5e7f0` | Brand darkest tint                    |
-| `--aou-10` | `#0d101c` | `#eff0f6` | Brand extreme                         |
+| `--aou-1`  | `#f5f7fd` | `#12172e` | Lightest brand tint / surface wash    |
+| `--aou-2`  | `#eef1fa` | `#1b2549` | Brand tint (home Agent bar dark base) |
+| `--aou-3`  | `#d8dff3` | `#253266` | Brand tint                            |
+| `--aou-4`  | `#aebbeb` | `#2e3f82` | Brand tint                            |
+| `--aou-5`  | `#6e82d6` | `#374ea2` | Brand mid                             |
+| `--aou-6`  | `#374ea2` | `#4e63c0` | Brand base (= `--brand`; Forge navy)  |
+| `--aou-7`  | `#2e3f82` | `#6e82d6` | Brand strong                          |
+| `--aou-8`  | `#253266` | `#8fa0e0` | Brand strong                          |
+| `--aou-9`  | `#1b2549` | `#b8c2ee` | Brand darkest tint                    |
+| `--aou-10` | `#12172e` | `#e8ecfb` | Brand extreme                         |
 
 ### Backgrounds / 背景 (`--bg-*`)
 
@@ -72,13 +80,13 @@ Layered surface scale — higher number = stronger/darker separation in light mo
 
 ### Semantic state / 语义状态
 
-| Token       | Light     | Dark      | Purpose / 用途                                                                          |
-| ----------- | --------- | --------- | --------------------------------------------------------------------------------------- |
-| `--primary` | `#165dff` | `#4d9fff` | Primary action / accent / 主色                                                          |
-| `--success` | `#00b42a` | `#23c343` | Success / 成功                                                                          |
-| `--warning` | `#ff7d00` | `#ff9a2e` | Warning / 警告                                                                          |
-| `--danger`  | `#f53f3f` | `#f76560` | Error / destructive / 危险                                                              |
-| `--info`    | `#165dff` | `#4d9fff` | Informational (= primary) / 信息 · ⚠️ **currently unused** — components use `--primary` |
+| Token       | Light     | Dark      | Purpose / 用途                                                                     |
+| ----------- | --------- | --------- | ---------------------------------------------------------------------------------- |
+| `--primary` | `#f05a22` | `#f05a22` | Primary action / accent / 主色 (Forge orange, constant across themes)              |
+| `--success` | `#058b57` | `#03ca77` | Success / 成功                                                                     |
+| `--warning` | `#e0a800` | `#f0be2e` | Warning / 警告 (amber)                                                             |
+| `--danger`  | `#d64541` | `#e86461` | Error / destructive / 危险                                                         |
+| `--info`    | `#29a7de` | `#4ebbea` | Informational (cyan) / 信息 · ⚠️ **currently unused** — components use `--primary` |
 
 ### Borders / 边框
 
@@ -92,9 +100,9 @@ Layered surface scale — higher number = stronger/darker separation in light mo
 
 | Token           | Light     | Dark      | Purpose / 用途                           |
 | --------------- | --------- | --------- | ---------------------------------------- |
-| `--brand`       | `#7583b2` | `#a1aacb` | Brand color / 品牌色                     |
-| `--brand-light` | `#eff0f6` | `#3d4150` | Brand-tinted background / 品牌浅(深)背景 |
-| `--brand-hover` | `#b5bcd6` | `#6a749b` | Brand hover / 品牌悬停                   |
+| `--brand`       | `#374ea2` | `#4e63c0` | Brand color (Forge navy) / 品牌色        |
+| `--brand-light` | `#eef1fa` | `#1e2536` | Brand-tinted background / 品牌浅(深)背景 |
+| `--brand-hover` | `#6e82d6` | `#6e82d6` | Brand hover / 品牌悬停                   |
 
 ### Fills & inverse / 填充与反色
 

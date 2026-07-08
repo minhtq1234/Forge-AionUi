@@ -1,0 +1,59 @@
+/* Forge shape & depth — radius, spacing, shadows, focus ring.
+   From the Forge design system (tokens/radius.css, spacing.css, shadows.css).
+   Shadows are ink-tinted with a large soft negative-spread drop paired with a
+   crisp 1px contact shadow; orange primary actions carry a brand glow; the
+   focus ring is navy. See docs/design/forge-rebrand-brief.md §7. */
+
+:root {
+  /* ---------- Radius ---------- */
+  --radius-xs: 5px; /* id / status badges */
+  --radius-sm: 6px; /* segmented-control thumb, small chips */
+  --radius-md: 8px; /* buttons, input fields, icon tiles */
+  --radius-lg: 12px; /* standard cards, KPI tiles */
+  --radius-xl: 14px; /* app frames, large cards */
+  --radius-2xl: 18px; /* feature / logo cards */
+  --radius-3xl: 22px; /* hero panels */
+  --radius-pill: 999px;
+
+  /* ---------- Spacing (4px grid) ---------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 14px;
+  --space-5: 16px;
+  --space-6: 18px;
+  --space-7: 22px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 40px;
+  --space-12: 56px;
+  --gap-chip: 8px;
+  --gap-card: 12px;
+  --gap-section: 14px;
+
+  /* ---------- Shadows (light) — ink-tinted, negative-spread + 1px contact ---------- */
+  --shadow-card: 0 1px 2px rgba(20, 24, 31, 0.05);
+  --shadow-raised: 0 1px 2px rgba(20, 24, 31, 0.05), 0 16px 34px -24px rgba(20, 24, 31, 0.28);
+  --shadow-elevated: 0 1px 2px rgba(20, 24, 31, 0.05), 0 20px 44px -30px rgba(20, 24, 31, 0.3);
+  --shadow-page: 0 2px 8px rgba(20, 24, 31, 0.1), 0 26px 50px -30px rgba(20, 24, 31, 0.4);
+  --shadow-dark: 0 2px 8px rgba(20, 24, 31, 0.2), 0 34px 64px -34px rgba(20, 24, 31, 0.6);
+
+  /* Brand-tinted glow — orange primary actions & the app icon */
+  --shadow-brand: 0 2px 8px -2px rgba(240, 90, 34, 0.6);
+  --shadow-brand-soft: 0 6px 16px -6px rgba(240, 90, 34, 0.55);
+
+  /* Focus ring (navy, used on editable selections / focused fields) */
+  --ring-focus: 0 0 0 3px rgba(55, 78, 162, 0.16);
+}
+
+/* Dark mode: ink shadows disappear on dark ground, so lift opacity for real depth,
+   and lighten the focus ring to the dark navy so it reads on the deep backdrop. */
+html[data-theme='dark'],
+body[arco-theme='dark'] {
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 34px -24px rgba(0, 0, 0, 0.6);
+  --shadow-elevated: 0 1px 2px rgba(0, 0, 0, 0.4), 0 20px 44px -30px rgba(0, 0, 0, 0.66);
+  --shadow-page: 0 2px 8px rgba(0, 0, 0, 0.5), 0 26px 50px -30px rgba(0, 0, 0, 0.72);
+  --shadow-dark: 0 2px 8px rgba(0, 0, 0, 0.55), 0 34px 64px -34px rgba(0, 0, 0, 0.8);
+  --ring-focus: 0 0 0 3px rgba(78, 99, 192, 0.3);
+}

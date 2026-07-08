@@ -1,0 +1,68 @@
+{
+  "id": "forge-dark",
+  "name": "Forge (Dark)",
+  "appearance": "dark",
+  "builtin": false,
+  "created_at": 0,
+  "updated_at": 0,
+  "_provisional": "Dark values are derived from the DS readme prose; the referenced tokens/dark.css was not delivered. Replace exact ramps once dark.css is in hand. See README.",
+  "tokens": {
+    "--aou-1": "#12172e",
+    "--aou-2": "#1b2549",
+    "--aou-3": "#253266",
+    "--aou-4": "#2e3f82",
+    "--aou-5": "#374ea2",
+    "--aou-6": "#4e63c0",
+    "--aou-7": "#6e82d6",
+    "--aou-8": "#8fa0e0",
+    "--aou-9": "#b8c2ee",
+    "--aou-10": "#e8ecfb",
+
+    "--bg-base": "#0b0e14",
+    "--bg-1": "#12161f",
+    "--bg-2": "#161c27",
+    "--bg-3": "#1e2536",
+    "--bg-4": "#2a3344",
+    "--bg-5": "#3b4658",
+    "--bg-6": "#5e7086",
+    "--bg-8": "#7c8da6",
+    "--bg-9": "#9db0c8",
+    "--bg-10": "#c4d0e0",
+
+    "--bg-hover": "#161c27",
+    "--bg-active": "#1e2536",
+
+    "--text-primary": "#e6ecf5",
+    "--color-text-1": "#e6ecf5",
+    "--text-secondary": "#9db0c8",
+    "--text-disabled": "#5e7086",
+
+    "--primary": "#f05a22",
+    "--success": "#03ca77",
+    "--warning": "#f0be2e",
+    "--danger": "#e86461",
+    "--info": "#4ebbea",
+
+    "--border-base": "#2a3344",
+    "--border-light": "#1e2536",
+
+    "--brand": "#4e63c0",
+    "--brand-light": "#1e2536",
+    "--brand-hover": "#6e82d6",
+
+    "--message-user-bg": "#1e2536",
+    "--message-tips-bg": "#161c27",
+    "--workspace-btn-bg": "#161c27",
+
+    "--fill": "#12161f",
+    "--inverse": "#ffffff",
+
+    "--dialog-fill-0": "#1e2536",
+    "--text-0": "#e6ecf5",
+    "--text-white": "#ffffff",
+    "--fill-0": "rgba(255, 255, 255, 0.08)",
+    "--fill-white-to-black": "#000000",
+    "--border-special": "#3b4658",
+    "--color-guid-agent-bar": "#1e2536"
+  }
+}

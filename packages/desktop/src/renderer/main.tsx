@@ -64,7 +64,10 @@ import { useTranslation } from 'react-i18next';
 
 // Styles
 import 'uno.css';
+import './styles/fonts.css';
+import './styles/shape.css';
 import './styles/arco-override.css';
+import './styles/typography.css';
 import './styles/themes/index.css';
 import './styles/markdown.css';
 

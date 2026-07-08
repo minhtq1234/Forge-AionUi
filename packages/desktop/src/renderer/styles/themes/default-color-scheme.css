@@ -1,144 +1,268 @@
-/* Default Color Scheme - AOU Purple Theme */
+/* Default Color Scheme - Forge Design Language */
+/* Token values map the Forge design system onto AionUi's theming layer.
+   See docs/design/forge-rebrand-brief.md (§6) and docs/design/forge-themes/*.theme.json.
+   本文件将 Forge 设计系统的取值映射到 AionUi 主题变量（明/暗两套）。 */
 
 /* Light Mode */
 :root,
 [data-color-scheme='default'] {
-  /* AOU Brand Colors - Light Mode */
-  --aou-1: #eff0f6;
-  --aou-2: #e5e7f0;
-  --aou-3: #d1d5e5;
-  --aou-4: #b5bcd6;
-  --aou-5: #97a0c5;
-  --aou-6: #7583b2;
-  --aou-7: #596590;
-  --aou-8: #3f4868;
-  --aou-9: #262c41;
-  --aou-10: #0d101c;
+  /* Forge brand ramp (navy) — anchored at --aou-6 = #374EA2 (navy-500).
+     Lightest → darkest in light mode (inverts in dark). */
+  --aou-1: #f5f7fd;
+  --aou-2: #eef1fa;
+  --aou-3: #d8dff3;
+  --aou-4: #aebbeb;
+  --aou-5: #6e82d6;
+  --aou-6: #374ea2;
+  --aou-7: #2e3f82;
+  --aou-8: #253266;
+  --aou-9: #1b2549;
+  --aou-10: #12172e;
 
-  /* Background Colors - Light Mode */
-  --bg-base: #ffffff; /* bg-0 - 主背景 */
-  --bg-1: #f9fafb; /* 次级背景 */
-  --bg-2: #f2f3f5; /* 三级背景 */
-  --bg-3: #e5e6eb; /* 边框/分隔 */
-  --bg-4: #c9cdd4;
-  --bg-5: #adb4c1;
-  --bg-6: #86909c; /* 禁用/次要文字 */
-  --bg-8: #4e5969;
-  --bg-9: #1d2129;
-  --bg-10: #0c0e12;
+  /* Background Colors - Light Mode
+     Forge: cream working surfaces floating over a cool-grey canvas; white cards. */
+  --bg-base: #faf6ee; /* cream working surface (primary) / 主背景 */
+  --bg-1: #f6f0e4; /* cream, secondary surface / 次级背景 */
+  --bg-2: #edeef1; /* cool-grey canvas / 三级背景 */
+  --bg-3: #dcdfe4; /* cool hairline border / 边框分隔 */
+  --bg-4: #cbd0d8;
+  --bg-5: #c6cdd6;
+  --bg-6: #8a93a1; /* ink-500 — muted / tertiary text / 禁用·次要文字 */
+  --bg-8: #5b6472;
+  --bg-9: #2a303b;
+  --bg-10: #14181f;
 
-  /* Interactive State Colors - Light Mode */
-  --bg-hover: #f3f4f6; /* 悬停背景 - 在 bg-1 和 bg-2 之间 */
-  --bg-active: #e5e6eb; /* 激活/按下背景 */
+  /* Interactive State Colors - Light Mode (warm cream steps) */
+  --bg-hover: #f4f1ea; /* cream-300 / 悬停背景 */
+  --bg-active: #eae1d3; /* cream-border / 激活背景 */
 
-  /* Text Colors - Light Mode */
-  --text-primary: #000000; /* 主要文字 */
-  --color-text-1: #000000; /* Arco 主文字 — 与 --text-primary 对齐 */
-  --text-secondary: #454d5f; /* 次要文字 — 加深至 ~7.5:1 对比度 */
-  --text-disabled: #c9cdd4; /* 禁用文字 */
+  /* Text Colors - Light Mode (cool ink ramp) */
+  --text-primary: #14181f; /* ink-900 / 主要文字 */
+  --color-text-1: #14181f; /* Arco 主文字 — aligned with --text-primary */
+  --text-secondary: #5b6472; /* ink-600 / 次要文字 (~5.5:1 on cream) */
+  --text-disabled: #c6cdd6; /* ink-300 / 禁用文字 */
 
   /* Semantic Colors - Light Mode */
-  --primary: #165dff;
-  --success: #00b42a;
-  --warning: #ff7d00;
-  --danger: #f53f3f;
-  --info: #165dff;
+  --primary: #f05a22; /* Forge orange — actions, links, accents */
+  --success: #058b57; /* pos-500 */
+  --warning: #e0a800; /* warn-500 (amber) */
+  --danger: #d64541; /* neg-500 */
+  --info: #29a7de; /* info-500 (cyan) */
 
   /* Border Colors - Light Mode */
-  --border-base: #e5e6eb; /* 基础边框 */
-  --border-light: #f2f3f5; /* 浅色边框 */
+  --border-base: #dcdfe4; /* cool border / 基础边框 */
+  --border-light: #eceef1; /* subtle border / 浅色边框 */
 
-  /* Brand Colors - Light Mode */
-  --brand: #7583b2; /* 品牌色 */
-  --brand-light: #eff0f6; /* 品牌浅色背景 */
-  --brand-hover: #b5bcd6; /* 品牌色悬停 */
+  /* Brand Colors - Light Mode (navy is the structural partner) */
+  --brand: #374ea2; /* navy-500 / 品牌色 */
+  --brand-light: #eef1fa; /* navy-tint-bg / 品牌浅色背景 */
+  --brand-hover: #6e82d6; /* navy-300 / 品牌色悬停 */
 
   /* Message & UI Component Colors - Light Mode */
-  --message-user-bg: #e9efff; /* 用户消息背景（浅蓝） */
-  --message-tips-bg: #f0f4ff; /* 提示信息背景（浅蓝） */
-  --workspace-btn-bg: #eff0f1; /* 工作区按钮背景 */
+  --message-user-bg: #eef1fa; /* user chat — navy tint / 用户消息背景 */
+  --message-tips-bg: #f5f7fd; /* navy-tint-weak / 提示信息背景 */
+  --workspace-btn-bg: #f4f1ea; /* cream-300 / 工作区按钮背景 */
 
   /* Special Colors - Light Mode */
-  --fill: #f7f8fa; /* 填充色 */
-  --inverse: #ffffff; /* 反色（黑白切换）*/
+  --fill: #f4f1ea; /* cream fill / 填充色 */
+  --inverse: #ffffff; /* 反色 */
 
   /* Custom Colors - Light Mode */
-  --dialog-fill-0: #ffffff; /* 对话框填充色 */
-  --text-0: #000000; /* 纯黑文字色 */
+  --dialog-fill-0: #ffffff; /* white cards / dialogs / 对话框填充 */
+  --text-0: #14181f; /* 纯黑文字色 */
   --text-white: #ffffff; /* 纯白文字色 */
   --fill-0: #ffffff; /* 填充色 0 */
   --fill-white-to-black: #ffffff; /* 白到黑填充色 */
   --border-special: var(--bg-3); /* 特殊边框色 */
-  --color-guid-agent-bar: #eaecf7; /* 首页 Agent 选择条背景 - 亮色 */
+  --color-guid-agent-bar: #eef1fa; /* 首页 Agent 选择条背景 — navy tint */
+
+  /* ---- Arco palette overrides (RGB triplets) - Light Mode ----
+     Arco derives every component color from these ramps
+     (`rgb(var(--primary-6))`, `--color-primary-light-*`, etc.). Overriding the
+     base palettes here (outranking arco.css's `body {}` via `:root`) re-skins all
+     Arco components to Forge. Generated with @arco-design/color, anchored at -6.
+     Arco maps: primary/link→arcoblue, success→green, warning→orange, danger→red. */
+  --arcoblue-1: 255, 242, 232;
+  --arcoblue-2: 252, 215, 191;
+  --arcoblue-3: 249, 186, 150;
+  --arcoblue-4: 246, 156, 110;
+  --arcoblue-5: 243, 123, 72;
+  --arcoblue-6: 240, 90, 34; /* #F05A22 Forge orange */
+  --arcoblue-7: 199, 63, 21;
+  --arcoblue-8: 158, 41, 11;
+  --arcoblue-9: 117, 23, 4;
+  --arcoblue-10: 77, 10, 0;
+
+  --red-1: 255, 237, 232;
+  --red-2: 247, 203, 195;
+  --red-3: 239, 170, 159;
+  --red-4: 230, 136, 126;
+  --red-5: 222, 103, 94;
+  --red-6: 214, 69, 65; /* #D64541 */
+  --red-7: 180, 41, 41;
+  --red-8: 145, 22, 26;
+  --red-9: 111, 8, 15;
+  --red-10: 77, 0, 8;
+
+  --green-1: 232, 255, 242;
+  --green-2: 170, 232, 200;
+  --green-3: 117, 209, 164;
+  --green-4: 71, 185, 134;
+  --green-5: 34, 162, 109;
+  --green-6: 5, 139, 87; /* #058B57 */
+  --green-7: 3, 123, 81;
+  --green-8: 2, 108, 74;
+  --green-9: 1, 92, 66;
+  --green-10: 0, 77, 57;
+
+  --orange-1: 255, 253, 232;
+  --orange-2: 249, 241, 181;
+  --orange-3: 243, 226, 132;
+  --orange-4: 236, 209, 86;
+  --orange-5: 230, 189, 42;
+  --orange-6: 224, 168, 0; /* #E0A800 amber */
+  --orange-7: 187, 134, 0;
+  --orange-8: 150, 103, 0;
+  --orange-9: 113, 74, 0;
+  --orange-10: 77, 47, 0;
+
+  --cyan-1: 232, 252, 255;
+  --cyan-2: 190, 239, 248;
+  --cyan-3: 150, 223, 242;
+  --cyan-4: 112, 206, 235;
+  --cyan-5: 75, 188, 229;
+  --cyan-6: 41, 167, 222; /* #29A7DE */
+  --cyan-7: 26, 132, 186;
+  --cyan-8: 14, 100, 149;
+  --cyan-9: 5, 70, 113;
+  --cyan-10: 0, 43, 77;
 }
 
 /* Dark Mode */
 [data-color-scheme='default'][data-theme='dark'] {
-  /* AOU Brand Colors - Dark Mode */
-  --aou-1: #2a2a2a;
-  --aou-2: #3d4150;
-  --color-guid-agent-bar: var(--aou-2); /* 首页 Agent 选择条背景 - 暗色沿用 aou-2 */
-  --aou-3: #525a77;
-  --aou-4: #6a749b;
-  --aou-5: #838fba;
-  --aou-6: #a1aacb;
-  --aou-7: #b5bcd6;
-  --aou-8: #d1d5e5;
-  --aou-9: #e5e7f0;
-  --aou-10: #eff0f6;
+  /* Forge brand ramp (navy) — inverted for dark; --aou-6 = #4E63C0 (lightened navy). */
+  --aou-1: #12172e;
+  --aou-2: #1b2549;
+  --color-guid-agent-bar: #1e2536; /* 首页 Agent 选择条背景 - 暗色 */
+  --aou-3: #253266;
+  --aou-4: #2e3f82;
+  --aou-5: #374ea2;
+  --aou-6: #4e63c0;
+  --aou-7: #6e82d6;
+  --aou-8: #8fa0e0;
+  --aou-9: #b8c2ee;
+  --aou-10: #e8ecfb;
 
-  /* Background Colors - Dark Mode */
-  --bg-base: #0e0e0e; /* 主背景 */
-  --bg-1: #1a1a1a; /* 次级背景 */
-  --bg-2: #262626; /* 三级背景 */
-  --bg-3: #333333; /* 边框/分隔 */
-  --bg-4: #404040;
-  --bg-5: #4d4d4d;
-  --bg-6: #5a5a5a; /* 禁用/次要文字 */
-  --bg-8: #737373;
-  --bg-9: #a6a6a6;
-  --bg-10: #d9d9d9;
+  /* Background Colors - Dark Mode (dark-ground ramp) */
+  --bg-base: #0b0e14; /* deep backdrop / 主背景 */
+  --bg-1: #12161f; /* 次级背景 */
+  --bg-2: #161c27; /* 三级背景 */
+  --bg-3: #1e2536; /* cards / raised surface / 边框分隔 */
+  --bg-4: #2a3344;
+  --bg-5: #3b4658;
+  --bg-6: #5e7086; /* 禁用/次要文字 */
+  --bg-8: #7c8da6;
+  --bg-9: #9db0c8;
+  --bg-10: #c4d0e0;
 
   /* Interactive State Colors - Dark Mode */
-  --bg-hover: #1f1f1f; /* 悬停背景 */
-  --bg-active: #2d2d2d; /* 激活/按下背景 */
+  --bg-hover: #161c27; /* 悬停背景 */
+  --bg-active: #1e2536; /* 激活背景 */
 
-  /* Text Colors - Dark Mode */
-  --text-primary: #ffffff; /* 主要文字 */
-  --color-text-1: #ffffff; /* Arco 主文字 — 与 --text-primary 对齐 */
-  --text-secondary: #ced3da; /* 次要文字 — 提亮至 ~11:1 对比度 */
-  --text-disabled: #737373; /* 禁用文字 */
+  /* Text Colors - Dark Mode (cool light ramp) */
+  --text-primary: #e6ecf5; /* 主要文字 */
+  --color-text-1: #e6ecf5; /* Arco 主文字 */
+  --text-secondary: #9db0c8; /* 次要文字 (~8.7:1 on dark ground) */
+  --text-disabled: #5e7086; /* 禁用文字 */
 
-  /* Semantic Colors - Dark Mode */
-  --primary: #4d9fff;
-  --success: #23c343;
-  --warning: #ff9a2e;
-  --danger: #f76560;
-  --info: #4d9fff;
+  /* Semantic Colors - Dark Mode (brightened; orange unchanged) */
+  --primary: #f05a22; /* Forge orange — constant across themes */
+  --success: #03ca77;
+  --warning: #f0be2e;
+  --danger: #e86461;
+  --info: #4ebbea;
 
   /* Border Colors - Dark Mode */
-  --border-base: #333333; /* 基础边框 */
-  --border-light: #262626; /* 浅色边框 */
+  --border-base: #2a3344; /* 基础边框 */
+  --border-light: #1e2536; /* 浅色边框 */
 
   /* Brand Colors - Dark Mode */
-  --brand: #a1aacb; /* 品牌色 */
-  --brand-light: #3d4150; /* 品牌深色背景 */
-  --brand-hover: #6a749b; /* 品牌色悬停 */
+  --brand: #4e63c0; /* navy lightened / 品牌色 */
+  --brand-light: #1e2536; /* 品牌深色背景 */
+  --brand-hover: #6e82d6; /* 品牌色悬停 */
 
   /* Message & UI Component Colors - Dark Mode */
-  --message-user-bg: #1e2a3a; /* 用户消息背景（深蓝灰） */
-  --message-tips-bg: #1a2333; /* 提示信息背景（深蓝灰） */
-  --workspace-btn-bg: #1f1f1f; /* 工作区按钮背景 */
+  --message-user-bg: #1e2536; /* 用户消息背景 */
+  --message-tips-bg: #161c27; /* 提示信息背景 */
+  --workspace-btn-bg: #161c27; /* 工作区按钮背景 */
 
   /* Special Colors - Dark Mode */
-  --fill: #1a1a1a; /* 填充色 */
-  --inverse: #ffffff; /* 反色（黑白切换）*/
+  --fill: #12161f; /* 填充色 */
+  --inverse: #ffffff; /* 反色 */
 
   /* Custom Colors - Dark Mode */
-  --dialog-fill-0: #333333; /* 对话框填充色 */
-  --text-0: #ffffff; /* 纯黑文字色（暗色模式下为白色） */
+  --dialog-fill-0: #1e2536; /* 对话框填充 */
+  --text-0: #e6ecf5; /* 纯黑文字色（暗色下为浅色） */
   --text-white: #ffffff; /* 纯白文字色 */
-  --fill-0: rgba(255, 255, 255, 0.08); /* 填充色 0 - 暗色模式下为半透明白色 */
-  --fill-white-to-black: #000000; /* 白到黑填充色（暗色模式下为黑色） */
-  --border-special: #60677e; /* 特殊边框色 */
+  --fill-0: rgba(255, 255, 255, 0.08); /* 填充色 0 - 半透明白 */
+  --fill-white-to-black: #000000; /* 白到黑填充色 */
+  --border-special: #3b4658; /* 特殊边框色 */
+
+  /* ---- Arco palette overrides (RGB triplets) - Dark Mode ----
+     Orange is held constant (-6 = #F05A22); semantic ramps anchored on the
+     brightened dark token values so Arco components match the tokens above. */
+  --arcoblue-1: 255, 242, 232;
+  --arcoblue-2: 252, 215, 191;
+  --arcoblue-3: 249, 186, 150;
+  --arcoblue-4: 246, 156, 110;
+  --arcoblue-5: 243, 123, 72;
+  --arcoblue-6: 240, 90, 34; /* #F05A22 Forge orange */
+  --arcoblue-7: 199, 63, 21;
+  --arcoblue-8: 158, 41, 11;
+  --arcoblue-9: 117, 23, 4;
+  --arcoblue-10: 77, 10, 0;
+
+  --red-1: 255, 236, 232;
+  --red-2: 250, 210, 203;
+  --red-3: 246, 184, 175;
+  --red-4: 241, 156, 148;
+  --red-5: 237, 128, 122;
+  --red-6: 232, 100, 97; /* #E86461 */
+  --red-7: 193, 61, 63;
+  --red-8: 154, 32, 38;
+  --red-9: 115, 12, 21;
+  --red-10: 77, 0, 9;
+
+  --green-1: 232, 255, 242;
+  --green-2: 179, 244, 208;
+  --green-3: 129, 234, 180;
+  --green-4: 83, 223, 156;
+  --green-5: 41, 213, 135;
+  --green-6: 3, 202, 119; /* #03CA77 */
+  --green-7: 2, 171, 106;
+  --green-8: 1, 139, 91;
+  --green-9: 0, 108, 74;
+  --green-10: 0, 77, 55;
+
+  --orange-1: 255, 253, 232;
+  --orange-2: 252, 245, 193;
+  --orange-3: 249, 235, 155;
+  --orange-4: 246, 223, 118;
+  --orange-5: 243, 208, 81;
+  --orange-6: 240, 190, 46; /* #F0BE2E amber */
+  --orange-7: 199, 151, 29;
+  --orange-8: 158, 113, 15;
+  --orange-9: 117, 78, 6;
+  --orange-10: 77, 47, 0;
+
+  --cyan-1: 232, 252, 255;
+  --cyan-2: 199, 242, 251;
+  --cyan-3: 168, 231, 247;
+  --cyan-4: 137, 218, 242;
+  --cyan-5: 107, 203, 238;
+  --cyan-6: 78, 187, 234; /* #4EBBEA */
+  --cyan-7: 49, 146, 195;
+  --cyan-8: 26, 108, 155;
+  --cyan-9: 10, 73, 116;
+  --cyan-10: 0, 43, 77;
 }

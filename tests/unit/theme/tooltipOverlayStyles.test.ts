@@ -12,11 +12,12 @@ describe('arco tooltip and popover overlay styles', () => {
   it('defines shared light and dark overlay tokens for tooltip-like surfaces', () => {
     const css = fs.readFileSync(arcoOverridePath, 'utf8');
 
-    expect(css).toContain('--aion-overlay-bg: #ffffff;');
-    expect(css).toContain('--aion-overlay-text: #1d2129;');
+    // Overlay chrome references semantic tokens so it tracks the active (Forge) theme;
+    // light/dark bg + text come from --dialog-fill-0 / --text-primary automatically.
+    expect(css).toContain('--aion-overlay-bg: var(--dialog-fill-0);');
+    expect(css).toContain('--aion-overlay-text: var(--text-primary);');
+    expect(css).toContain('--aion-overlay-border: var(--border-base);');
     expect(css).toContain("body[arco-theme='dark'] {");
-    expect(css).toContain('--aion-overlay-bg: #0e0e0e;');
-    expect(css).toContain('--aion-overlay-text: #f2f3f5;');
   });
 
   it('applies the shared overlay tokens to tooltip, popover, and popconfirm surfaces', () => {

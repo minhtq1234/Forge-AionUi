@@ -1,178 +1,179 @@
-/* Default Theme - AOU Purple Theme / 默认主题 */
-/* 此主题展示了系统默认的颜色变量，您可以基于此进行自定义 */
-/* This theme shows the system default color variables, you can customize based on this */
+/* Default Theme - Forge Design Language / 默认主题 */
+/* Reference of the system default color variables (Forge). The live values are
+   applied by styles/themes/default-color-scheme.css; this file mirrors them so
+   theme authors can copy/customize. / 此文件展示 Forge 默认配色变量，供主题作者参考。 */
 
 :root {
-  /* Primary Colors - 主色调 */
-  --color-primary: #165dff;
-  --primary: #165dff;
-  --color-primary-light-1: #4080ff;
-  --color-primary-light-2: #6aa1ff;
-  --color-primary-light-3: #94bfff;
-  --color-primary-dark-1: #0e42d2;
-  --primary-rgb: 22, 93, 255;
+  /* Primary Colors - Forge orange */
+  --color-primary: #f05a22;
+  --primary: #f05a22;
+  --color-primary-light-1: #fff2e8;
+  --color-primary-light-2: #fcd7bf;
+  --color-primary-light-3: #f9ba96;
+  --color-primary-dark-1: #c73f15;
+  --primary-rgb: 240, 90, 34;
 
-  /* Brand Colors - 品牌色 */
-  --brand: #7583b2;
-  --brand-light: #eff0f6;
-  --brand-hover: #b5bcd6;
-  --color-brand-fill: #7583b2;
-  --color-brand-bg: #eff0f6;
+  /* Brand Colors - navy */
+  --brand: #374ea2;
+  --brand-light: #eef1fa;
+  --brand-hover: #6e82d6;
+  --color-brand-fill: #374ea2;
+  --color-brand-bg: #eef1fa;
 
-  /* AOU Brand Colors - AOU 品牌色板 */
-  --aou-1: #eff0f6;
-  --aou-2: #e5e7f0;
-  --aou-3: #d1d5e5;
-  --aou-4: #b5bcd6;
-  --aou-5: #97a0c5;
-  --aou-6: #7583b2;
-  --aou-7: #596590;
-  --aou-8: #3f4868;
-  --aou-9: #262c41;
-  --aou-10: #0d101c;
+  /* AOU brand ramp (navy) */
+  --aou-1: #f5f7fd;
+  --aou-2: #eef1fa;
+  --aou-3: #d8dff3;
+  --aou-4: #aebbeb;
+  --aou-5: #6e82d6;
+  --aou-6: #374ea2;
+  --aou-7: #2e3f82;
+  --aou-8: #253266;
+  --aou-9: #1b2549;
+  --aou-10: #12172e;
 
-  /* Background Colors - 背景色 */
-  --color-bg-1: #f9fafb;
-  --bg-1: #f9fafb;
-  --color-bg-2: #f2f3f5;
-  --bg-2: #f2f3f5;
-  --color-bg-3: #e5e6eb;
-  --bg-3: #e5e6eb;
-  --color-bg-4: #c9cdd4;
-  --bg-4: #c9cdd4;
-  --bg-base: #ffffff;
-  --bg-5: #adb4c1;
-  --bg-6: #86909c;
-  --bg-8: #4e5969;
-  --bg-9: #1d2129;
-  --bg-10: #0c0e12;
+  /* Background Colors - cream working surfaces over a cool-grey canvas */
+  --color-bg-1: #f6f0e4;
+  --bg-1: #f6f0e4;
+  --color-bg-2: #edeef1;
+  --bg-2: #edeef1;
+  --color-bg-3: #dcdfe4;
+  --bg-3: #dcdfe4;
+  --color-bg-4: #cbd0d8;
+  --bg-4: #cbd0d8;
+  --bg-base: #faf6ee;
+  --bg-5: #c6cdd6;
+  --bg-6: #8a93a1;
+  --bg-8: #5b6472;
+  --bg-9: #2a303b;
+  --bg-10: #14181f;
 
-  /* Interactive State Colors - 交互状态色 */
-  --bg-hover: #f3f4f6;
-  --bg-active: #e5e6eb;
+  /* Interactive State Colors */
+  --bg-hover: #f4f1ea;
+  --bg-active: #eae1d3;
 
-  /* Fill Colors - 填充色 */
-  --fill: #f7f8fa;
-  --color-fill: #f7f8fa;
+  /* Fill Colors */
+  --fill: #f4f1ea;
+  --color-fill: #f4f1ea;
   --fill-0: #ffffff;
   --fill-white-to-black: #ffffff;
   --dialog-fill-0: #ffffff;
   --inverse: #ffffff;
 
-  /* Text Colors - 文字色 */
-  --color-text-1: #000000;
-  --text-primary: #000000;
-  --color-text-2: #4e5969;
-  --text-secondary: #454d5f;
-  --color-text-3: #86909c;
-  --text-disabled: #c9cdd4;
-  --text-0: #000000;
+  /* Text Colors - cool ink ramp */
+  --color-text-1: #14181f;
+  --text-primary: #14181f;
+  --color-text-2: #5b6472;
+  --text-secondary: #5b6472;
+  --color-text-3: #8a93a1;
+  --text-disabled: #c6cdd6;
+  --text-0: #14181f;
   --text-white: #ffffff;
 
-  /* Border Colors - 边框色 */
-  --color-border: #e5e6eb;
-  --color-border-1: #e5e6eb;
-  --color-border-2: #f2f3f5;
-  --border-base: #e5e6eb;
-  --border-light: #f2f3f5;
+  /* Border Colors */
+  --color-border: #dcdfe4;
+  --color-border-1: #dcdfe4;
+  --color-border-2: #eceef1;
+  --border-base: #dcdfe4;
+  --border-light: #eceef1;
   --border-special: var(--bg-3);
 
-  /* Semantic Colors - 语义色 */
-  --success: #00b42a;
-  --warning: #ff7d00;
-  --danger: #f53f3f;
-  --info: #165dff;
+  /* Semantic Colors */
+  --success: #058b57;
+  --warning: #e0a800;
+  --danger: #d64541;
+  --info: #29a7de;
 
-  /* Message & UI Component Colors - 消息和组件色 */
-  --message-user-bg: #e9efff;
-  --message-tips-bg: #f0f4ff;
-  --workspace-btn-bg: #eff0f1;
+  /* Message & UI Component Colors */
+  --message-user-bg: #eef1fa;
+  --message-tips-bg: #f5f7fd;
+  --workspace-btn-bg: #f4f1ea;
 }
 
 /* Dark Mode Overrides - 深色模式覆盖 */
 [data-theme='dark'] {
-  /* Primary Colors - Dark Mode */
-  --color-primary: #4d9fff;
-  --primary: #4d9fff;
-  --color-primary-light-1: #6aa8ff;
-  --color-primary-light-2: #87b7ff;
-  --color-primary-light-3: #a4c6ff;
-  --color-primary-dark-1: #306acc;
-  --primary-rgb: 77, 159, 255;
+  /* Primary Colors - Dark Mode (orange constant) */
+  --color-primary: #f05a22;
+  --primary: #f05a22;
+  --color-primary-light-1: #4d0a00;
+  --color-primary-light-2: #751704;
+  --color-primary-light-3: #9e290b;
+  --color-primary-dark-1: #f37b48;
+  --primary-rgb: 240, 90, 34;
 
   /* Brand Colors - Dark Mode */
-  --brand: #a1aacb;
-  --brand-light: #3d4150;
-  --brand-hover: #6a749b;
-  --color-brand-fill: #a1aacb;
-  --color-brand-bg: #3d4150;
+  --brand: #4e63c0;
+  --brand-light: #1e2536;
+  --brand-hover: #6e82d6;
+  --color-brand-fill: #4e63c0;
+  --color-brand-bg: #1e2536;
 
-  /* AOU Brand Colors - Dark Mode */
-  --aou-1: #2a2a2a;
-  --aou-2: #3d4150;
-  --aou-3: #525a77;
-  --aou-4: #6a749b;
-  --aou-5: #838fba;
-  --aou-6: #a1aacb;
-  --aou-7: #b5bcd6;
-  --aou-8: #d1d5e5;
-  --aou-9: #e5e7f0;
-  --aou-10: #eff0f6;
+  /* AOU brand ramp (navy) - Dark Mode (inverted) */
+  --aou-1: #12172e;
+  --aou-2: #1b2549;
+  --aou-3: #253266;
+  --aou-4: #2e3f82;
+  --aou-5: #374ea2;
+  --aou-6: #4e63c0;
+  --aou-7: #6e82d6;
+  --aou-8: #8fa0e0;
+  --aou-9: #b8c2ee;
+  --aou-10: #e8ecfb;
 
-  /* Background Colors - Dark Mode */
-  --color-bg-1: #1a1a1a;
-  --bg-1: #1a1a1a;
-  --color-bg-2: #262626;
-  --bg-2: #262626;
-  --color-bg-3: #333333;
-  --bg-3: #333333;
-  --color-bg-4: #404040;
-  --bg-4: #404040;
-  --bg-base: #0e0e0e;
-  --bg-5: #4d4d4d;
-  --bg-6: #5a5a5a;
-  --bg-8: #737373;
-  --bg-9: #a6a6a6;
-  --bg-10: #d9d9d9;
+  /* Background Colors - Dark Mode (dark ground) */
+  --color-bg-1: #12161f;
+  --bg-1: #12161f;
+  --color-bg-2: #161c27;
+  --bg-2: #161c27;
+  --color-bg-3: #1e2536;
+  --bg-3: #1e2536;
+  --color-bg-4: #2a3344;
+  --bg-4: #2a3344;
+  --bg-base: #0b0e14;
+  --bg-5: #3b4658;
+  --bg-6: #5e7086;
+  --bg-8: #7c8da6;
+  --bg-9: #9db0c8;
+  --bg-10: #c4d0e0;
 
   /* Interactive State Colors - Dark Mode */
-  --bg-hover: #1f1f1f;
-  --bg-active: #2d2d2d;
+  --bg-hover: #161c27;
+  --bg-active: #1e2536;
 
   /* Fill Colors - Dark Mode */
-  --fill: #1a1a1a;
-  --color-fill: #1a1a1a;
+  --fill: #12161f;
+  --color-fill: #12161f;
   --fill-0: rgba(255, 255, 255, 0.08);
   --fill-white-to-black: #000000;
-  --dialog-fill-0: #333333;
+  --dialog-fill-0: #1e2536;
   --inverse: #ffffff;
 
-  /* Text Colors - Dark Mode */
-  --color-text-1: #ffffff;
-  --text-primary: #ffffff;
-  --color-text-2: #a6a6a6;
-  --text-secondary: #ced3da;
-  --color-text-3: #737373;
-  --text-disabled: #737373;
-  --text-0: #ffffff;
+  /* Text Colors - Dark Mode (cool light ramp) */
+  --color-text-1: #e6ecf5;
+  --text-primary: #e6ecf5;
+  --color-text-2: #9db0c8;
+  --text-secondary: #9db0c8;
+  --color-text-3: #5e7086;
+  --text-disabled: #5e7086;
+  --text-0: #e6ecf5;
   --text-white: #ffffff;
 
   /* Border Colors - Dark Mode */
-  --color-border: #333333;
-  --color-border-1: #333333;
-  --color-border-2: #262626;
-  --border-base: #333333;
-  --border-light: #262626;
-  --border-special: #60677e;
+  --color-border: #2a3344;
+  --color-border-1: #2a3344;
+  --color-border-2: #1e2536;
+  --border-base: #2a3344;
+  --border-light: #1e2536;
+  --border-special: #3b4658;
 
   /* Semantic Colors - Dark Mode */
-  --success: #23c343;
-  --warning: #ff9a2e;
-  --danger: #f76560;
-  --info: #4d9fff;
+  --success: #03ca77;
+  --warning: #f0be2e;
+  --danger: #e86461;
+  --info: #4ebbea;
 
   /* Message & UI Component Colors - Dark Mode */
-  --message-user-bg: #1e2a3a;
-  --message-tips-bg: #1a2333;
-  --workspace-btn-bg: #1f1f1f;
+  --message-user-bg: #1e2536;
+  --message-tips-bg: #161c27;
+  --workspace-btn-bg: #161c27;
 }
