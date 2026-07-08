@@ -18,10 +18,10 @@ never overwritten.
 
 ## Tier 1 — on by default (no key)
 
-| Capability | Server | Default |
-| --- | --- | --- |
-| **Long-term memory** | `@modelcontextprotocol/server-memory` | Enabled |
-| **Web browse** | bundled `chrome-devtools-mcp` | Enabled on fresh installs |
+| Capability           | Server                                | Default                   |
+| -------------------- | ------------------------------------- | ------------------------- |
+| **Long-term memory** | `@modelcontextprotocol/server-memory` | Enabled                   |
+| **Web browse**       | bundled `chrome-devtools-mcp`         | Enabled on fresh installs |
 
 - **Memory** gives agents a cross-chat knowledge graph.
 - **Web browse** reuses the already-bundled `chrome-devtools` server (navigate and
@@ -34,11 +34,11 @@ never overwritten.
 These are seeded but **disabled**, with empty credentials. Enable them in
 **Settings → Tools → Capabilities** by entering a key/connection string:
 
-| Capability | Server | Credential |
-| --- | --- | --- |
-| **Web search (Tavily)** | `tavily-mcp` | Tavily API key (`TAVILY_API_KEY`) |
-| **GitHub** | `@modelcontextprotocol/server-github` | Personal access token (`GITHUB_PERSONAL_ACCESS_TOKEN`) |
-| **Postgres** | `@modelcontextprotocol/server-postgres` | Connection string (positional argument) |
+| Capability              | Server                                  | Credential                                             |
+| ----------------------- | --------------------------------------- | ------------------------------------------------------ |
+| **Web search (Tavily)** | `tavily-mcp`                            | Tavily API key (`TAVILY_API_KEY`)                      |
+| **GitHub**              | `@modelcontextprotocol/server-github`   | Personal access token (`GITHUB_PERSONAL_ACCESS_TOKEN`) |
+| **Postgres**            | `@modelcontextprotocol/server-postgres` | Connection string (positional argument)                |
 
 The Capabilities section writes the credential into the built-in server's stdio
 transport (`env` for API keys, a trailing argument for the Postgres connection
