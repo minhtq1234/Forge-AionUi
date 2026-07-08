@@ -561,3 +561,43 @@ body[arco-theme='dark'] .arco-message-error {
 .arco-tree-select-popup {
   border-radius: var(--radius-lg);
 }
+
+/* Conversation header model selector — a defined bordered pill, not a bare fill. */
+.header-model-btn,
+.header-model-btn:hover,
+.header-model-btn:focus,
+.header-model-btn:focus-visible,
+.header-model-btn:active {
+  border: 1px solid var(--border-base) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.header-model-btn:hover {
+  border-color: var(--bg-4) !important;
+  background: var(--bg-1) !important;
+}
+
+/* Agent-error "Technical Details" collapse — flatten to one surface (no nested
+   header/content boxes); the detail sits under a hairline rule, not in a box. */
+.agent-error-collapse.arco-collapse,
+.agent-error-collapse .arco-collapse-item,
+.agent-error-collapse .arco-collapse-item-header,
+.agent-error-collapse .arco-collapse-item-content {
+  background: transparent !important;
+  border: none !important;
+}
+.agent-error-collapse .arco-collapse-item-header {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  height: auto !important;
+  line-height: 1.6 !important;
+}
+.agent-error-collapse .arco-collapse-item-content {
+  padding: 0 !important;
+  font-size: 12px;
+}
+.agent-error-collapse .arco-collapse-item-content-box {
+  padding: 2px 0 0 10px !important;
+  border-left: 2px solid var(--border-base);
+  margin-top: 4px;
+}

@@ -61,7 +61,7 @@
 
   /* Message & UI Component Colors - Light Mode */
   --message-user-bg: #eef1fa; /* user chat — navy tint / 用户消息背景 */
-  --message-tips-bg: #f5f7fd; /* navy-tint-weak / 提示信息背景 */
+  --message-tips-bg: #f0e9db; /* warm cream — tips / error card / 提示信息背景 */
   --workspace-btn-bg: #f4f1ea; /* cream-300 / 工作区按钮背景 */
 
   /* Special Colors - Light Mode */
