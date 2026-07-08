@@ -1241,5 +1241,21 @@
     }
   },
   "providerIdConflict": "El ID del proveedor ya existe. Inténtalo de nuevo.",
-  "autoInjectedSkillsHint": "Se cargan automáticamente en cada conversación: no hace falta activarlas; el agente decide cuándo usarlas."
+  "autoInjectedSkillsHint": "Se cargan automáticamente en cada conversación: no hace falta activarlas; el agente decide cuándo usarlas.",
+  "capabilitiesSection": "Capabilities",
+  "capabilitiesSectionDesc": "Optional tools your agents can use. Add a key to enable each one.",
+  "capabilityWebSearch": "Web search (Tavily)",
+  "capabilityWebSearchDesc": "Search the web and read results. Requires a Tavily API key.",
+  "capabilityWebSearchPlaceholder": "Tavily API key (tvly-...)",
+  "capabilityGithub": "GitHub",
+  "capabilityGithubDesc": "Access repositories, issues and pull requests. Requires a personal access token.",
+  "capabilityGithubPlaceholder": "GitHub personal access token",
+  "capabilityPostgres": "Postgres database",
+  "capabilityPostgresDesc": "Query a Postgres database. Requires a connection string.",
+  "capabilityPostgresPlaceholder": "postgresql://user:pass@host:5432/dbname",
+  "capabilityMemory": "Long-term memory",
+  "capabilityMemoryDesc": "Remember facts across chats.",
+  "capabilitySaved": "Saved",
+  "capabilitySaveError": "Could not save. Check the value and try again.",
+  "capabilityMissingKey": "Add a key first to enable this capability."
 }
