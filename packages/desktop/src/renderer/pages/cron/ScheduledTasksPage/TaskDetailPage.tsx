@@ -54,7 +54,7 @@ const TaskDetailPage: React.FC = () => {
   const { conversations, refetch: refetchConversations } = useCronJobConversations(job_id);
   const { presetAssistants } = useConversationAssistants();
   const logos = useAgentLogos();
-  const assistantIdentity = job ? getJobAgentMeta(job, presetAssistants, logos) : null;
+  const assistantIdentity = job ? getJobAgentMeta(job, presetAssistants, logos, t) : null;
 
   useEffect(() => {
     setSelectedConversationIds((prev) => {

@@ -9,10 +9,12 @@ import type { Assistant } from '@/common/types/agent/assistantTypes';
 import { resolveLocaleKey } from '@/common/utils';
 import AssistantAvatar from '@/renderer/pages/settings/AssistantSettings/AssistantAvatar';
 import type { ManagedAgent } from '@/renderer/utils/model/agentTypes';
+import { resolveAssistantDisplayName } from '@/renderer/utils/model/assistantDisplay';
 import { Right } from '@icon-park/react';
 import { Tooltip, Typography } from '@arco-design/web-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import useSWR from 'swr';
 
 const BOUND_ASSISTANTS_SWR_KEY = 'agents.boundAssistants.list';
@@ -34,8 +36,8 @@ export const useAssistantsForAgents = (): { assistants: Assistant[]; isLoading: 
   return { assistants: data ?? [], isLoading };
 };
 
-const assistantLabel = (assistant: Assistant, localeKey: string): string =>
-  assistant.name_i18n?.[localeKey] || assistant.name;
+const assistantLabel = (assistant: Assistant, localeKey: string, t: TFunction): string =>
+  resolveAssistantDisplayName(assistant, localeKey, t, assistant.name);
 
 /**
  * Compact overlapping avatar stack shown on an agent list row to surface which
@@ -49,7 +51,7 @@ export const BoundAssistantStack: React.FC<{ assistants: Assistant[]; max?: numb
 
   const shown = assistants.slice(0, max);
   const overflow = assistants.length - shown.length;
-  const tooltip = assistants.map((a) => assistantLabel(a, localeKey)).join('、');
+  const tooltip = assistants.map((a) => assistantLabel(a, localeKey, t)).join('、');
 
   return (
     <Tooltip
@@ -111,7 +113,7 @@ export const BoundAssistantList: React.FC<{
         >
           <AssistantAvatar assistant={assistant} size={26} />
           <Typography.Text className='flex-1 truncate text-13px font-500 text-t-primary'>
-            {assistantLabel(assistant, localeKey)}
+            {assistantLabel(assistant, localeKey, t)}
           </Typography.Text>
           <span className='flex items-center gap-2px text-12px text-t-tertiary group-hover:text-t-secondary'>
             {t('settings.agentManagement.viewAssistant')}

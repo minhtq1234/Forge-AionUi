@@ -42,5 +42,10 @@
     "label": "Denk-Stufe",
     "switchSuccess": "Denk-Stufe gewechselt",
     "switchFailed": "Wechsel der Denk-Stufe fehlgeschlagen"
+  },
+  "brand": {
+    "forgeChat": "Forge Chat",
+    "forgeCode": "Forge Code",
+    "forgeAssistant": "Forge Assistant"
   }
 }

@@ -8,7 +8,7 @@ import type { IChannelPairingRequest, IChannelPluginStatus, IChannelUser } from 
 import { assistants, channel } from '@/common/adapter/ipcBridge';
 import { isAionrsAssistant, type Assistant } from '@/common/types/agent/assistantTypes';
 import { resolveLocaleKey } from '@/common/utils';
-import { resolveAssistantName } from '@/renderer/utils/model/assistantDisplay';
+import { resolveAssistantDisplayName } from '@/renderer/utils/model/assistantDisplay';
 import GoogleModelSelector from '@/renderer/pages/conversation/platforms/gemini/GoogleModelSelector';
 import type { GoogleModelSelection } from '@/renderer/pages/conversation/platforms/gemini/useGoogleModelSelection';
 import { Button, Dropdown, Empty, Input, Menu, Message, Spin, Tooltip } from '@arco-design/web-react';
@@ -307,7 +307,7 @@ const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
   const showModelSelector = isAionrsAssistant(selectedAssistant);
   const assistantOptions = availableAssistants;
   const selectedAssistantName = selectedAssistant
-    ? resolveAssistantName(selectedAssistant, localeKey, selectedAssistant.name)
+    ? resolveAssistantDisplayName(selectedAssistant, localeKey, t, selectedAssistant.name)
     : t('settings.assistant.name', 'Assistant');
 
   return (
@@ -407,7 +407,7 @@ const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
             droplist={
               <Menu selectedKeys={selectedAssistant ? [selectedAssistant.id] : []}>
                 {assistantOptions.map((assistant) => {
-                  const assistantName = resolveAssistantName(assistant, localeKey, assistant.name);
+                  const assistantName = resolveAssistantDisplayName(assistant, localeKey, t, assistant.name);
                   return (
                     <Menu.Item
                       key={assistant.id}

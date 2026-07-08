@@ -42,5 +42,10 @@
     "label": "Nivel de razonamiento",
     "switchSuccess": "Nivel de razonamiento cambiado",
     "switchFailed": "Error al cambiar el nivel de razonamiento"
+  },
+  "brand": {
+    "forgeChat": "Forge Chat",
+    "forgeCode": "Forge Code",
+    "forgeAssistant": "Forge Assistant"
   }
 }

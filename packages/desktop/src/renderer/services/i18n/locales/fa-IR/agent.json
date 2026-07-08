@@ -42,5 +42,10 @@
     "label": "سطح تفکر",
     "switchSuccess": "سطح تفکر تغییر کرد",
     "switchFailed": "تغییر سطح تفکر ناموفق بود"
+  },
+  "brand": {
+    "forgeChat": "Forge Chat",
+    "forgeCode": "Forge Code",
+    "forgeAssistant": "Forge Assistant"
   }
 }

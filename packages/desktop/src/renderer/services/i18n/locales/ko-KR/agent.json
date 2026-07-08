@@ -42,5 +42,10 @@
     "label": "사고 강도",
     "switchSuccess": "사고 강도가 전환되었습니다",
     "switchFailed": "사고 강도 전환에 실패했습니다"
+  },
+  "brand": {
+    "forgeChat": "Forge Chat",
+    "forgeCode": "Forge Code",
+    "forgeAssistant": "Forge Assistant"
   }
 }

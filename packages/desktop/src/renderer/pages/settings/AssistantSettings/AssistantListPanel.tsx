@@ -8,6 +8,7 @@ import TalkToButlerButton from '@/renderer/components/base/TalkToButlerButton';
 import type { AssistantListItem } from './types';
 import { resolveAssistantSourceTag } from './assistantUtils';
 import AssistantAvatar from './AssistantAvatar';
+import { resolveAssistantDisplayName } from '@/renderer/utils/model/assistantDisplay';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -146,7 +147,7 @@ const SortableAssistantCard: React.FC<SortableAssistantCardProps> = ({
         <AssistantAvatar assistant={assistant} size={28} />
         <div className='min-w-0 flex-1'>
           <div className='flex min-w-0 items-center gap-8px font-medium text-t-primary'>
-            <span className='truncate'>{assistant.name_i18n?.[localeKey] || assistant.name}</span>
+            <span className='truncate'>{resolveAssistantDisplayName(assistant, localeKey, t, assistant.name)}</span>
             {/* F2-05: when the assistant's underlying agent is not online, flag it
                 with a warning icon + hover reason. The assistant is NOT disabled
                 or removed — it stays listed and toggleable. */}

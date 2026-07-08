@@ -28,7 +28,16 @@ Object.defineProperty(window, 'matchMedia', {
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue || key,
+    t: (key: string, options?: { defaultValue?: string }) => {
+      // Forge brand keys render as the brand name; everything else echoes the
+      // key (or its defaultValue), as before.
+      const brand: Record<string, string> = {
+        'agent.brand.forgeChat': 'Forge Chat',
+        'agent.brand.forgeCode': 'Forge Code',
+        'agent.brand.forgeAssistant': 'Forge Assistant',
+      };
+      return brand[key] || options?.defaultValue || key;
+    },
     i18n: { language: 'zh-CN' },
   }),
 }));
@@ -86,7 +95,10 @@ describe('TeamCreateModal', () => {
     render(<TeamCreateModal visible onClose={vi.fn()} onCreated={vi.fn()} />);
 
     expect(screen.getByTestId('team-create-agent-option-bare-aionrs')).toBeInTheDocument();
-    expect(screen.getByText('Aion 命令行')).toBeInTheDocument();
+    // The bare aionrs CLI agent surfaces under the Forge brand name; its legacy
+    // catalog name (localized or raw) is not shown in the selector.
+    expect(screen.getByText('Forge Chat')).toBeInTheDocument();
+    expect(screen.queryByText('Aion 命令行')).not.toBeInTheDocument();
     expect(screen.queryByText('Aion CLI')).not.toBeInTheDocument();
     expect(screen.getByTestId('team-create-agent-option-blocked-reviewer')).toBeInTheDocument();
     expect(screen.getByTestId('team-create-agent-option-remote-runner')).toBeInTheDocument();

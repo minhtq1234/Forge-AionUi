@@ -42,5 +42,10 @@
     "label": "思考強度",
     "switchSuccess": "思考強度切換成功",
     "switchFailed": "思考強度切換失敗"
+  },
+  "brand": {
+    "forgeChat": "Forge Chat",
+    "forgeCode": "Forge Code",
+    "forgeAssistant": "Forge Assistant"
   }
 }

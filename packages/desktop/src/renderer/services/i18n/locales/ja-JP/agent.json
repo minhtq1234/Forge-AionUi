@@ -42,5 +42,10 @@
     "label": "思考レベル",
     "switchSuccess": "思考レベルを切り替えました",
     "switchFailed": "思考レベルの切り替えに失敗しました"
+  },
+  "brand": {
+    "forgeChat": "Forge Chat",
+    "forgeCode": "Forge Code",
+    "forgeAssistant": "Forge Assistant"
   }
 }

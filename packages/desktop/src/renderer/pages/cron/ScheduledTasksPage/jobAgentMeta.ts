@@ -5,9 +5,11 @@
  */
 
 import type { ICronJob } from '@/common/adapter/ipcBridge';
+import type { TFunction } from 'i18next';
 import type { AgentLogoMap } from '@renderer/utils/model/agentLogo';
 import { resolveAgentLogo } from '@renderer/utils/model/agentLogo';
 import { resolveAssistantAvatar } from '@renderer/utils/model/assistantAvatar';
+import { getForgeAssistantBrandKey } from '@renderer/utils/model/assistantDisplay';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 
 function normalizeAgentBackend(agent: string | undefined): string | undefined {
@@ -28,7 +30,8 @@ function resolveCronAssistantId(config: ICronJob['metadata']['agent_config']): s
 export function getJobAgentMeta(
   job: ICronJob,
   presetAssistants: Assistant[],
-  logos: AgentLogoMap
+  logos: AgentLogoMap,
+  t: TFunction
 ): { name?: string; logo?: string | null; emoji?: string; assistantFallback?: boolean } {
   const config = job.metadata.agent_config;
   const assistantId = resolveCronAssistantId(config);
@@ -39,7 +42,9 @@ export function getJobAgentMeta(
     }
 
     const rawType = normalizeAgentBackend(job.metadata.agent_type);
-    const displayName = assistant.name || rawType;
+    // Display-only Forge brand override; storage keeps the real catalog name.
+    const brandKey = getForgeAssistantBrandKey(assistant);
+    const displayName = brandKey ? t(brandKey) : assistant.name || rawType;
     const avatar = resolveAssistantAvatar(assistant.avatar);
     if (avatar.kind === 'image') {
       return { name: displayName, logo: avatar.value };
