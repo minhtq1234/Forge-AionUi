@@ -7,6 +7,7 @@ export interface NormalizedToolCall {
   key: string;
   name: string;
   status: NormalizedToolStatus;
+  kind?: string;
   description?: string;
   input?: string;
   output?: string;
@@ -171,6 +172,7 @@ export function normalizeAcpToolCall(message: IMessageAcpToolCall): NormalizedTo
     key: update.tool_call_id,
     name: update.title,
     status: normalizeAcpStatus(update.status),
+    kind: update.kind,
     description: keyParam || (rawInput?.command as string) || update.kind,
     input,
     output,
