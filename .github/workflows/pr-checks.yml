@@ -44,6 +44,41 @@ jobs:
     steps:
       - run: echo "PR closed, cancelling in-progress runs via concurrency."
 
+  # Decide which OS matrix the unit-tests and build-test jobs run on.
+  # Routine PR pushes run Linux only (1x minutes). The expensive macOS (10x)
+  # and Windows (2x) runners are gated behind an explicit opt-in so they do not
+  # burn Actions minutes on every push. To get the full cross-platform run:
+  #   • trigger this workflow manually (Actions → PR Checks → Run workflow), or
+  #   • add the "full-ci" label to the PR, then push a commit — the label is
+  #     read on the next PR run, not on the labeling event itself (labeling is
+  #     intentionally not a trigger, so labels never spend runner minutes).
+  setup-matrix:
+    name: Setup Matrix
+    if: github.event_name == 'workflow_dispatch' || (github.event.action != 'closed' && github.event.pull_request.draft == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      unit_os: ${{ steps.matrix.outputs.unit_os }}
+      build_include: ${{ steps.matrix.outputs.build_include }}
+      full: ${{ steps.matrix.outputs.full }}
+    env:
+      FULL_CI: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'full-ci') }}
+    steps:
+      - name: Decide matrix
+        id: matrix
+        shell: bash
+        run: |
+          echo "full=$FULL_CI" >> "$GITHUB_OUTPUT"
+          if [ "$FULL_CI" = "true" ]; then
+            echo "Full cross-platform matrix (macOS + Windows + Linux)."
+            echo 'unit_os=["ubuntu-latest","macos-14","windows-2022"]' >> "$GITHUB_OUTPUT"
+            echo 'build_include=[{"platform":"macos-arm64","os":"macos-14","arch":"arm64","target":"--mac","build_args":"--mac --arm64","unpacked_dir":"mac-arm64"},{"platform":"windows-x64","os":"windows-2022","arch":"x64","target":"--win","build_args":"--win --x64","unpacked_dir":"win-unpacked"},{"platform":"linux-x64","os":"ubuntu-latest","arch":"x64","target":"--linux","build_args":"--linux --x64","unpacked_dir":"linux-unpacked"}]' >> "$GITHUB_OUTPUT"
+          else
+            echo "Linux-only matrix (add the 'full-ci' label or dispatch for macOS/Windows)."
+            echo 'unit_os=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+            echo 'build_include=[{"platform":"linux-x64","os":"ubuntu-latest","arch":"x64","target":"--linux","build_args":"--linux --x64","unpacked_dir":"linux-unpacked"}]' >> "$GITHUB_OUTPUT"
+          fi
+
   # Job 1: Code quality checks (TypeScript, Oxlint, Oxfmt)
   code-quality:
     name: Code Quality
@@ -91,13 +126,14 @@ jobs:
   # Job 2: Unit tests across all platforms
   unit-tests:
     name: Unit Tests (${{ matrix.os }})
+    needs: setup-matrix
     if: github.event_name == 'workflow_dispatch' || (github.event.action != 'closed' && github.event.pull_request.draft == false)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14, windows-2022]
+        os: ${{ fromJSON(needs.setup-matrix.outputs.unit_os) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -274,31 +310,14 @@ jobs:
   # Job 4: Build test across representative PR platforms (parallel with code-quality and unit-tests)
   build-test:
     name: Build Test (${{ matrix.platform }})
-    if: github.event.action != 'closed' && github.event.pull_request.draft == false && inputs.skip_build_test != true
+    needs: setup-matrix
+    if: inputs.skip_build_test != true && (github.event_name == 'workflow_dispatch' || (github.event.action != 'closed' && github.event.pull_request.draft == false))
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: 'macos-arm64'
-            os: 'macos-14'
-            arch: 'arm64'
-            target: '--mac'
-            build_args: '--mac --arm64'
-            unpacked_dir: 'mac-arm64'
-          - platform: 'windows-x64'
-            os: 'windows-2022'
-            arch: 'x64'
-            target: '--win'
-            build_args: '--win --x64'
-            unpacked_dir: 'win-unpacked'
-          - platform: 'linux-x64'
-            os: 'ubuntu-latest'
-            arch: 'x64'
-            target: '--linux'
-            build_args: '--linux --x64'
-            unpacked_dir: 'linux-unpacked'
+        include: ${{ fromJSON(needs.setup-matrix.outputs.build_include) }}
 
     steps:
       - name: Checkout code
