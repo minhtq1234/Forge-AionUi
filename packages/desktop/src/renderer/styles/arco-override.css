@@ -577,21 +577,16 @@ body[arco-theme='dark'] .arco-message-error {
   background: var(--bg-1) !important;
 }
 
-/* Create/Edit Scheduled Task dialog uses ModalWrapper (not .arco-modal), so the
-   modal field rules above don't reach it — its TextArea kept Arco's raw warm fill
-   while the other fields looked clean. Normalize all fields to a clean white
-   outlined control (DS: white card + hairline-bordered fields). The warm info
-   callout (bg-fill-2) stays as the one intentional accent. */
-.forge-task-form :is(.arco-input, .arco-input-wrapper, .arco-input-inner-wrapper, .arco-select-view, .arco-textarea) {
-  background-color: var(--dialog-fill-0) !important;
-  border: 1px solid var(--border-base) !important;
-}
-.forge-task-form :is(.arco-select-focused, .arco-input-focus, .arco-textarea-focus, .arco-input-inner-wrapper-focus),
-.forge-task-form .arco-select-view:focus-within,
-.forge-task-form .arco-textarea:focus,
-.forge-task-form .arco-input:focus {
-  border-color: var(--brand) !important;
-  box-shadow: var(--ring-focus) !important;
+/* Dialog TextAreas: the global field-background rule (layout.css) whitens
+   .arco-input / .arco-select-view but omits .arco-textarea, so a dialog's
+   TextArea kept Arco's raw warm fill while its sibling inputs looked clean
+   (first seen in the Scheduled Task dialog, also affects Feedback Report and
+   Edit Provider). Match textareas to the same surface as inputs across every
+   dialog. Scoped to .arco-modal so the chat composer and page-level textareas
+   keep their own styling. The resting hairline border (.arco-modal field rules
+   above) and the navy focus ring (global editable-field rule) already apply. */
+.arco-modal .arco-textarea {
+  background-color: var(--fill-0) !important;
 }
 
 /* Agent-error "Technical Details" collapse — flatten to one surface (no nested
