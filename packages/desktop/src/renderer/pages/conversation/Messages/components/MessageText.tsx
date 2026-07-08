@@ -169,7 +169,14 @@ const MessageText: React.FC<{ message: IMessageText; showCopyRow?: boolean }> = 
 
   return (
     <>
-      <div className={classNames('min-w-0 flex flex-col group', isUserMessage ? 'items-end' : 'items-start')}>
+      <div
+        className={classNames(
+          'flex flex-col group',
+          // User column sizes to content up to 85% (no min-w-0, which would let the
+          // flex item collapse to min-content and wrap short text prematurely).
+          isUserMessage ? 'items-end max-w-[85%] ml-auto' : 'min-w-0 items-start'
+        )}
+      >
         {cronMeta && <MessageCronBadge meta={cronMeta} />}
         {isTeammateMessage && senderName && (
           <div className='flex items-center gap-6px mb-4px'>
@@ -203,7 +210,6 @@ const MessageText: React.FC<{ message: IMessageText; showCopyRow?: boolean }> = 
             'bg-aou-2 p-6px md:p-8px': cronMeta,
             'bg-3 p-6px md:p-8px': isTeammateMessage,
             'w-full': !(isUserMessage || cronMeta || isTeammateMessage),
-            'max-w-[85%] text-right': isUserMessage && !cronMeta,
           })}
           style={{
             ...(cronMeta
