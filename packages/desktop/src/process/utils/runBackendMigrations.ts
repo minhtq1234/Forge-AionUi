@@ -8,7 +8,11 @@ import { execFile } from 'node:child_process';
 import { migrateConfigStorage, migrateLegacyMcpConfigToDb, migrateProviders } from '@/common/config/configMigration';
 import { httpRequest } from '@/common/adapter/httpBridge';
 import { mcpService } from '@/common/adapter/ipcBridge';
-import { BUILTIN_CAPABILITIES, buildBuiltinCapabilityServer, BUILTIN_CHROME_DEVTOOLS_NAME } from '@/common/config/builtinCapabilities';
+import {
+  BUILTIN_CAPABILITIES,
+  buildBuiltinCapabilityServer,
+  BUILTIN_CHROME_DEVTOOLS_NAME,
+} from '@/common/config/builtinCapabilities';
 import type { ImageGenerationModelSetting } from '@/common/config/clientSettings';
 import {
   removeImageGenerationEnvKeys,

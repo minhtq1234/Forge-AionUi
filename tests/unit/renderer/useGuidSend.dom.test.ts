@@ -250,7 +250,9 @@ describe('useGuidSend', () => {
     const deps = createDeps();
     deps.selectedMcpServerIds = undefined;
     deps.assistantDefaultMcpIds = [];
-    deps.availableMcpServers = [{ id: 'builtin-memory', name: 'aionui-memory', enabled: true, builtin: true } as IMcpServer];
+    deps.availableMcpServers = [
+      { id: 'builtin-memory', name: 'aionui-memory', enabled: true, builtin: true } as IMcpServer,
+    ];
 
     const { result } = renderHook(() => useGuidSend(deps));
 
