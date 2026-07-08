@@ -24,7 +24,7 @@ import { WorkspaceFolderSelect } from '@renderer/components/workspace';
 import { createCronSchedule } from '@renderer/pages/cron/cronUtils';
 import { getConversationCreateErrorMessage } from '@renderer/pages/conversation/utils/conversationCreateError';
 import { resolveAssistantAvatar } from '@renderer/utils/model/assistantAvatar';
-import { resolveAssistantName } from '@renderer/utils/model/assistantDisplay';
+import { resolveAssistantDisplayName } from '@renderer/utils/model/assistantDisplay';
 import { resolveCronAgentConfig } from './resolveCronAgentConfig';
 import { assistantRuntimeKey, isAionrsAssistant } from '@/common/types/agent/assistantTypes';
 
@@ -540,7 +540,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
                 if (!assistantId) return '';
 
                 const assistant = presetAssistants.find((item) => item.id === assistantId);
-                const name = resolveAssistantName(assistant, localeKey, assistantId);
+                const name = resolveAssistantDisplayName(assistant, localeKey, t, assistantId);
                 const avatar = resolveAssistantAvatar(assistant?.avatar);
 
                 return (
@@ -558,7 +558,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
               }}
             >
               {presetAssistants.map((assistant) => {
-                const name = resolveAssistantName(assistant, localeKey, assistant.name);
+                const name = resolveAssistantDisplayName(assistant, localeKey, t, assistant.name);
                 const avatar = resolveAssistantAvatar(assistant.avatar);
                 const disabled = isAionrsAssistant(assistant) && !hasAionrsProvider;
                 return (

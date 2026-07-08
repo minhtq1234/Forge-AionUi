@@ -7,6 +7,7 @@
 import type { AssistantListItem } from '../types';
 import AssistantAvatar from '../AssistantAvatar';
 import RuntimeBadge from './RuntimeBadge';
+import { resolveAssistantDisplayName } from '@/renderer/utils/model/assistantDisplay';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Button, Dropdown, Menu, Switch, Tooltip } from '@arco-design/web-react';
@@ -98,7 +99,7 @@ const MyAssistantRow: React.FC<MyAssistantRowProps> = ({
         </span>
         <div className={`min-w-0 flex-1 ${enabled ? '' : 'opacity-60'}`}>
           <div className='flex min-w-0 items-center gap-8px font-medium text-t-primary'>
-            <span className='truncate'>{assistant.name_i18n?.[localeKey] || assistant.name}</span>
+            <span className='truncate'>{resolveAssistantDisplayName(assistant, localeKey, t, assistant.name)}</span>
             {assistant.agent_status !== 'online' && (
               <Tooltip
                 content={

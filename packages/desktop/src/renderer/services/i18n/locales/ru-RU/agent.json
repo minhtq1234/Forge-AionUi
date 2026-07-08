@@ -42,5 +42,10 @@
     "label": "Уровень рассуждений",
     "switchSuccess": "Уровень рассуждений переключен",
     "switchFailed": "Не удалось переключить уровень рассуждений"
+  },
+  "brand": {
+    "forgeChat": "Forge Chat",
+    "forgeCode": "Forge Code",
+    "forgeAssistant": "Forge Assistant"
   }
 }

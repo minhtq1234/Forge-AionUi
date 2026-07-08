@@ -9,7 +9,7 @@ import { assistants, channel } from '@/common/adapter/ipcBridge';
 import { isAionrsAssistant, type Assistant } from '@/common/types/agent/assistantTypes';
 import { resolveLocaleKey } from '@/common/utils';
 import { getBaseUrl } from '@/common/adapter/httpBridge';
-import { resolveAssistantName } from '@/renderer/utils/model/assistantDisplay';
+import { resolveAssistantDisplayName } from '@/renderer/utils/model/assistantDisplay';
 import GoogleModelSelector from '@/renderer/pages/conversation/platforms/gemini/GoogleModelSelector';
 import type { GoogleModelSelection } from '@/renderer/pages/conversation/platforms/gemini/useGoogleModelSelection';
 import { Button, Dropdown, Empty, Menu, Message, Spin, Tooltip } from '@arco-design/web-react';
@@ -304,7 +304,7 @@ const WeixinConfigForm: React.FC<WeixinConfigFormProps> = ({ pluginStatus, model
   const showModelSelector = isAionrsAssistant(selectedAssistant);
   const assistantOptions = availableAssistants;
   const selectedAssistantName = selectedAssistant
-    ? resolveAssistantName(selectedAssistant, localeKey, selectedAssistant.name)
+    ? resolveAssistantDisplayName(selectedAssistant, localeKey, t, selectedAssistant.name)
     : t('settings.assistant.name', 'Assistant');
 
   const handleDisconnect = async () => {
@@ -409,7 +409,7 @@ const WeixinConfigForm: React.FC<WeixinConfigFormProps> = ({ pluginStatus, model
           droplist={
             <Menu selectedKeys={selectedAssistant ? [selectedAssistant.id] : []}>
               {assistantOptions.map((assistant) => {
-                const assistantName = resolveAssistantName(assistant, localeKey, assistant.name);
+                const assistantName = resolveAssistantDisplayName(assistant, localeKey, t, assistant.name);
                 return (
                   <Menu.Item
                     key={assistant.id}
