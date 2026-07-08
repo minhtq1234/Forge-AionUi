@@ -2,15 +2,19 @@ import { describe, expect, it } from 'vitest';
 import type { IMcpServerTransportStdio } from '@/common/config/storage';
 import {
   BUILTIN_CAPABILITIES,
+  BUILTIN_MEMORY_ID,
   BUILTIN_MEMORY_NAME,
   BUILTIN_TAVILY_NAME,
   BUILTIN_POSTGRES_NAME,
+  BUILTIN_CHROME_DEVTOOLS_NAME,
   TIER2_CAPABILITIES,
   buildBuiltinCapabilityServer,
   applyCapabilityCredential,
   getCapabilityCredentialValue,
   hasCapabilityCredential,
   findCapabilityDescriptor,
+  isCommodityBuiltinServer,
+  mergeCommodityMcpServerIds,
 } from '@/common/config/builtinCapabilities';
 
 const stdio = (over: Partial<IMcpServerTransportStdio> = {}): IMcpServerTransportStdio => ({
@@ -77,5 +81,40 @@ describe('applyCapabilityCredential / getCapabilityCredentialValue (connectionSt
     const cleared = applyCapabilityCredential(pg, withConn, '');
     expect(cleared.args).toEqual([...pg.baseArgs]);
     expect(getCapabilityCredentialValue(pg, cleared)).toBe('');
+  });
+});
+
+describe('mergeCommodityMcpServerIds', () => {
+  const srv = (id: string, name: string, enabled: boolean, builtin: boolean) => ({ id, name, enabled, builtin });
+
+  it('adds enabled commodity builtin servers to the assistant defaults, de-duped', () => {
+    const servers = [
+      srv(BUILTIN_MEMORY_ID, BUILTIN_MEMORY_NAME, true, true),
+      srv('chrome', BUILTIN_CHROME_DEVTOOLS_NAME, true, true),
+      srv('user-1', 'User MCP', true, false),
+    ];
+    const result = mergeCommodityMcpServerIds(['assistant-default'], servers);
+    expect(result).toEqual(['assistant-default', BUILTIN_MEMORY_ID, 'chrome']);
+  });
+
+  it('does not add disabled commodity servers, non-builtin servers, or non-commodity builtins', () => {
+    const servers = [
+      srv(BUILTIN_MEMORY_ID, BUILTIN_MEMORY_NAME, false, true), // disabled
+      srv('image', 'aionui-image-generation', true, true), // builtin but not commodity
+      srv('user-1', 'User MCP', true, false), // non-builtin
+    ];
+    expect(mergeCommodityMcpServerIds([], servers)).toEqual([]);
+  });
+
+  it('does not duplicate an id already in the assistant defaults', () => {
+    const servers = [srv(BUILTIN_MEMORY_ID, BUILTIN_MEMORY_NAME, true, true)];
+    expect(mergeCommodityMcpServerIds([BUILTIN_MEMORY_ID], servers)).toEqual([BUILTIN_MEMORY_ID]);
+  });
+
+  it('isCommodityBuiltinServer excludes image-gen and user servers', () => {
+    expect(isCommodityBuiltinServer({ name: BUILTIN_MEMORY_NAME, builtin: true })).toBe(true);
+    expect(isCommodityBuiltinServer({ name: BUILTIN_CHROME_DEVTOOLS_NAME, builtin: true })).toBe(true);
+    expect(isCommodityBuiltinServer({ name: 'aionui-image-generation', builtin: true })).toBe(false);
+    expect(isCommodityBuiltinServer({ name: BUILTIN_MEMORY_NAME, builtin: false })).toBe(false);
   });
 });

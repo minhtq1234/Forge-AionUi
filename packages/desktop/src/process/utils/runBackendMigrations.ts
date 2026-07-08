@@ -8,7 +8,7 @@ import { execFile } from 'node:child_process';
 import { migrateConfigStorage, migrateLegacyMcpConfigToDb, migrateProviders } from '@/common/config/configMigration';
 import { httpRequest } from '@/common/adapter/httpBridge';
 import { mcpService } from '@/common/adapter/ipcBridge';
-import { BUILTIN_CAPABILITIES, buildBuiltinCapabilityServer } from '@/common/config/builtinCapabilities';
+import { BUILTIN_CAPABILITIES, buildBuiltinCapabilityServer, BUILTIN_CHROME_DEVTOOLS_NAME } from '@/common/config/builtinCapabilities';
 import type { ImageGenerationModelSetting } from '@/common/config/clientSettings';
 import {
   removeImageGenerationEnvKeys,
@@ -23,7 +23,6 @@ type ConfigFile = typeof ProcessConfigType;
 type MigrationStepResult = boolean;
 type McpImportServer = Partial<IMcpServer> & Pick<IMcpServer, 'name' | 'transport'>;
 type BackendClientPreferences = Record<string, unknown>;
-const BUILTIN_CHROME_DEVTOOLS_NAME = 'chrome-devtools';
 
 const LEGACY_BACKEND_CLIENT_PREFERENCE_KEYS = [
   'assistants',

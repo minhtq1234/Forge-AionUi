@@ -189,3 +189,37 @@ export const isTier2CapabilityServer = (server: Pick<IMcpServer, 'id' | 'name' |
 
 export const buildCapabilityOriginalJson = (name: string, transport: IMcpServerTransportStdio): string =>
   buildOriginalJson(name, transport.command, transport.args ?? [], transport.env ?? {});
+
+export const BUILTIN_CHROME_DEVTOOLS_NAME = 'chrome-devtools';
+
+/** Built-in server names shipped as commodity defaults (Tier-1 web browse + all capability servers). */
+export const COMMODITY_BUILTIN_SERVER_NAMES: readonly string[] = [
+  BUILTIN_CHROME_DEVTOOLS_NAME,
+  ...BUILTIN_CAPABILITIES.map((c) => c.name),
+];
+
+/** True when `server` is one of our commodity built-in servers (excludes image-gen and user servers). */
+export const isCommodityBuiltinServer = (server: Pick<IMcpServer, 'name' | 'builtin'>): boolean =>
+  server.builtin === true && COMMODITY_BUILTIN_SERVER_NAMES.includes(server.name);
+
+/**
+ * Union the assistant's default MCP server ids with the ids of any *enabled*
+ * commodity built-in servers, so our on-by-default capabilities attach to new
+ * conversations even when the assistant has no saved selection. De-duped,
+ * assistant defaults kept first. Intended for the default (no explicit user
+ * selection) path only.
+ */
+export const mergeCommodityMcpServerIds = (
+  assistantDefaultIds: string[],
+  availableServers: Array<Pick<IMcpServer, 'id' | 'name' | 'builtin' | 'enabled'>>
+): string[] => {
+  const ids = [...assistantDefaultIds];
+  const seen = new Set(ids);
+  for (const server of availableServers) {
+    if (server.enabled === true && isCommodityBuiltinServer(server) && !seen.has(server.id)) {
+      seen.add(server.id);
+      ids.push(server.id);
+    }
+  }
+  return ids;
+};
