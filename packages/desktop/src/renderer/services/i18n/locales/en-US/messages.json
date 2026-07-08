@@ -66,5 +66,66 @@
     "yesAlwaysAllowTool": "Yes, always allow tool \"{{toolName}}\" from server \"{{serverName}}\"",
     "yesAlwaysAllowServer": "Yes, always allow all tools from server \"{{serverName}}\"",
     "no": "No (esc)"
+  },
+  "toolActivity": {
+    "attempt": "(attempt {{n}})",
+    "steps": "{{n}} steps",
+    "generic": { "running": "Working on it…", "done": "Done", "failedTitle": "Something went wrong" },
+    "status": { "stopped": "Stopped" },
+    "error": { "suggestion": "Something went wrong on that step — you can try again, or check the file name." },
+    "categories": {
+      "web": {
+        "running": "Searching the web…",
+        "done": "Searched the web",
+        "failedTitle": "Couldn't complete the search"
+      },
+      "search": { "running": "Searching…", "done": "Search complete", "failedTitle": "Couldn't complete the search" },
+      "fileRead": { "running": "Reading a file…", "done": "Read the file", "failedTitle": "Couldn't read the file" },
+      "fileWrite": { "running": "Saving a file…", "done": "Saved the file", "failedTitle": "Couldn't save the file" },
+      "data": { "running": "Querying data…", "done": "Got the data", "failedTitle": "Couldn't get the data" },
+      "report": {
+        "running": "Building your report…",
+        "done": "Report ready",
+        "failedTitle": "Couldn't build your report"
+      },
+      "export": {
+        "running": "Exporting your file…",
+        "done": "Export ready",
+        "failedTitle": "Couldn't export the file"
+      },
+      "memory": { "running": "Saving to memory…", "done": "Saved to memory", "failedTitle": "Couldn't update memory" },
+      "code": {
+        "running": "Running a command…",
+        "done": "Command finished",
+        "failedTitle": "The command didn't finish"
+      }
+    },
+    "tools": {
+      "data_open": {
+        "running": "Opening your Excel file…",
+        "done": "Opened your Excel file",
+        "failedTitle": "Couldn't open your file"
+      },
+      "data_get_schema": {
+        "running": "Reading the data columns…",
+        "done": "Read the data columns",
+        "failedTitle": "Couldn't read the data"
+      },
+      "data_run_sql": {
+        "running": "Pulling your numbers…",
+        "done": "Pulled your numbers",
+        "failedTitle": "Couldn't pull your numbers"
+      },
+      "render_report": {
+        "running": "Building your report…",
+        "done": "Report ready",
+        "failedTitle": "Couldn't build your report"
+      },
+      "export_pdf": {
+        "running": "Exporting to PDF…",
+        "done": "Exported to PDF",
+        "failedTitle": "Couldn't export the PDF"
+      }
+    }
   }
 }
