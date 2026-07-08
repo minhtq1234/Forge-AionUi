@@ -20,13 +20,14 @@
   --aou-10: #12172e;
 
   /* Background Colors - Light Mode
-     Forge: cream working surfaces floating over a cool-grey canvas; white cards. */
+     Warm cream surface family (no cool grey) so panels harmonize with the cream
+     working surface instead of reading as a cool patchwork. White cards still pop. */
   --bg-base: #faf6ee; /* cream working surface (primary) / 主背景 */
   --bg-1: #f6f0e4; /* cream, secondary surface / 次级背景 */
-  --bg-2: #edeef1; /* cool-grey canvas / 三级背景 */
-  --bg-3: #dcdfe4; /* cool hairline border / 边框分隔 */
-  --bg-4: #cbd0d8;
-  --bg-5: #c6cdd6;
+  --bg-2: #f0e9db; /* warm cream — panels / cards / 三级背景 */
+  --bg-3: #e5dcc9; /* warm hairline border / 边框分隔 */
+  --bg-4: #d8cbb6;
+  --bg-5: #d0c3ad;
   --bg-6: #8a93a1; /* ink-500 — muted / tertiary text / 禁用·次要文字 */
   --bg-8: #5b6472;
   --bg-9: #2a303b;
@@ -75,67 +76,9 @@
   --fill-white-to-black: #ffffff; /* 白到黑填充色 */
   --border-special: var(--bg-3); /* 特殊边框色 */
   --color-guid-agent-bar: #eef1fa; /* 首页 Agent 选择条背景 — navy tint */
-
-  /* ---- Arco palette overrides (RGB triplets) - Light Mode ----
-     Arco derives every component color from these ramps
-     (`rgb(var(--primary-6))`, `--color-primary-light-*`, etc.). Overriding the
-     base palettes here (outranking arco.css's `body {}` via `:root`) re-skins all
-     Arco components to Forge. Generated with @arco-design/color, anchored at -6.
-     Arco maps: primary/link→arcoblue, success→green, warning→orange, danger→red. */
-  --arcoblue-1: 255, 242, 232;
-  --arcoblue-2: 252, 215, 191;
-  --arcoblue-3: 249, 186, 150;
-  --arcoblue-4: 246, 156, 110;
-  --arcoblue-5: 243, 123, 72;
-  --arcoblue-6: 240, 90, 34; /* #F05A22 Forge orange */
-  --arcoblue-7: 199, 63, 21;
-  --arcoblue-8: 158, 41, 11;
-  --arcoblue-9: 117, 23, 4;
-  --arcoblue-10: 77, 10, 0;
-
-  --red-1: 255, 237, 232;
-  --red-2: 247, 203, 195;
-  --red-3: 239, 170, 159;
-  --red-4: 230, 136, 126;
-  --red-5: 222, 103, 94;
-  --red-6: 214, 69, 65; /* #D64541 */
-  --red-7: 180, 41, 41;
-  --red-8: 145, 22, 26;
-  --red-9: 111, 8, 15;
-  --red-10: 77, 0, 8;
-
-  --green-1: 232, 255, 242;
-  --green-2: 170, 232, 200;
-  --green-3: 117, 209, 164;
-  --green-4: 71, 185, 134;
-  --green-5: 34, 162, 109;
-  --green-6: 5, 139, 87; /* #058B57 */
-  --green-7: 3, 123, 81;
-  --green-8: 2, 108, 74;
-  --green-9: 1, 92, 66;
-  --green-10: 0, 77, 57;
-
-  --orange-1: 255, 253, 232;
-  --orange-2: 249, 241, 181;
-  --orange-3: 243, 226, 132;
-  --orange-4: 236, 209, 86;
-  --orange-5: 230, 189, 42;
-  --orange-6: 224, 168, 0; /* #E0A800 amber */
-  --orange-7: 187, 134, 0;
-  --orange-8: 150, 103, 0;
-  --orange-9: 113, 74, 0;
-  --orange-10: 77, 47, 0;
-
-  --cyan-1: 232, 252, 255;
-  --cyan-2: 190, 239, 248;
-  --cyan-3: 150, 223, 242;
-  --cyan-4: 112, 206, 235;
-  --cyan-5: 75, 188, 229;
-  --cyan-6: 41, 167, 222; /* #29A7DE */
-  --cyan-7: 26, 132, 186;
-  --cyan-8: 14, 100, 149;
-  --cyan-9: 5, 70, 113;
-  --cyan-10: 0, 43, 77;
+  /* Arco's own palettes (--arcoblue/red/green/orange/cyan) and neutral fills are
+     defined on `body`, which shadows :root — so they're overridden in the
+     `body[arco-theme='...']` blocks below, not here. Primary is set via ConfigProvider. */
 }
 
 /* Dark Mode */
@@ -207,21 +150,65 @@
   --fill-0: rgba(255, 255, 255, 0.08); /* 填充色 0 - 半透明白 */
   --fill-white-to-black: #000000; /* 白到黑填充色 */
   --border-special: #3b4658; /* 特殊边框色 */
+  /* Arco palettes + neutral fills are overridden in the `body[arco-theme='dark']`
+     block below (Arco defines them on `body`, shadowing :root). */
+}
 
-  /* ---- Arco palette overrides (RGB triplets) - Dark Mode ----
-     Orange is held constant (-6 = #F05A22); semantic ramps anchored on the
-     brightened dark token values so Arco components match the tokens above. */
-  --arcoblue-1: 255, 242, 232;
-  --arcoblue-2: 252, 215, 191;
-  --arcoblue-3: 249, 186, 150;
-  --arcoblue-4: 246, 156, 110;
-  --arcoblue-5: 243, 123, 72;
-  --arcoblue-6: 240, 90, 34; /* #F05A22 Forge orange */
-  --arcoblue-7: 199, 63, 21;
-  --arcoblue-8: 158, 41, 11;
-  --arcoblue-9: 117, 23, 4;
-  --arcoblue-10: 77, 10, 0;
-
+/* ---- Arco neutral fills (body scope) ----
+   Arco's --color-fill-* (hover / selection / disabled backgrounds, e.g. sidebar
+   nav pills, tree + list selection) are defined on `body`, which shadows :root —
+   so they must be overridden here. Light = a warm "sand" ramp that matches the
+   cream palette (no cool grey); dark = aligned to the dark surface ramp. */
+body[arco-theme='light'] {
+  /* Semantic palettes → Forge hues (Arco maps success→green, warning→orange,
+     danger→red; info→cyan). Primary (--arcoblue) is owned by ConfigProvider. */
+  --red-1: 255, 237, 232;
+  --red-2: 247, 203, 195;
+  --red-3: 239, 170, 159;
+  --red-4: 230, 136, 126;
+  --red-5: 222, 103, 94;
+  --red-6: 214, 69, 65; /* #D64541 */
+  --red-7: 180, 41, 41;
+  --red-8: 145, 22, 26;
+  --red-9: 111, 8, 15;
+  --red-10: 77, 0, 8;
+  --green-1: 232, 255, 242;
+  --green-2: 170, 232, 200;
+  --green-3: 117, 209, 164;
+  --green-4: 71, 185, 134;
+  --green-5: 34, 162, 109;
+  --green-6: 5, 139, 87; /* #058B57 */
+  --green-7: 3, 123, 81;
+  --green-8: 2, 108, 74;
+  --green-9: 1, 92, 66;
+  --green-10: 0, 77, 57;
+  --orange-1: 255, 253, 232;
+  --orange-2: 249, 241, 181;
+  --orange-3: 243, 226, 132;
+  --orange-4: 236, 209, 86;
+  --orange-5: 230, 189, 42;
+  --orange-6: 224, 168, 0; /* #E0A800 amber */
+  --orange-7: 187, 134, 0;
+  --orange-8: 150, 103, 0;
+  --orange-9: 113, 74, 0;
+  --orange-10: 77, 47, 0;
+  --cyan-1: 232, 252, 255;
+  --cyan-2: 190, 239, 248;
+  --cyan-3: 150, 223, 242;
+  --cyan-4: 112, 206, 235;
+  --cyan-5: 75, 188, 229;
+  --cyan-6: 41, 167, 222; /* #29A7DE */
+  --cyan-7: 26, 132, 186;
+  --cyan-8: 14, 100, 149;
+  --cyan-9: 5, 70, 113;
+  --cyan-10: 0, 43, 77;
+  /* Neutral fills → warm sand (hover / selection / disabled) */
+  --color-fill-1: #f6f1e8;
+  --color-fill-2: #f0e9db; /* hover */
+  --color-fill-3: #e9dfce; /* selected — warm sand */
+  --color-fill-4: #e0d4bf;
+}
+body[arco-theme='dark'] {
   --red-1: 255, 236, 232;
   --red-2: 250, 210, 203;
   --red-3: 246, 184, 175;
@@ -232,7 +219,6 @@
   --red-8: 154, 32, 38;
   --red-9: 115, 12, 21;
   --red-10: 77, 0, 9;
-
   --green-1: 232, 255, 242;
   --green-2: 179, 244, 208;
   --green-3: 129, 234, 180;
@@ -243,7 +229,6 @@
   --green-8: 1, 139, 91;
   --green-9: 0, 108, 74;
   --green-10: 0, 77, 55;
-
   --orange-1: 255, 253, 232;
   --orange-2: 252, 245, 193;
   --orange-3: 249, 235, 155;
@@ -254,7 +239,6 @@
   --orange-8: 158, 113, 15;
   --orange-9: 117, 78, 6;
   --orange-10: 77, 47, 0;
-
   --cyan-1: 232, 252, 255;
   --cyan-2: 199, 242, 251;
   --cyan-3: 168, 231, 247;
@@ -265,4 +249,8 @@
   --cyan-8: 26, 108, 155;
   --cyan-9: 10, 73, 116;
   --cyan-10: 0, 43, 77;
+  --color-fill-1: #161c27;
+  --color-fill-2: #1e2536;
+  --color-fill-3: #2a3344;
+  --color-fill-4: #3b4658;
 }
