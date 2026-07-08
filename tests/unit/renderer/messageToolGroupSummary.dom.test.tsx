@@ -6,6 +6,12 @@ import type { TMessage } from '@/common/chat/chatLib';
 import type { ToolMessage } from '@/common/chat/normalizeToolCall';
 import MessageToolGroupSummary from '@/renderer/pages/conversation/Messages/components/MessageToolGroupSummary';
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+  }),
+}));
+
 vi.mock('@/common', () => ({
   ipcBridge: {
     database: {
@@ -17,7 +23,7 @@ vi.mock('@/common', () => ({
 }));
 
 describe('MessageToolGroupSummary', () => {
-  it('loads full tool content when expanding a compact history item', async () => {
+  it('lazy-loads full tool content when expanding a truncated item under Technical details', async () => {
     const invoke = vi.mocked(ipcBridge.database.getConversationMessage.invoke);
     invoke.mockResolvedValue({
       id: 'message-1',
@@ -64,7 +70,10 @@ describe('MessageToolGroupSummary', () => {
       />
     );
 
-    fireEvent.click(screen.getByText('View Steps · 1'));
+    // The tool has settled, so the raw machinery lives behind the opt-in
+    // "Technical details" toggle (rendered as its i18n key under the mock).
+    fireEvent.click(screen.getByText('common.technical_details'));
+    // Expanding the raw row triggers the lazy-load of the full (untruncated) output.
     fireEvent.click(screen.getByText('rg'));
 
     await waitFor(() => {

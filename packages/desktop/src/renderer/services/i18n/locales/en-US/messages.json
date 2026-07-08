@@ -69,7 +69,6 @@
   },
   "toolActivity": {
     "attempt": "(attempt {{n}})",
-    "steps": "{{n}} steps",
     "generic": { "running": "Working on it…", "done": "Done", "failedTitle": "Something went wrong" },
     "status": { "stopped": "Stopped" },
     "error": { "suggestion": "Something went wrong on that step — you can try again, or check the file name." },

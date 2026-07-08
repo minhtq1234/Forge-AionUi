@@ -1008,7 +1008,6 @@ export type I18nKey =
   | 'messages.toolActivity.generic.failedTitle'
   | 'messages.toolActivity.generic.running'
   | 'messages.toolActivity.status.stopped'
-  | 'messages.toolActivity.steps'
   | 'messages.toolActivity.tools.data_get_schema.done'
   | 'messages.toolActivity.tools.data_get_schema.failedTitle'
   | 'messages.toolActivity.tools.data_get_schema.running'
