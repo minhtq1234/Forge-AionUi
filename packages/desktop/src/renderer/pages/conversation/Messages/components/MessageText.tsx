@@ -205,8 +205,8 @@ const MessageText: React.FC<{ message: IMessageText; showCopyRow?: boolean }> = 
         )}
         <div
           className={classNames('min-w-0 [&>p:first-child]:mt-0px [&>p:last-child]:mb-0px', {
-            // User messages read as plain right-aligned text on the surface (no bubble);
-            // cron-triggered and teammate messages keep a subtle box.
+            // User messages get a subtle warm bubble; cron/teammate keep their box.
+            'bg-message-user p-8px md:px-12px md:py-8px': isUserMessage && !cronMeta,
             'bg-aou-2 p-6px md:p-8px': cronMeta,
             'bg-3 p-6px md:p-8px': isTeammateMessage,
             'w-full': !(isUserMessage || cronMeta || isTeammateMessage),
@@ -217,7 +217,9 @@ const MessageText: React.FC<{ message: IMessageText; showCopyRow?: boolean }> = 
               : isTeammateMessage
                 ? { borderRadius: '0 8px 8px 8px' }
                 : undefined),
-            ...(isUserMessage && !cronMeta ? { color: 'var(--text-primary)' } : undefined),
+            ...(isUserMessage && !cronMeta
+              ? { borderRadius: '12px 2px 12px 12px', color: 'var(--text-primary)' }
+              : undefined),
           }}
         >
           {/* JSON 内容使用折叠组件 Use CollapsibleContent for JSON content */}

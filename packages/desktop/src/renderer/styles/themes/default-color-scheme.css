@@ -60,7 +60,7 @@
   --brand-hover: #6e82d6; /* navy-300 / 品牌色悬停 */
 
   /* Message & UI Component Colors - Light Mode */
-  --message-user-bg: #eef1fa; /* user chat — navy tint / 用户消息背景 */
+  --message-user-bg: #efe7d8; /* user chat — subtle warm bubble / 用户消息背景 */
   --message-tips-bg: #f0e9db; /* warm cream — tips / error card / 提示信息背景 */
   --workspace-btn-bg: #f4f1ea; /* cream-300 / 工作区按钮背景 */
 
