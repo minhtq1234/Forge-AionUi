@@ -9,7 +9,16 @@ import { removeImageGenerationEnvKeys, resolveImageGenerationMcpEnv } from '@/co
 import { mcpService } from '@/common/adapter/ipcBridge';
 import { type IMcpServer, BUILTIN_IMAGE_GEN_ID, BUILTIN_IMAGE_GEN_NAME } from '@/common/config/storage';
 import { isImageGenSupported } from '@/common/utils/imageModelAllowlist';
-import { Divider, Form, Tooltip, Message, Modal, Switch } from '@arco-design/web-react';
+import {
+  TIER2_CAPABILITIES,
+  isTier2CapabilityServer,
+  applyCapabilityCredential,
+  getCapabilityCredentialValue,
+  hasCapabilityCredential,
+  buildCapabilityOriginalJson,
+  type BuiltinCapabilityDescriptor,
+} from '@/common/config/builtinCapabilities';
+import { Divider, Form, Tooltip, Message, Modal, Switch, Input, Button } from '@arco-design/web-react';
 import { Help } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -55,7 +64,7 @@ const ModalMcpManagementSection: React.FC<{
   const { t } = useTranslation();
   const { oauthStatus, loggingIn, checkOAuthStatus, markLoginRequired, clearLoginRequired, login } = useMcpOAuth();
   const visibleMcpServers = useMemo(
-    () => mcpServers.filter((server) => !isBuiltinImageGenServer(server)),
+    () => mcpServers.filter((server) => !isBuiltinImageGenServer(server) && !isTier2CapabilityServer(server)),
     [mcpServers]
   );
 
@@ -262,6 +271,138 @@ const ModalMcpManagementSection: React.FC<{
       >
         <p>{t('settings.mcpDeleteConfirm')}</p>
       </Modal>
+    </div>
+  );
+};
+
+export const CapabilitiesSection: React.FC<{
+  mcpServers: IMcpServer[];
+  saveMcpServers: (serversOrUpdater: IMcpServer[] | ((prev: IMcpServer[]) => IMcpServer[])) => Promise<void>;
+  message: MessageInstance;
+}> = ({ mcpServers, saveMcpServers, message }) => {
+  const { t } = useTranslation();
+
+  const findServer = useCallback(
+    (descriptor: BuiltinCapabilityDescriptor) =>
+      mcpServers.find((s) => s.builtin === true && (s.id === descriptor.id || s.name === descriptor.name)),
+    [mcpServers]
+  );
+
+  const persistServer = useCallback(
+    (updated: IMcpServer) =>
+      saveMcpServers((prev) => prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s))),
+    [saveMcpServers]
+  );
+
+  const handleSaveCredential = useCallback(
+    async (descriptor: BuiltinCapabilityDescriptor, value: string) => {
+      const server = findServer(descriptor);
+      if (!server || server.transport.type !== 'stdio') return;
+      try {
+        const transport = applyCapabilityCredential(descriptor, server.transport, value);
+        const original_json = buildCapabilityOriginalJson(server.name, transport);
+        const updated = await mcpService.updateServer.invoke({ id: server.id, data: { transport, original_json } });
+        await persistServer(updated);
+        // Clearing the credential disables the capability.
+        if (!hasCapabilityCredential(descriptor, transport) && updated.enabled) {
+          const toggled = await mcpService.toggleServer.invoke({ id: server.id });
+          await persistServer(toggled);
+        }
+        message.success?.(t('settings.capabilitySaved'));
+      } catch (error) {
+        console.error('[Capabilities] save failed', error);
+        message.error?.(t('settings.capabilitySaveError'));
+      }
+    },
+    [findServer, persistServer, message, t]
+  );
+
+  const handleToggle = useCallback(
+    async (descriptor: BuiltinCapabilityDescriptor, checked: boolean) => {
+      const server = findServer(descriptor);
+      if (!server || server.transport.type !== 'stdio') return;
+      if (checked && !hasCapabilityCredential(descriptor, server.transport)) {
+        message.error?.(t('settings.capabilityMissingKey'));
+        return;
+      }
+      try {
+        const toggled = await mcpService.toggleServer.invoke({ id: server.id });
+        await persistServer(toggled);
+      } catch (error) {
+        console.error('[Capabilities] toggle failed', error);
+        message.error?.(t('settings.capabilitySaveError'));
+      }
+    },
+    [findServer, persistServer, message, t]
+  );
+
+  return (
+    <div className='px-[12px] md:px-[32px] py-[24px] bg-2 rd-12px md:rd-16px border border-border-2'>
+      <div className='mb-16px'>
+        <span className='text-14px text-t-primary'>{t('settings.capabilitiesSection')}</span>
+        <div className='text-12px text-t-secondary mt-4px'>{t('settings.capabilitiesSectionDesc')}</div>
+      </div>
+      <Divider className='mt-0px mb-20px' />
+      <div className='space-y-20px'>
+        {TIER2_CAPABILITIES.map((descriptor) => {
+          const server = findServer(descriptor);
+          const value =
+            server && server.transport.type === 'stdio'
+              ? getCapabilityCredentialValue(descriptor, server.transport)
+              : '';
+          const isApiKey = descriptor.credential?.kind === 'apiKey';
+          return (
+            <CapabilityRow
+              key={descriptor.id}
+              descriptor={descriptor}
+              enabled={Boolean(server?.enabled)}
+              disabled={!server}
+              initialValue={value}
+              isApiKey={isApiKey}
+              onToggle={(checked) => handleToggle(descriptor, checked)}
+              onSave={(next) => handleSaveCredential(descriptor, next)}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const CapabilityRow: React.FC<{
+  descriptor: BuiltinCapabilityDescriptor;
+  enabled: boolean;
+  disabled: boolean;
+  initialValue: string;
+  isApiKey: boolean;
+  onToggle: (checked: boolean) => void;
+  onSave: (value: string) => void;
+}> = ({ descriptor, enabled, disabled, initialValue, isApiKey, onToggle, onSave }) => {
+  const { t } = useTranslation();
+  const [value, setValue] = useState(initialValue);
+  useEffect(() => setValue(initialValue), [initialValue]);
+
+  const placeholder = t(descriptor.credential?.placeholderKey ?? 'settings.capabilitiesSection');
+
+  return (
+    <div>
+      <div className='flex items-center justify-between mb-8px'>
+        <div>
+          <div className='text-14px text-t-primary'>{t(descriptor.labelKey)}</div>
+          <div className='text-12px text-t-secondary mt-2px'>{t(descriptor.descriptionKey)}</div>
+        </div>
+        <Switch disabled={disabled} checked={enabled} onChange={onToggle} />
+      </div>
+      <div className='flex items-center gap-8px'>
+        {isApiKey ? (
+          <Input.Password value={value} onChange={setValue} placeholder={placeholder} disabled={disabled} />
+        ) : (
+          <Input value={value} onChange={setValue} placeholder={placeholder} disabled={disabled} />
+        )}
+        <Button type='primary' disabled={disabled || value === initialValue} onClick={() => onSave(value)}>
+          {t('common.save')}
+        </Button>
+      </div>
     </div>
   );
 };
@@ -508,6 +649,7 @@ const ToolsModalContent: React.FC = () => {
               </AionScrollArea>
             </div>
           </div>
+          <CapabilitiesSection message={mcpMessage} mcpServers={mcpServers} saveMcpServers={saveMcpServers} />
           {/* 图像生成 */}
           <div className='px-[12px] md:px-[32px] py-[24px] bg-2 rd-12px md:rd-16px border border-border-2'>
             <div className='flex items-center justify-between mb-16px'>
