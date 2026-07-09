@@ -626,6 +626,16 @@ const isChatMessagePosition = (value: unknown): value is NonNullable<TMessage['p
 const isChatMessageStatus = (value: unknown): value is NonNullable<TMessage['status']> =>
   value === 'finish' || value === 'pending' || value === 'error' || value === 'work';
 
+// aioncore emits internal token-accounting telemetry (e.g.
+// "Token watermark override: provider=0, local_estimate=…, using=…") as `tips`
+// notifications. These are diagnostic noise for end users, and by landing
+// between consecutive tool calls they also fragment retry coalescing. Drop them
+// at ingestion — the same treatment as the `info`/`request_trace`/`thought`
+// stream types handled below.
+const DIAGNOSTIC_TIP_PATTERNS = [/^\s*Token watermark override\b/i, /\blocal_estimate=\d/i];
+
+const isDiagnosticTelemetryTip = (content: unknown): boolean => typeof content === 'string' && DIAGNOSTIC_TIP_PATTERNS.some((pattern) => pattern.test(content));
+
 export const transformMessage = (message: IResponseMessage): TMessage | undefined => {
   const created_at = message.created_at ?? Date.now();
   switch (message.type) {
@@ -658,6 +668,7 @@ export const transformMessage = (message: IResponseMessage): TMessage | undefine
         params?: unknown;
         error?: unknown;
       };
+      if (isDiagnosticTelemetryTip(data?.content)) return undefined;
       const tipType = data.type ?? 'warning';
       const tipCode = typeof data.code === 'string' ? data.code : undefined;
       const tipParams = isObject(data.params) ? data.params : undefined;
