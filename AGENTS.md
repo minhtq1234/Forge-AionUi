@@ -2,6 +2,8 @@
 
 All contributors (human and AI) must follow [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR. ([Chinese version](CONTRIBUTING.zh.md))
 
+New here? Start with [ONBOARDING.md](ONBOARDING.md) for a fast, agent-facing tour of this guide.
+
 ## Code Conventions
 
 ### File & Directory Structure
@@ -151,4 +153,4 @@ When opening a PR, fill in the PR body using [.github/pull_request_template.md](
 | **testing**      | Testing workflow and quality standards                                      | Writing tests, changing runtime behavior, fixing bugs, or claiming behavior is verified                |
 | **bump-version** | Version bump workflow: update package.json, checks, branch, PR, tag release | Bumping version, `/bump-version`                                                                       |
 
-> Skills are located in `.claude/skills/` and contain project conventions that apply to **all** agents and contributors.
+> Skills are located in `.claude/skills/` and contain project conventions that apply to **all** agents and contributors. Claude Code invokes them through its skill system; **agents without one (e.g. Codex) must read the referenced `SKILL.md` file directly** and treat it as ordinary Markdown guidance.
