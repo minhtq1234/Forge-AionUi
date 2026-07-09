@@ -632,7 +632,13 @@ const isChatMessageStatus = (value: unknown): value is NonNullable<TMessage['sta
 // between consecutive tool calls they also fragment retry coalescing. Drop them
 // at ingestion — the same treatment as the `info`/`request_trace`/`thought`
 // stream types handled below.
-const DIAGNOSTIC_TIP_PATTERNS = [/^\s*Token watermark override\b/i, /\blocal_estimate=\d/i];
+const DIAGNOSTIC_TIP_PATTERNS = [
+  /^\s*Token watermark override\b/i,
+  /\blocal_estimate=\d/i,
+  /^\s*Microcompact\b/i,
+  /\btokens freed\b/i,
+  /\bcleared \d+ tool results?\b/i,
+];
 
 const isDiagnosticTelemetryTip = (content: unknown): boolean =>
   typeof content === 'string' && DIAGNOSTIC_TIP_PATTERNS.some((pattern) => pattern.test(content));

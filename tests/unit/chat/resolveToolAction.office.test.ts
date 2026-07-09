@@ -10,6 +10,21 @@ describe('resolveToolAction — office-file detection from call detail', () => {
     });
   });
 
+  it('labels an ExecCommand running officecli as office (office beats the generic code label)', () => {
+    // Real shape: name "ExecCommand", input carries the officecli command + .docx path.
+    expect(
+      resolveToolAction(
+        'ExecCommand',
+        'execute',
+        '{"cmd":"officecli watch /Users/x/ABB_Bank_Report.docx --port 26316","timeout":10000}'
+      )
+    ).toEqual({ category: 'office' });
+  });
+
+  it('labels a plain ExecCommand (no office signal) as code', () => {
+    expect(resolveToolAction('ExecCommand', 'execute', '{"cmd":"ls -la /tmp"}')).toEqual({ category: 'code' });
+  });
+
   it('detects an office file extension in the detail (docx)', () => {
     expect(resolveToolAction('Skill', 'execute', '{"file":"/Users/x/Q2.docx"}')).toEqual({ category: 'office' });
   });

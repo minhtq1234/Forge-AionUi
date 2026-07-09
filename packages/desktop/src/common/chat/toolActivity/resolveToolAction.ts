@@ -14,8 +14,12 @@ const KEYWORD_CATEGORIES: Array<[readonly string[], ToolCategory]> = [
   [['memory', 'remember', 'recall'], 'memory'],
   [['read', 'open', 'load', 'cat'], 'fileRead'],
   [['write', 'save', 'create'], 'fileWrite'],
-  [['exec', 'execute', 'command', 'bash', 'shell'], 'code'],
 ];
+
+// Generic command-execution keywords — checked AFTER office detection so an
+// exec wrapper (e.g. "ExecCommand" running officecli on a .docx) is labelled by
+// what it actually does rather than the generic "command".
+const CODE_KEYWORDS = ['exec', 'execute', 'command', 'bash', 'shell'] as const;
 
 // Office-file work, detected from the call detail (command/args) rather than the
 // tool name — skill wrappers (e.g. officecli) arrive with a generic name like
@@ -64,18 +68,23 @@ export function resolveToolAction(rawName: string | undefined, kind?: string, de
   const toolKey = SEED_TOOL_KEYS.find((key) => id === key || id.endsWith(`_${key}`));
   if (toolKey) return { toolKey, category: categoryForKey(toolKey) };
 
-  // 2. Keyword category on the id tokens (tool-name identity wins over detail).
+  // 2. Specific keyword categories on the id tokens (a descriptive tool name
+  //    wins over the command detail).
   for (const [keywords, category] of KEYWORD_CATEGORIES) {
     if (keywords.some((kw) => id.includes(kw))) return { category };
   }
 
-  // 3. Office-file work, inferred from the command/args when the tool name is
-  //    generic (e.g. a "Skill" wrapper running officecli on an .xlsx).
+  // 3. Office-file work, inferred from the command/args — this beats the generic
+  //    "command" label so an exec/skill wrapper running officecli on an Office
+  //    file reads as Office work, not "Running a command".
   if (detail && OFFICE_DETAIL_PATTERN.test(detail)) return { category: 'office' };
 
-  // 4. Kind-based category (built-in tools).
+  // 4. Generic command execution (checked after office so officecli wins).
+  if (CODE_KEYWORDS.some((kw) => id.includes(kw))) return { category: 'code' };
+
+  // 5. Kind-based category (built-in tools).
   if (kind && KIND_CATEGORIES[kind]) return { category: KIND_CATEGORIES[kind] };
 
-  // 5. Generic fallback — never a raw id.
+  // 6. Generic fallback — never a raw id.
   return { category: 'generic' };
 }

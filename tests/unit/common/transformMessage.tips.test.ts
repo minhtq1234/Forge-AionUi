@@ -26,6 +26,10 @@ describe('transformMessage — aioncore diagnostic tips are filtered out', () =>
     expect(transformMessage(tip('provider=0, local_estimate=20198, using=20198'))).toBeUndefined();
   });
 
+  it('drops "Microcompact: cleared N tool results" compaction telemetry', () => {
+    expect(transformMessage(tip('Microcompact: cleared 6 tool results (~21844 tokens freed)'))).toBeUndefined();
+  });
+
   it('keeps ordinary user-facing tips untouched', () => {
     const result = transformMessage(tip('Your report is ready to download.'));
     expect(result).toBeDefined();
