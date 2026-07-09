@@ -18,7 +18,7 @@ separate content there. `AGENTS.md` is the file you (Codex) load automatically.
 ## 2. How "skills" work for you
 
 The repo's detailed workflows live as skill files under `.claude/skills/`. Claude
-Code *invokes* these through a skill system. **You do not have that mechanism — so
+Code _invokes_ these through a skill system. **You do not have that mechanism — so
 read the `SKILL.md` file directly, as plain Markdown, when its trigger applies.**
 
 | Workflow     | Read this file                         | When                                                                  |
@@ -84,7 +84,7 @@ node scripts/check-i18n.js
 - When you do push, use **`just push`**, never `git push`. It runs
   lint → format-check → typecheck → i18n-check → test, then pushes; a failing step
   aborts. Judge success by **exit code**, not output volume — the repo has many
-  pre-existing lint *warnings* that are not failures.
+  pre-existing lint _warnings_ that are not failures.
 - Commits and PR titles use Conventional Commits: `<type>(<scope>): <subject>`
   (`feat`, `fix`, `perf`, `refactor`, `docs`, `style`, `chore`, `test`, `ci`, `build`).
 - Fill in the PR body from `.github/pull_request_template.md`; check only what you
