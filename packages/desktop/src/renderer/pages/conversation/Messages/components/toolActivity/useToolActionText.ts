@@ -16,8 +16,12 @@ type Form = 'running' | 'done' | 'failedTitle';
 export const useToolActionText = () => {
   const { t } = useTranslation();
   return useMemo(() => {
-    const resolveForm = (rawName: string, kind: string | undefined, form: Form): string => {
-      const { toolKey, category } = resolveToolAction(rawName, kind);
+    // The command/args carry signals the tool name doesn't (e.g. a generic
+    // "Skill" wrapper running officecli on an .xlsx), so pass them to the resolver.
+    const collectDetail = (step: CoalescedStep): string =>
+      step.calls.map((call) => [call.description, call.input].filter(Boolean).join(' ')).join(' ');
+    const resolveForm = (rawName: string, kind: string | undefined, detail: string, form: Form): string => {
+      const { toolKey, category } = resolveToolAction(rawName, kind, detail);
       const generic = t(`messages.toolActivity.generic.${form}`);
       const cat = t(`messages.toolActivity.categories.${category}.${form}`, { defaultValue: generic });
       if (!toolKey) return cat;
@@ -28,14 +32,14 @@ export const useToolActionText = () => {
       label(step: CoalescedStep): string {
         if (step.status === 'canceled') return t('messages.toolActivity.status.stopped');
         const form: Form = step.status === 'completed' ? 'done' : 'running';
-        const base = resolveForm(step.rawName, step.kind, form);
+        const base = resolveForm(step.rawName, step.kind, collectDetail(step), form);
         if (step.attempts > 1 && step.status !== 'completed') {
           return `${base} ${t('messages.toolActivity.attempt', { n: step.attempts })}`;
         }
         return base;
       },
       failedTitle(step: CoalescedStep): string {
-        return resolveForm(step.rawName, step.kind, 'failedTitle');
+        return resolveForm(step.rawName, step.kind, collectDetail(step), 'failedTitle');
       },
       suggestion(): string {
         return t('messages.toolActivity.error.suggestion');

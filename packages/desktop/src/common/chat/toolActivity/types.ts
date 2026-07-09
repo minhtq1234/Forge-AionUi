@@ -10,6 +10,7 @@ export type ToolCategory =
   | 'export'
   | 'memory'
   | 'code'
+  | 'office'
   | 'generic';
 
 export type ResolvedToolAction = {

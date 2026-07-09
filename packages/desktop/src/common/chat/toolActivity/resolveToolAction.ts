@@ -17,6 +17,12 @@ const KEYWORD_CATEGORIES: Array<[readonly string[], ToolCategory]> = [
   [['exec', 'execute', 'command', 'bash', 'shell'], 'code'],
 ];
 
+// Office-file work, detected from the call detail (command/args) rather than the
+// tool name — skill wrappers (e.g. officecli) arrive with a generic name like
+// "Skill", so the meaningful signal is the officecli invocation or an Office
+// file extension in the command/arguments.
+const OFFICE_DETAIL_PATTERN = /\bofficecli\b|\.(xlsx|xlsm|xls|csv|docx|doc|pptx|ppt)\b/i;
+
 const KIND_CATEGORIES: Record<string, ToolCategory> = {
   read: 'fileRead',
   edit: 'fileWrite',
@@ -51,21 +57,25 @@ function normalizeId(rawName: string): string {
     .replace(/^_|_$/g, '');
 }
 
-export function resolveToolAction(rawName: string | undefined, kind?: string): ResolvedToolAction {
+export function resolveToolAction(rawName: string | undefined, kind?: string, detail?: string): ResolvedToolAction {
   const id = normalizeId(rawName ?? '');
 
   // 1. Exact tool: id === key, or id ends with `_<key>` (tolerate a server prefix).
   const toolKey = SEED_TOOL_KEYS.find((key) => id === key || id.endsWith(`_${key}`));
   if (toolKey) return { toolKey, category: categoryForKey(toolKey) };
 
-  // 2. Keyword category on the id tokens.
+  // 2. Keyword category on the id tokens (tool-name identity wins over detail).
   for (const [keywords, category] of KEYWORD_CATEGORIES) {
     if (keywords.some((kw) => id.includes(kw))) return { category };
   }
 
-  // 3. Kind-based category (built-in tools).
+  // 3. Office-file work, inferred from the command/args when the tool name is
+  //    generic (e.g. a "Skill" wrapper running officecli on an .xlsx).
+  if (detail && OFFICE_DETAIL_PATTERN.test(detail)) return { category: 'office' };
+
+  // 4. Kind-based category (built-in tools).
   if (kind && KIND_CATEGORIES[kind]) return { category: KIND_CATEGORIES[kind] };
 
-  // 4. Generic fallback — never a raw id.
+  // 5. Generic fallback — never a raw id.
   return { category: 'generic' };
 }

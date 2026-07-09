@@ -634,7 +634,8 @@ const isChatMessageStatus = (value: unknown): value is NonNullable<TMessage['sta
 // stream types handled below.
 const DIAGNOSTIC_TIP_PATTERNS = [/^\s*Token watermark override\b/i, /\blocal_estimate=\d/i];
 
-const isDiagnosticTelemetryTip = (content: unknown): boolean => typeof content === 'string' && DIAGNOSTIC_TIP_PATTERNS.some((pattern) => pattern.test(content));
+const isDiagnosticTelemetryTip = (content: unknown): boolean =>
+  typeof content === 'string' && DIAGNOSTIC_TIP_PATTERNS.some((pattern) => pattern.test(content));
 
 export const transformMessage = (message: IResponseMessage): TMessage | undefined => {
   const created_at = message.created_at ?? Date.now();

@@ -97,6 +97,11 @@
         "running": "Running a command…",
         "done": "Command finished",
         "failedTitle": "The command didn't finish"
+      },
+      "office": {
+        "running": "Working with your Office file…",
+        "done": "Finished with your Office file",
+        "failedTitle": "Couldn't finish with your Office file"
       }
     },
     "tools": {

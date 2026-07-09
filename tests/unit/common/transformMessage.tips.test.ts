@@ -17,7 +17,9 @@ const tip = (content: string, type: 'success' | 'info' | 'warning' | 'error' = '
 
 describe('transformMessage — aioncore diagnostic tips are filtered out', () => {
   it('drops "Token watermark override" telemetry tips', () => {
-    expect(transformMessage(tip('Token watermark override: provider=0, local_estimate=19756, using=19756'))).toBeUndefined();
+    expect(
+      transformMessage(tip('Token watermark override: provider=0, local_estimate=19756, using=19756'))
+    ).toBeUndefined();
   });
 
   it('drops tips carrying a local_estimate token accounting line', () => {
