@@ -26,7 +26,8 @@
     "uno.config.ts",
     "packages/desktop/electron.vite.config.ts",
     "playwright.config.ts",
-    "packages/desktop/src/renderer/types.d.ts"
+    "packages/desktop/src/renderer/types.d.ts",
+    "tests/unit/common-adapter/ipcBridgeManagedAssistants.test.ts"
   ],
   "exclude": [
     "packages/desktop/src/process/services/database/drivers/BunSqliteDriver.ts",
