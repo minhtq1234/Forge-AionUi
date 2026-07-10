@@ -185,54 +185,60 @@ export const assistants = {
 
 type ManagedId = { id: string };
 type ManagedDetailParams = ManagedId & { locale?: string };
+type ManagedMutationParams<Request> = ManagedDetailParams & Request;
+type ManagedDraftParams = ManagedAssistantDraftRequest & { locale?: string };
+
+const withManagedLocale = (path: string, locale?: string) =>
+  locale ? `${path}?locale=${encodeURIComponent(locale)}` : path;
 
 export const managedAssistants = {
   list: httpGet<ManagedAssistantSummary[], void>('/api/managed-assistants'),
-  get: httpGet<ManagedAssistantDetail, ManagedDetailParams>(
-    ({ id, locale }) =>
-      `/api/managed-assistants/${encodeURIComponent(id)}${locale ? `?locale=${encodeURIComponent(locale)}` : ''}`
+  get: httpGet<ManagedAssistantDetail, ManagedDetailParams>(({ id, locale }) =>
+    withManagedLocale(`/api/managed-assistants/${encodeURIComponent(id)}`, locale)
   ),
-  setAdoption: httpPut<ManagedAssistantDetail, ManagedId & ManagedAssistantAdoptionRequest>(
-    ({ id }) => `/api/managed-assistants/${encodeURIComponent(id)}/adoption`,
-    ({ id: _id, ...body }) => body
+  setAdoption: httpPut<ManagedAssistantDetail, ManagedMutationParams<ManagedAssistantAdoptionRequest>>(
+    ({ id, locale }) => withManagedLocale(`/api/managed-assistants/${encodeURIComponent(id)}/adoption`, locale),
+    ({ id: _id, locale: _locale, ...body }) => body
   ),
-  updatePreferences: httpPut<ManagedAssistantDetail, ManagedId & ManagedAssistantPreferencesRequest>(
-    ({ id }) => `/api/managed-assistants/${encodeURIComponent(id)}/preferences`,
-    ({ id: _id, ...body }) => body
+  updatePreferences: httpPut<ManagedAssistantDetail, ManagedMutationParams<ManagedAssistantPreferencesRequest>>(
+    ({ id, locale }) => withManagedLocale(`/api/managed-assistants/${encodeURIComponent(id)}/preferences`, locale),
+    ({ id: _id, locale: _locale, ...body }) => body
   ),
-  resetPreferences: httpDelete<ManagedAssistantDetail, ManagedId>(
-    ({ id }) => `/api/managed-assistants/${encodeURIComponent(id)}/preferences`
+  resetPreferences: httpDelete<ManagedAssistantDetail, ManagedDetailParams>(({ id, locale }) =>
+    withManagedLocale(`/api/managed-assistants/${encodeURIComponent(id)}/preferences`, locale)
   ),
-  acknowledge: httpPost<ManagedAssistantDetail, ManagedId & ManagedAssistantAcknowledgementRequest>(
-    ({ id }) => `/api/managed-assistants/${encodeURIComponent(id)}/acknowledgements`,
-    ({ id: _id, ...body }) => body
+  acknowledge: httpPost<ManagedAssistantDetail, ManagedMutationParams<ManagedAssistantAcknowledgementRequest>>(
+    ({ id, locale }) => withManagedLocale(`/api/managed-assistants/${encodeURIComponent(id)}/acknowledgements`, locale),
+    ({ id: _id, locale: _locale, ...body }) => body
   ),
-  markNoticeSeen: httpPost<ManagedAssistantDetail, ManagedId & ManagedAssistantNoticeSeenRequest>(
-    ({ id }) => `/api/managed-assistants/${encodeURIComponent(id)}/notices/seen`,
-    ({ id: _id, ...body }) => body
+  markNoticeSeen: httpPost<ManagedAssistantDetail, ManagedMutationParams<ManagedAssistantNoticeSeenRequest>>(
+    ({ id, locale }) => withManagedLocale(`/api/managed-assistants/${encodeURIComponent(id)}/notices/seen`, locale),
+    ({ id: _id, locale: _locale, ...body }) => body
   ),
 };
 
 export const managedAssistantAdmin = {
-  list: httpGet<ManagedAssistantAdminSummary[], { locale?: string }>(
-    ({ locale }) => `/api/admin/managed-assistants${locale ? `?locale=${encodeURIComponent(locale)}` : ''}`
+  list: httpGet<ManagedAssistantAdminSummary[], { locale?: string }>(({ locale }) =>
+    withManagedLocale('/api/admin/managed-assistants', locale)
   ),
-  createDraft: httpPost<ManagedAssistantAdminDetail, ManagedAssistantDraftRequest>('/api/admin/managed-assistants'),
-  get: httpGet<ManagedAssistantAdminDetail, ManagedDetailParams>(
-    ({ id, locale }) =>
-      `/api/admin/managed-assistants/${encodeURIComponent(id)}${locale ? `?locale=${encodeURIComponent(locale)}` : ''}`
+  createDraft: httpPost<ManagedAssistantAdminDetail, ManagedDraftParams>(
+    ({ locale }) => withManagedLocale('/api/admin/managed-assistants', locale),
+    ({ locale: _locale, ...body }) => body
   ),
-  saveDraft: httpPut<ManagedAssistantAdminDetail, ManagedId & ManagedAssistantDraftRequest>(
-    ({ id }) => `/api/admin/managed-assistants/${encodeURIComponent(id)}/draft`,
-    ({ id: _id, ...body }) => body
+  get: httpGet<ManagedAssistantAdminDetail, ManagedDetailParams>(({ id, locale }) =>
+    withManagedLocale(`/api/admin/managed-assistants/${encodeURIComponent(id)}`, locale)
   ),
-  publish: httpPost<ManagedAssistantAdminDetail, ManagedId & ManagedAssistantPublishRequest>(
-    ({ id }) => `/api/admin/managed-assistants/${encodeURIComponent(id)}/publish`,
-    ({ id: _id, ...body }) => body
+  saveDraft: httpPut<ManagedAssistantAdminDetail, ManagedMutationParams<ManagedAssistantDraftRequest>>(
+    ({ id, locale }) => withManagedLocale(`/api/admin/managed-assistants/${encodeURIComponent(id)}/draft`, locale),
+    ({ id: _id, locale: _locale, ...body }) => body
   ),
-  retire: httpPost<ManagedAssistantAdminDetail, ManagedId & ManagedAssistantRetireRequest>(
-    ({ id }) => `/api/admin/managed-assistants/${encodeURIComponent(id)}/retire`,
-    ({ id: _id, ...body }) => body
+  publish: httpPost<ManagedAssistantAdminDetail, ManagedMutationParams<ManagedAssistantPublishRequest>>(
+    ({ id, locale }) => withManagedLocale(`/api/admin/managed-assistants/${encodeURIComponent(id)}/publish`, locale),
+    ({ id: _id, locale: _locale, ...body }) => body
+  ),
+  retire: httpPost<ManagedAssistantAdminDetail, ManagedMutationParams<ManagedAssistantRetireRequest>>(
+    ({ id, locale }) => withManagedLocale(`/api/admin/managed-assistants/${encodeURIComponent(id)}/retire`, locale),
+    ({ id: _id, locale: _locale, ...body }) => body
   ),
 };
 

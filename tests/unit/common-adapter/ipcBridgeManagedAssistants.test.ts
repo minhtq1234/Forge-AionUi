@@ -117,6 +117,9 @@ const draftRequest: ManagedAssistantDraftRequest = {
   },
 };
 
+const locale = 'vi VN/2026?x=y&z';
+const encodedLocale = 'vi%20VN%2F2026%3Fx%3Dy%26z';
+
 describe('managed assistant IPC bridge clients', () => {
   beforeEach(() => {
     httpBridgeMocks.calls.length = 0;
@@ -147,104 +150,145 @@ describe('managed assistant IPC bridge clients', () => {
   });
 
   it('gets an employee managed assistant with encoded id and locale', async () => {
-    await managedAssistants.get.invoke({ id: 'finance/team', locale: 'en-US' });
+    await managedAssistants.get.invoke({ id: 'finance/team', locale });
 
     expect(httpBridgeMocks.calls).toEqual([
-      { method: 'GET', path: '/api/managed-assistants/finance%2Fteam?locale=en-US', body: undefined },
+      {
+        method: 'GET',
+        path: `/api/managed-assistants/finance%2Fteam?locale=${encodedLocale}`,
+        body: undefined,
+      },
     ]);
   });
 
-  it('sets employee adoption without sending the path id in the body', async () => {
-    await managedAssistants.setAdoption.invoke({ id: 'finance/team', active: true });
+  it('sets employee adoption with encoded locale outside the body', async () => {
+    await managedAssistants.setAdoption.invoke({ id: 'finance/team', locale, active: true });
 
     expect(httpBridgeMocks.calls).toEqual([
-      { method: 'PUT', path: '/api/managed-assistants/finance%2Fteam/adoption', body: { active: true } },
+      {
+        method: 'PUT',
+        path: `/api/managed-assistants/finance%2Fteam/adoption?locale=${encodedLocale}`,
+        body: { active: true },
+      },
     ]);
   });
 
-  it('updates employee preferences without sending the path id in the body', async () => {
-    await managedAssistants.updatePreferences.invoke({ id: 'finance/team', nickname: 'Fin' });
+  it('updates employee preferences with encoded locale outside the body', async () => {
+    await managedAssistants.updatePreferences.invoke({ id: 'finance/team', locale, nickname: 'Fin' });
 
     expect(httpBridgeMocks.calls).toEqual([
-      { method: 'PUT', path: '/api/managed-assistants/finance%2Fteam/preferences', body: { nickname: 'Fin' } },
+      {
+        method: 'PUT',
+        path: `/api/managed-assistants/finance%2Fteam/preferences?locale=${encodedLocale}`,
+        body: { nickname: 'Fin' },
+      },
     ]);
   });
 
-  it('resets employee preferences', async () => {
-    await managedAssistants.resetPreferences.invoke({ id: 'finance/team' });
+  it('resets employee preferences with encoded locale', async () => {
+    await managedAssistants.resetPreferences.invoke({ id: 'finance/team', locale });
 
     expect(httpBridgeMocks.calls).toEqual([
-      { method: 'DELETE', path: '/api/managed-assistants/finance%2Fteam/preferences', body: undefined },
+      {
+        method: 'DELETE',
+        path: `/api/managed-assistants/finance%2Fteam/preferences?locale=${encodedLocale}`,
+        body: undefined,
+      },
     ]);
   });
 
-  it('acknowledges an employee managed assistant version without sending the path id in the body', async () => {
-    await managedAssistants.acknowledge.invoke({ id: 'finance/team', version: 4 });
-
-    expect(httpBridgeMocks.calls).toEqual([
-      { method: 'POST', path: '/api/managed-assistants/finance%2Fteam/acknowledgements', body: { version: 4 } },
-    ]);
-  });
-
-  it('marks an employee managed assistant notice seen without sending the path id in the body', async () => {
-    await managedAssistants.markNoticeSeen.invoke({ id: 'finance/team', version: 4 });
-
-    expect(httpBridgeMocks.calls).toEqual([
-      { method: 'POST', path: '/api/managed-assistants/finance%2Fteam/notices/seen', body: { version: 4 } },
-    ]);
-  });
-
-  it('lists admin managed assistants with locale', async () => {
-    await managedAssistantAdmin.list.invoke({ locale: 'vi-VN' });
-
-    expect(httpBridgeMocks.calls).toEqual([
-      { method: 'GET', path: '/api/admin/managed-assistants?locale=vi-VN', body: undefined },
-    ]);
-  });
-
-  it('creates an admin managed assistant draft', async () => {
-    await managedAssistantAdmin.createDraft.invoke(draftRequest);
-
-    expect(httpBridgeMocks.calls).toEqual([
-      { method: 'POST', path: '/api/admin/managed-assistants', body: draftRequest },
-    ]);
-  });
-
-  it('gets an admin managed assistant with encoded id and locale', async () => {
-    await managedAssistantAdmin.get.invoke({ id: 'finance/team', locale: 'en-US' });
-
-    expect(httpBridgeMocks.calls).toEqual([
-      { method: 'GET', path: '/api/admin/managed-assistants/finance%2Fteam?locale=en-US', body: undefined },
-    ]);
-  });
-
-  it('saves an admin managed assistant draft without sending the path id in the body', async () => {
-    await managedAssistantAdmin.saveDraft.invoke({ id: 'finance/team', ...draftRequest });
-
-    expect(httpBridgeMocks.calls).toEqual([
-      { method: 'PUT', path: '/api/admin/managed-assistants/finance%2Fteam/draft', body: draftRequest },
-    ]);
-  });
-
-  it('publishes an admin managed assistant without sending the path id in the body', async () => {
-    await managedAssistantAdmin.publish.invoke({ id: 'finance/team', release_notes: 'release', draft_version: 4 });
+  it('acknowledges an employee managed assistant version with encoded locale outside the body', async () => {
+    await managedAssistants.acknowledge.invoke({ id: 'finance/team', locale, version: 4 });
 
     expect(httpBridgeMocks.calls).toEqual([
       {
         method: 'POST',
-        path: '/api/admin/managed-assistants/finance%2Fteam/publish',
+        path: `/api/managed-assistants/finance%2Fteam/acknowledgements?locale=${encodedLocale}`,
+        body: { version: 4 },
+      },
+    ]);
+  });
+
+  it('marks an employee managed assistant notice seen with encoded locale outside the body', async () => {
+    await managedAssistants.markNoticeSeen.invoke({ id: 'finance/team', locale, version: 4 });
+
+    expect(httpBridgeMocks.calls).toEqual([
+      {
+        method: 'POST',
+        path: `/api/managed-assistants/finance%2Fteam/notices/seen?locale=${encodedLocale}`,
+        body: { version: 4 },
+      },
+    ]);
+  });
+
+  it('lists admin managed assistants with locale', async () => {
+    await managedAssistantAdmin.list.invoke({ locale });
+
+    expect(httpBridgeMocks.calls).toEqual([
+      { method: 'GET', path: `/api/admin/managed-assistants?locale=${encodedLocale}`, body: undefined },
+    ]);
+  });
+
+  it('creates an admin managed assistant draft with encoded locale outside the body', async () => {
+    await managedAssistantAdmin.createDraft.invoke({ ...draftRequest, locale });
+
+    expect(httpBridgeMocks.calls).toEqual([
+      {
+        method: 'POST',
+        path: `/api/admin/managed-assistants?locale=${encodedLocale}`,
+        body: draftRequest,
+      },
+    ]);
+  });
+
+  it('gets an admin managed assistant with encoded id and locale', async () => {
+    await managedAssistantAdmin.get.invoke({ id: 'finance/team', locale });
+
+    expect(httpBridgeMocks.calls).toEqual([
+      {
+        method: 'GET',
+        path: `/api/admin/managed-assistants/finance%2Fteam?locale=${encodedLocale}`,
+        body: undefined,
+      },
+    ]);
+  });
+
+  it('saves an admin managed assistant draft with encoded locale outside the body', async () => {
+    await managedAssistantAdmin.saveDraft.invoke({ id: 'finance/team', locale, ...draftRequest });
+
+    expect(httpBridgeMocks.calls).toEqual([
+      {
+        method: 'PUT',
+        path: `/api/admin/managed-assistants/finance%2Fteam/draft?locale=${encodedLocale}`,
+        body: draftRequest,
+      },
+    ]);
+  });
+
+  it('publishes an admin managed assistant with encoded locale outside the body', async () => {
+    await managedAssistantAdmin.publish.invoke({
+      id: 'finance/team',
+      locale,
+      release_notes: 'release',
+      draft_version: 4,
+    });
+
+    expect(httpBridgeMocks.calls).toEqual([
+      {
+        method: 'POST',
+        path: `/api/admin/managed-assistants/finance%2Fteam/publish?locale=${encodedLocale}`,
         body: { release_notes: 'release', draft_version: 4 },
       },
     ]);
   });
 
-  it('retires an admin managed assistant without sending the path id in the body', async () => {
-    await managedAssistantAdmin.retire.invoke({ id: 'finance/team', reason: 'replacement', cutoff_at: 123 });
+  it('retires an admin managed assistant with encoded locale outside the body', async () => {
+    await managedAssistantAdmin.retire.invoke({ id: 'finance/team', locale, reason: 'replacement', cutoff_at: 123 });
 
     expect(httpBridgeMocks.calls).toEqual([
       {
         method: 'POST',
-        path: '/api/admin/managed-assistants/finance%2Fteam/retire',
+        path: `/api/admin/managed-assistants/finance%2Fteam/retire?locale=${encodedLocale}`,
         body: { reason: 'replacement', cutoff_at: 123 },
       },
     ]);
