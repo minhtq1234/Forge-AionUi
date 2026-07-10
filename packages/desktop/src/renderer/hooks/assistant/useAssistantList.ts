@@ -22,15 +22,21 @@ export const useAssistantList = () => {
   const [activeAssistantId, setActiveAssistantId] = useState<string | null>(null);
   const localeKey = resolveLocaleKey(i18n.language);
   const previousLocaleKeyRef = useRef(localeKey);
+  const refreshGenerationRef = useRef(0);
 
   const loadAssistants = useCallback(async (): Promise<AssistantListLoadResult> => {
+    const refreshGeneration = refreshGenerationRef.current + 1;
+    refreshGenerationRef.current = refreshGeneration;
+
     try {
       const list = await ipcBridge.assistants.list.invoke();
-      setAssistants(list);
-      setActiveAssistantId((prev) => {
-        if (prev && list.some((a) => a.id === prev)) return prev;
-        return list[0]?.id ?? null;
-      });
+      if (refreshGeneration === refreshGenerationRef.current) {
+        setAssistants(list);
+        setActiveAssistantId((prev) => {
+          if (prev && list.some((a) => a.id === prev)) return prev;
+          return list[0]?.id ?? null;
+        });
+      }
       return { ok: true, assistants: list };
     } catch (error) {
       console.error('Failed to load assistants:', error);

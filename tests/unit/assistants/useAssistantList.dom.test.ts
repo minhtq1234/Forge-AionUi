@@ -32,6 +32,16 @@ import { useAssistantList } from '@/renderer/hooks/assistant/useAssistantList';
 import { ipcBridge } from '@/common';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 
+const deferred = <T>() => {
+  let resolve: (value: T) => void;
+  let reject: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+};
+
 describe('useAssistantList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -94,6 +104,48 @@ describe('useAssistantList', () => {
     });
 
     expect(loadResult).toEqual({ ok: true, assistants: mockList });
+  });
+
+  it('keeps the newest assistant list when an older refresh completes last', async () => {
+    const initialList: Assistant[] = [{ id: 'initial', name: 'Initial', sort_order: 1, source: 'user', enabled: true }];
+    const obsoleteList: Assistant[] = [
+      { id: 'obsolete', name: 'Obsolete', sort_order: 1, source: 'user', enabled: true },
+    ];
+    const newestList: Assistant[] = [{ id: 'newest', name: 'Newest', sort_order: 1, source: 'user', enabled: true }];
+    const olderRefresh = deferred<Assistant[]>();
+    const newerRefresh = deferred<Assistant[]>();
+    vi.mocked(ipcBridge.assistants.list.invoke)
+      .mockResolvedValueOnce(initialList)
+      .mockReturnValueOnce(olderRefresh.promise)
+      .mockReturnValueOnce(newerRefresh.promise);
+
+    const { result } = renderHook(() => useAssistantList());
+    await waitFor(() => expect(result.current.assistants).toEqual(initialList));
+
+    let olderResult: Awaited<ReturnType<typeof result.current.loadAssistants>> | undefined;
+    let newerResult: Awaited<ReturnType<typeof result.current.loadAssistants>> | undefined;
+    act(() => {
+      void result.current.loadAssistants().then((value) => {
+        olderResult = value;
+      });
+      void result.current.loadAssistants().then((value) => {
+        newerResult = value;
+      });
+    });
+
+    await act(async () => {
+      newerRefresh.resolve(newestList);
+      await newerRefresh.promise;
+    });
+    await waitFor(() => expect(newerResult).toEqual({ ok: true, assistants: newestList }));
+
+    await act(async () => {
+      olderRefresh.resolve(obsoleteList);
+      await olderRefresh.promise;
+    });
+
+    await waitFor(() => expect(olderResult).toEqual({ ok: true, assistants: obsoleteList }));
+    expect(result.current.assistants).toEqual(newestList);
   });
 
   it('preserves active selection if still present after reload', async () => {

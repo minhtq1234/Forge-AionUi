@@ -13,7 +13,7 @@ import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import TalkToButlerButton from '@/renderer/components/base/TalkToButlerButton';
 import { Alert, Tabs } from '@arco-design/web-react';
 import classNames from 'classnames';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 type AssistantHomeTabsProps = {
@@ -60,6 +60,12 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
   const [verifiedManagedAssistantIds, setVerifiedManagedAssistantIds] = useState<Set<string>>(
     () => new Set(assistants.filter((assistant) => assistant.source === 'managed').map((assistant) => assistant.id))
   );
+  const [retainedManagedAssistants, setRetainedManagedAssistants] = useState<Map<string, AssistantListItem>>(
+    () =>
+      new Map(
+        assistants.filter((assistant) => assistant.source === 'managed').map((assistant) => [assistant.id, assistant])
+      )
+  );
   const managedVerificationSequenceRef = useRef(new Map<string, number>());
 
   useEffect(() => {
@@ -67,17 +73,29 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
   }, [initialTab]);
 
   useEffect(() => {
-    const managedAssistantIds = assistants
-      .filter((assistant) => assistant.source === 'managed')
-      .map((assistant) => assistant.id);
-    if (managedAssistantIds.length === 0) return;
+    const managedAssistants = assistants.filter((assistant) => assistant.source === 'managed');
+    if (managedAssistants.length === 0) return;
 
     setVerifiedManagedAssistantIds((current) => {
       const next = new Set(current);
-      managedAssistantIds.forEach((id) => next.add(id));
+      managedAssistants.forEach((assistant) => next.add(assistant.id));
+      return next;
+    });
+
+    setRetainedManagedAssistants((current) => {
+      const next = new Map(current);
+      managedAssistants.forEach((assistant) => next.set(assistant.id, assistant));
       return next;
     });
   }, [assistants]);
+
+  const myAssistants = useMemo(() => {
+    const currentAssistantIds = new Set(assistants.map((assistant) => assistant.id));
+    const retained = [...retainedManagedAssistants.values()].filter(
+      (assistant) => !currentAssistantIds.has(assistant.id)
+    );
+    return [...assistants, ...retained];
+  }, [assistants, retainedManagedAssistants]);
 
   const verifyManagedAssistantProjection = useCallback(
     async (id: string): Promise<AssistantListLoadResult> => {
@@ -185,7 +203,7 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
         <div className='mx-auto min-w-0 w-full max-w-800px'>
           {tab === 'mine' ? (
             <MyAssistantsList
-              assistants={assistants}
+              assistants={myAssistants}
               localeKey={localeKey}
               onOpenDetail={onOpenDetail}
               onOpenManagedDetail={openManagedDetail}

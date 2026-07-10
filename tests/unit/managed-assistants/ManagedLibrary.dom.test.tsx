@@ -7,10 +7,10 @@ import ManagedLibrary from '@/renderer/pages/settings/AssistantSettings/home/Man
 import MyAssistantRow from '@/renderer/pages/settings/AssistantSettings/home/MyAssistantRow';
 import { ConfigProvider } from '@arco-design/web-react';
 import { DndContext } from '@dnd-kit/core';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const listManagedAssistants = vi.fn();
 const getManagedAssistant = vi.fn();
@@ -291,6 +291,7 @@ const AssistantHomeTabsWithRealAssistantList: React.FC<{
 describe('ManagedLibrary', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    listAssistants.mockReset();
     translationOverrides = {};
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -824,6 +825,84 @@ describe('ManagedLibrary', () => {
 });
 
 describe('managed assistant entry points', () => {
+  afterEach(() => {
+    listAssistants.mockReset();
+  });
+
+  it('keeps managed A visible and unavailable until a current exact-A refresh succeeds', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const assistantA = createAssistant();
+    const assistantB = createAssistant({
+      id: 'contract-review',
+      name: 'Contract Review Teammate',
+      name_i18n: { 'en-US': 'Contract Review Teammate' },
+    });
+    const refreshOne = deferred<Assistant[]>();
+    const refreshTwo = deferred<Assistant[]>();
+    getManagedAssistant.mockResolvedValue(createDetail({ adoption: { active: true, adopted_at: 1_788_192_100 } }));
+    listAssistants
+      .mockResolvedValueOnce([assistantA])
+      .mockReturnValueOnce(refreshOne.promise)
+      .mockReturnValueOnce(refreshTwo.promise)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([assistantB])
+      .mockResolvedValueOnce([assistantA]);
+
+    render(
+      <ConfigProvider>
+        <AssistantHomeTabsWithRealAssistantList onStartChat={vi.fn()} />
+      </ConfigProvider>
+    );
+
+    await screen.findByTestId('assistant-card-finance-close');
+    await userEvent.click(screen.getByRole('button', { name: 'View details' }));
+    await waitFor(() => expect(listAssistants).toHaveBeenCalledTimes(2));
+
+    await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'View details' }));
+    await waitFor(() => expect(listAssistants).toHaveBeenCalledTimes(3));
+    await act(async () => {
+      refreshTwo.reject(new Error('generic list failed'));
+      await refreshTwo.promise.catch(() => undefined);
+    });
+    await screen.findByRole('button', { name: 'Retry' });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
+    const start = await screen.findByRole('button', { name: 'Start working' });
+    expect(start).toBeDisabled();
+
+    await act(async () => {
+      refreshOne.resolve([assistantA]);
+      await refreshOne.promise;
+    });
+    await waitFor(() => expect(start).toBeDisabled());
+
+    await userEvent.click(screen.getByRole('button', { name: 'View details' }));
+    await screen.findByRole('button', { name: 'Retry' });
+    await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
+    expect(screen.getByTestId('assistant-card-finance-close')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start working' })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'View details' }));
+    await screen.findByRole('button', { name: 'Retry' });
+    await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
+    expect(screen.getByTestId('assistant-card-finance-close')).toBeInTheDocument();
+    expect(screen.getByTestId('assistant-card-contract-review')).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('assistant-card-finance-close')).getByRole('button', { name: 'Start working' })
+    ).toBeDisabled();
+
+    await userEvent.click(
+      within(screen.getByTestId('assistant-card-finance-close')).getByRole('button', { name: 'View details' })
+    );
+    await screen.findByRole('button', { name: 'Start working' });
+    await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
+    expect(
+      within(screen.getByTestId('assistant-card-finance-close')).getByRole('button', { name: 'Start working' })
+    ).toBeEnabled();
+    consoleErrorSpy.mockRestore();
+  });
+
   it('keeps a stale managed row visible but blocks Start until its exact generic projection refreshes', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const onStartChat = vi.fn();
