@@ -20,6 +20,7 @@ type MyAssistantsListProps = {
   assistants: AssistantListItem[];
   localeKey: string;
   onOpenDetail: (assistant: AssistantListItem) => void;
+  onOpenManagedDetail: (id: string) => void;
   onDelete: (assistant: AssistantListItem) => void;
   onToggleEnabled: (assistant: AssistantListItem, checked: boolean) => void;
   onReorder: (activeId: string, overId: string) => void | Promise<void>;
@@ -34,6 +35,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
   assistants,
   localeKey,
   onOpenDetail,
+  onOpenManagedDetail,
   onDelete,
   onToggleEnabled,
   onReorder,
@@ -48,9 +50,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
   // ready-made create-an-assistant prompt (same flow as the header action).
   const handleCreateViaChat = () => {
     void talkToButler({
-      prompt: t('settings.talkToButler.prompt.createAssistant', {
-        defaultValue: 'Help me create a new assistant and walk me through setting it up.',
-      }),
+      prompt: t('settings.managedTeammates.createPrompt'),
     });
   };
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -59,7 +59,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
   // view hides rows, so dragging would produce an ambiguous global order.
   const draggable = filter === 'all';
 
-  const { cliAssistants, createdAssistants } = useMemo(() => {
+  const { managedAssistants, cliAssistants, createdAssistants } = useMemo(() => {
     const filtered = filterByEnabled(assistants, filter);
     return groupMyAssistants(filtered);
   }, [assistants, filter]);
@@ -106,6 +106,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
                   localeKey={localeKey}
                   draggable={draggable}
                   onOpenDetail={onOpenDetail}
+                  onOpenManagedDetail={onOpenManagedDetail}
                   onDelete={onDelete}
                   onToggleEnabled={onToggleEnabled}
                   onStartChat={onStartChat}
@@ -128,13 +129,9 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
       className='flex flex-col items-center rounded-14px border border-dashed border-border-2 bg-fill-1/40 px-20px py-28px text-center'
       data-testid='created-empty'
     >
-      <div className='mb-6px text-13px font-600 text-t-primary'>
-        {t('settings.customEmptyTitle', { defaultValue: 'No custom assistants yet' })}
-      </div>
+      <div className='mb-6px text-13px font-600 text-t-primary'>{t('settings.managedTeammates.customEmptyTitle')}</div>
       <p className='mb-16px max-w-360px text-12px leading-[1.6] text-t-secondary'>
-        {t('settings.customEmptyBody', {
-          defaultValue: 'Create one by chatting with the butler, or duplicate an official assistant into your own.',
-        })}
+        {t('settings.managedTeammates.customEmptyBody')}
       </p>
       <div className='flex items-center gap-10px'>
         <Button
@@ -144,10 +141,10 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
           onClick={handleCreateViaChat}
           data-testid='created-empty-create'
         >
-          {t('settings.customEmptyCreate', { defaultValue: 'Create via chat' })}
+          {t('settings.managedTeammates.createViaChat')}
         </Button>
         <Button size='small' className='!rounded-8px' onClick={onGoOfficial} data-testid='created-empty-official'>
-          {t('settings.customEmptyBrowseOfficial', { defaultValue: 'Browse official' })}
+          {t('settings.managedTeammates.browseOfficial')}
         </Button>
       </div>
     </div>
@@ -166,11 +163,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
             className='block shrink-0 leading-none text-t-quaternary'
             style={{ lineHeight: 0 }}
           />
-          <span className='truncate'>
-            {t('settings.myAssistantsHintShort', {
-              defaultValue: 'Your own assistants — used wherever you pick one. Drag to reorder.',
-            })}
-          </span>
+          <span className='truncate'>{t('settings.managedTeammates.mineHint')}</span>
         </span>
         <Dropdown droplist={filterMenu} trigger='click' position='br'>
           <Button
@@ -188,21 +181,41 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
         </Dropdown>
       </div>
 
-      {renderGroup(
-        t('settings.assistantGroupCli', { defaultValue: 'Your CLI' }),
-        cliAssistants,
-        'group-cli',
-        'bg-warning-5'
-      )}
+      {managedAssistants.length > 0 ? (
+        <div className='mt-20px first:mt-0' data-testid='group-managed'>
+          <div className='mb-10px flex items-center gap-8px px-2px'>
+            <span className='h-13px w-3px rounded-2px bg-primary-5' />
+            <span className='text-12px font-600 text-t-secondary'>{t('settings.managedTeammates.sourceManaged')}</span>
+            <span className='rounded-999px bg-fill-2 px-6px py-1px text-10px font-500 text-t-quaternary'>
+              {managedAssistants.length}
+            </span>
+          </div>
+          <div className='space-y-8px'>
+            {managedAssistants.map((assistant) => (
+              <MyAssistantRow
+                key={assistant.id}
+                assistant={assistant}
+                localeKey={localeKey}
+                draggable={false}
+                onOpenDetail={onOpenDetail}
+                onOpenManagedDetail={onOpenManagedDetail}
+                onDelete={onDelete}
+                onToggleEnabled={onToggleEnabled}
+                onStartChat={onStartChat}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {renderGroup(t('settings.managedTeammates.groupCli'), cliAssistants, 'group-cli', 'bg-warning-5')}
 
       {/* Created-by-me group: show its rows, or a guiding empty state when the
           user has no custom assistants yet. */}
       <div className='mt-20px' data-testid='group-created-section'>
         <div className='mb-10px flex items-center gap-8px px-2px'>
           <span className='h-13px w-3px rounded-2px bg-primary-5' />
-          <span className='text-12px font-600 text-t-secondary'>
-            {t('settings.assistantGroupCreated', { defaultValue: 'Created by you' })}
-          </span>
+          <span className='text-12px font-600 text-t-secondary'>{t('settings.managedTeammates.sourceCreated')}</span>
           {createdAssistants.length > 0 ? (
             <span className='rounded-999px bg-fill-2 px-6px py-1px text-10px font-500 text-t-quaternary'>
               {createdAssistants.length}
@@ -222,6 +235,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
                     localeKey={localeKey}
                     draggable={draggable}
                     onOpenDetail={onOpenDetail}
+                    onOpenManagedDetail={onOpenManagedDetail}
                     onDelete={onDelete}
                     onToggleEnabled={onToggleEnabled}
                     onStartChat={onStartChat}

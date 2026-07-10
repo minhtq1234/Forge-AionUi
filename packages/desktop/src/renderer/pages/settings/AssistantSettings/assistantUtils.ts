@@ -12,12 +12,14 @@ export const ASSISTANT_SORT_ORDER_GAP = 1000;
  * - `builtin` → "Built-in" tag
  * - `user` → "Custom" tag
  * - `generated` (agent-generated) → "CLI" tag, matching the product terminology.
+ * - `managed` → organization-managed tag.
  */
-export type AssistantSourceTag = 'builtin' | 'custom' | 'cli' | null;
+export type AssistantSourceTag = 'builtin' | 'custom' | 'cli' | 'managed' | null;
 
 export const resolveAssistantSourceTag = (source: string): AssistantSourceTag => {
   if (source === 'builtin') return 'builtin';
   if (source === 'generated') return 'cli';
+  if (source === 'managed') return 'managed';
   return 'custom';
 };
 
@@ -167,13 +169,13 @@ const ASSISTANT_EDITOR_AGENT_TYPES = new Set(['acp', 'aionrs']);
 const isAssistantEditorAgent = (agent: ManagedAgent): boolean => ASSISTANT_EDITOR_AGENT_TYPES.has(agent.agent_type);
 
 /**
- * Split the user's own assistants into the two "My Assistants" groups, each
- * sorted by sort_order. Bare CLI assistants come first (fixed), then
- * user-created. Official (builtin) assistants live in the other tab and are
- * excluded here.
+ * Split the user's assistants into managed, CLI, and user-created groups,
+ * each sorted by sort_order. Official (builtin) assistants live in the other
+ * tab and are excluded here.
  */
 export const groupMyAssistants = (assistants: AssistantListItem[]) => {
   return {
+    managedAssistants: assistants.filter((a) => a.source === 'managed').toSorted(byAssistantSortOrder),
     // 'generated' == a bare CLI assistant auto-created from a local CLI tool.
     cliAssistants: assistants.filter((a) => a.source === 'generated').toSorted(byAssistantSortOrder),
     createdAssistants: assistants.filter((a) => a.source === 'user').toSorted(byAssistantSortOrder),

@@ -10,6 +10,7 @@ import {
   resolveAvatarImageSrc,
   sortAssistants,
   filterAssistants,
+  groupMyAssistants,
   groupAssistantsByEnabled,
   resolveAssistantSourceTag,
 } from '@/renderer/pages/settings/AssistantSettings/assistantUtils';
@@ -237,5 +238,24 @@ describe('resolveAssistantSourceTag', () => {
 
   it('shows the CLI tag for generated assistants', () => {
     expect(resolveAssistantSourceTag('generated')).toBe('cli');
+  });
+
+  it('shows a distinct managed tag for VNG-managed assistants', () => {
+    expect(resolveAssistantSourceTag('managed')).toBe('managed');
+  });
+});
+
+describe('groupMyAssistants', () => {
+  it('returns managed assistants first without mixing them into reorderable groups', () => {
+    const grouped = groupMyAssistants([
+      mockAssistant({ id: 'user-2', source: 'user', sort_order: 2000 }),
+      mockAssistant({ id: 'managed-2', source: 'managed', sort_order: 2000 }),
+      mockAssistant({ id: 'generated-1', source: 'generated', sort_order: 1000 }),
+      mockAssistant({ id: 'managed-1', source: 'managed', sort_order: 1000 }),
+    ]);
+
+    expect(grouped.managedAssistants.map((assistant) => assistant.id)).toEqual(['managed-1', 'managed-2']);
+    expect(grouped.cliAssistants.map((assistant) => assistant.id)).toEqual(['generated-1']);
+    expect(grouped.createdAssistants.map((assistant) => assistant.id)).toEqual(['user-2']);
   });
 });

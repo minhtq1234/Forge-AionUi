@@ -29,6 +29,7 @@ type AssistantMcpDefaultMode = 'auto' | 'fixed';
 
 const isBuiltinAssistant = (assistant: Assistant | null | undefined): boolean => assistant?.source === 'builtin';
 const isGeneratedAssistant = (assistant: Assistant | null | undefined): boolean => assistant?.source === 'generated';
+const isManagedAssistant = (assistant: Assistant | null | undefined): boolean => assistant?.source === 'managed';
 
 const resolveLocalizedRecommendedPrompts = (
   detail: Awaited<ReturnType<typeof ipcBridge.assistants.get.invoke>>,
@@ -218,6 +219,11 @@ export const useAssistantEditor = ({
   );
 
   const handleEdit = async (assistant: AssistantListItem) => {
+    if (isManagedAssistant(assistant)) {
+      message.warning(t('settings.managedTeammates.managedActionBlocked'));
+      return;
+    }
+
     setIsCreating(false);
     setActiveAssistantId(assistant.id);
     setEditVisible(true);
@@ -305,6 +311,11 @@ export const useAssistantEditor = ({
   };
 
   const handleDuplicate = async (assistant: AssistantListItem) => {
+    if (isManagedAssistant(assistant)) {
+      message.warning(t('settings.managedTeammates.managedActionBlocked'));
+      return;
+    }
+
     setIsCreating(true);
     setActiveAssistantId(null);
     setEditVisible(true);
@@ -366,6 +377,11 @@ export const useAssistantEditor = ({
 
   const handleSave = async () => {
     try {
+      if (!isCreating && isManagedAssistant(activeAssistant)) {
+        message.warning(t('settings.managedTeammates.managedActionBlocked'));
+        return;
+      }
+
       if (!editName.trim()) {
         message.error(t('settings.assistantNameRequired', { defaultValue: 'Assistant name is required' }));
         return;
@@ -565,6 +581,11 @@ export const useAssistantEditor = ({
   };
 
   const handleToggleEnabled = async (assistant: AssistantListItem, enabled: boolean) => {
+    if (isManagedAssistant(assistant)) {
+      message.warning(t('settings.managedTeammates.managedActionBlocked'));
+      return;
+    }
+
     try {
       await swrMutate(
         'assistants.list',

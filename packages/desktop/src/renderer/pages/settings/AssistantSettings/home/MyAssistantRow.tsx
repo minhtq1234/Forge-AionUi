@@ -11,7 +11,7 @@ import { resolveAssistantDisplayName } from '@/renderer/utils/model/assistantDis
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Button, Dropdown, Menu, Switch, Tooltip } from '@arco-design/web-react';
-import { Attention, Drag, MoreOne } from '@icon-park/react';
+import { Attention, Drag, MoreOne, Play, Right, Shield } from '@icon-park/react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -20,16 +20,67 @@ type MyAssistantRowProps = {
   localeKey: string;
   draggable: boolean;
   onOpenDetail: (assistant: AssistantListItem) => void;
+  onOpenManagedDetail: (id: string) => void;
   onDelete: (assistant: AssistantListItem) => void;
   onToggleEnabled: (assistant: AssistantListItem, checked: boolean) => void;
   onStartChat: (assistant: AssistantListItem) => void;
+};
+
+const ManagedAssistantRow: React.FC<MyAssistantRowProps> = ({
+  assistant,
+  localeKey,
+  onOpenManagedDetail,
+  onStartChat,
+}) => {
+  const { t } = useTranslation();
+  return (
+    <div
+      data-testid={`assistant-card-${assistant.id}`}
+      className='flex min-w-0 flex-wrap items-center justify-between gap-12px rounded-8px border border-solid border-border-2 bg-base px-14px py-12px'
+    >
+      <div className='flex min-w-0 flex-1 items-center gap-12px'>
+        <AssistantAvatar assistant={assistant} size={34} />
+        <div className='min-w-0 flex-1'>
+          <div className='truncate text-14px font-600 text-t-primary'>
+            {resolveAssistantDisplayName(assistant, localeKey, t, assistant.name)}
+          </div>
+          <div className='mt-2px truncate text-12px text-t-secondary'>
+            {assistant.description_i18n?.[localeKey] || assistant.description || ''}
+          </div>
+          <div className='mt-6px inline-flex items-center gap-5px text-12px font-500 text-primary-6'>
+            <Shield theme='outline' size={14} fill='currentColor' />
+            {t('settings.managedTeammates.sourceManaged')}
+          </div>
+        </div>
+      </div>
+      <div className='flex min-w-0 flex-wrap items-center justify-end gap-8px'>
+        <Button
+          size='small'
+          icon={<Right theme='outline' size={14} fill='currentColor' />}
+          onClick={() => onOpenManagedDetail(assistant.id)}
+        >
+          {t('settings.managedTeammates.viewDetails')}
+        </Button>
+        {assistant.enabled !== false ? (
+          <Button
+            type='primary'
+            size='small'
+            icon={<Play theme='outline' size={14} fill='currentColor' />}
+            onClick={() => onStartChat(assistant)}
+          >
+            {t('settings.managedTeammates.startWorking')}
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
 };
 
 /**
  * A single row in the "My Assistants" list (bare CLI or user-created).
  * Clicking the row (outside the interactive controls) opens the detail/editor.
  */
-const MyAssistantRow: React.FC<MyAssistantRowProps> = ({
+const SortableAssistantRow: React.FC<MyAssistantRowProps> = ({
   assistant,
   localeKey,
   draggable,
@@ -168,5 +219,8 @@ const MyAssistantRow: React.FC<MyAssistantRowProps> = ({
     </div>
   );
 };
+
+const MyAssistantRow: React.FC<MyAssistantRowProps> = (props) =>
+  props.assistant.source === 'managed' ? <ManagedAssistantRow {...props} /> : <SortableAssistantRow {...props} />;
 
 export default MyAssistantRow;

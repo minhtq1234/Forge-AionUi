@@ -190,6 +190,26 @@ describe('AssistantListPanel', () => {
     expect(screen.getByTestId('btn-assistant-more-2')).toHaveClass('!h-30px', '!rounded-8px');
   });
 
+  it('does not expose generic mutation controls when a managed record reaches the legacy panel', () => {
+    const onEdit = vi.fn();
+    const managed = {
+      ...mockAssistants[0],
+      id: 'managed-1',
+      name: 'Finance Close Coordinator',
+      source: 'managed' as const,
+      deletable: false,
+    };
+
+    renderWithProviders(<AssistantListPanel {...defaultProps} assistants={[managed]} onEdit={onEdit} />);
+
+    expect(screen.getByText('settings.managedTeammates.sourceManaged')).toBeInTheDocument();
+    expect(screen.queryByTestId('assistant-reorder-handle-managed-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('switch-enabled-managed-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('btn-assistant-more-managed-1')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('assistant-card-managed-1'));
+    expect(onEdit).not.toHaveBeenCalled();
+  });
+
   // F2-05: flag assistants whose underlying agent is not online.
   it('shows an unavailable-agent warning only for assistants whose agent is not online', () => {
     const assistants: AssistantListItem[] = [

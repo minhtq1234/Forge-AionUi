@@ -146,6 +146,32 @@ describe('useAssistantEditor', () => {
     expect(result.current.defaultMcpMode).toBe('auto');
   });
 
+  it('rejects managed edit and duplicate entry before loading generic editor resources', async () => {
+    const managedAssistant: AssistantListItem = {
+      id: 'managed-1',
+      name: 'Finance Close Coordinator',
+      description: 'Close support',
+      avatar: '\u{1F4CA}',
+      agent_id: 'aionrs',
+      sort_order: 1,
+      source: 'managed',
+      enabled: true,
+    };
+    const { result } = renderHook(() => useAssistantEditor(defaultParams));
+
+    await act(async () => {
+      await result.current.handleEdit(managedAssistant);
+      await result.current.handleDuplicate(managedAssistant);
+    });
+
+    expect(result.current.editVisible).toBe(false);
+    expect(ipcBridge.assistants.get.invoke).not.toHaveBeenCalled();
+    expect(ipcBridge.fs.listAvailableSkills.invoke).not.toHaveBeenCalled();
+    expect(defaultParams.setActiveAssistantId).not.toHaveBeenCalled();
+    expect(mockMessage.warning).toHaveBeenCalledTimes(2);
+    expect(mockMessage.warning).toHaveBeenCalledWith('settings.managedTeammates.managedActionBlocked');
+  });
+
   it('handles handleEdit to populate form from active assistant', async () => {
     const assistant: AssistantListItem = {
       id: 'a1',

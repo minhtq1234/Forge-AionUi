@@ -36,6 +36,7 @@ export type BuiltinAutoSkill = {
 };
 
 export type AssistantListItem = Assistant;
+export type AssistantHomeTab = 'mine' | 'library' | 'official';
 
 export type BuiltinAvatarOption = {
   id: string;

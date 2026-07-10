@@ -61,9 +61,15 @@ const SortableAssistantCard: React.FC<SortableAssistantCardProps> = ({
   sortingEnabled,
 }) => {
   const { t } = useTranslation();
+  const isManaged = assistant.source === 'managed';
   const canDelete = assistant.source === 'user';
-  const canDuplicate = assistant.source !== 'user';
-  const actionMenu = (
+  const canDuplicate = assistant.source !== 'user' && !isManaged;
+  const canSort = sortingEnabled && !isManaged;
+  const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: assistant.id,
+    disabled: !canSort,
+  });
+  const actionMenu = isManaged ? null : (
     <Menu
       onClickMenuItem={(key) => {
         if (key === 'edit') {
@@ -103,11 +109,6 @@ const SortableAssistantCard: React.FC<SortableAssistantCardProps> = ({
       ) : null}
     </Menu>
   );
-  const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: assistant.id,
-    disabled: !sortingEnabled,
-  });
-
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -124,26 +125,32 @@ const SortableAssistantCard: React.FC<SortableAssistantCardProps> = ({
       key={assistant.id}
       style={style}
       data-testid={`assistant-card-${assistant.id}`}
-      className={`group flex cursor-pointer items-center justify-between gap-12px rounded-12px border border-solid px-14px py-10px transition-all duration-180 hover:border-border-1 hover:bg-fill-1 ${highlightedId === assistant.id ? 'border-primary-5 bg-primary-1' : 'border-transparent bg-base'}`}
-      onClick={() => {
-        setActiveAssistantId(assistant.id);
-        onEdit(assistant);
-      }}
+      className={`group flex items-center justify-between gap-12px rounded-12px border border-solid px-14px py-10px transition-all duration-180 ${isManaged ? 'cursor-default' : 'cursor-pointer hover:border-border-1 hover:bg-fill-1'} ${highlightedId === assistant.id ? 'border-primary-5 bg-primary-1' : 'border-transparent bg-base'}`}
+      onClick={
+        isManaged
+          ? undefined
+          : () => {
+              setActiveAssistantId(assistant.id);
+              onEdit(assistant);
+            }
+      }
     >
       <div className='flex min-w-0 flex-1 items-center gap-12px'>
-        <Button
-          ref={setActivatorNodeRef}
-          type='text'
-          size='small'
-          disabled={!sortingEnabled}
-          data-testid={`assistant-reorder-handle-${assistant.id}`}
-          className={`!min-w-0 !rounded-6px !px-4px !py-0 !text-t-tertiary ${sortingEnabled ? 'cursor-grab active:cursor-grabbing' : '!opacity-40'}`}
-          onClick={(event) => event.stopPropagation()}
-          {...attributes}
-          {...listeners}
-        >
-          <Drag size={16} fill='currentColor' />
-        </Button>
+        {isManaged ? null : (
+          <Button
+            ref={setActivatorNodeRef}
+            type='text'
+            size='small'
+            disabled={!canSort}
+            data-testid={`assistant-reorder-handle-${assistant.id}`}
+            className={`!min-w-0 !rounded-6px !px-4px !py-0 !text-t-tertiary ${canSort ? 'cursor-grab active:cursor-grabbing' : '!opacity-40'}`}
+            onClick={(event) => event.stopPropagation()}
+            {...attributes}
+            {...listeners}
+          >
+            <Drag size={16} fill='currentColor' />
+          </Button>
+        )}
         <AssistantAvatar assistant={assistant} size={28} />
         <div className='min-w-0 flex-1'>
           <div className='flex min-w-0 items-center gap-8px font-medium text-t-primary'>
@@ -182,29 +189,31 @@ const SortableAssistantCard: React.FC<SortableAssistantCardProps> = ({
           </div>
         </div>
       </div>
-      <div
-        className='ml-12px flex flex-shrink-0 items-center gap-8px text-t-secondary'
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Switch
-          size='small'
-          data-testid={`switch-enabled-${assistant.id}`}
-          checked={assistant.enabled !== false}
-          onChange={(checked) => {
-            onToggleEnabled(assistant, checked);
-          }}
-        />
-        <Dropdown droplist={actionMenu} trigger='click' position='br' getPopupContainer={() => document.body}>
-          <Button
-            type='text'
+      {isManaged ? null : (
+        <div
+          className='ml-12px flex flex-shrink-0 items-center gap-8px text-t-secondary'
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Switch
             size='small'
-            icon={<MoreOne theme='outline' size='16' fill='currentColor' />}
-            aria-label={t('common.more', { defaultValue: 'More' })}
-            className='!flex !h-30px !w-30px !items-center !justify-center !rounded-8px !p-0 !text-t-secondary hover:!bg-fill-2 hover:!text-t-primary'
-            data-testid={`btn-assistant-more-${assistant.id}`}
+            data-testid={`switch-enabled-${assistant.id}`}
+            checked={assistant.enabled !== false}
+            onChange={(checked) => {
+              onToggleEnabled(assistant, checked);
+            }}
           />
-        </Dropdown>
-      </div>
+          <Dropdown droplist={actionMenu} trigger='click' position='br' getPopupContainer={() => document.body}>
+            <Button
+              type='text'
+              size='small'
+              icon={<MoreOne theme='outline' size='16' fill='currentColor' />}
+              aria-label={t('common.more', { defaultValue: 'More' })}
+              className='!flex !h-30px !w-30px !items-center !justify-center !rounded-8px !p-0 !text-t-secondary hover:!bg-fill-2 hover:!text-t-primary'
+              data-testid={`btn-assistant-more-${assistant.id}`}
+            />
+          </Dropdown>
+        </div>
+      )}
     </div>
   );
 };
@@ -290,6 +299,17 @@ const AssistantListPanel: React.FC<AssistantListPanelProps> = ({
         </Tag>
       );
     }
+    if (tag === 'managed') {
+      return (
+        <Tag
+          size='small'
+          bordered={false}
+          className='!rounded-10px !bg-fill-1 !px-8px !py-1px !text-10px !font-600 !leading-16px !text-primary-6'
+        >
+          {t('settings.managedTeammates.sourceManaged')}
+        </Tag>
+      );
+    }
 
     return (
       <Tag
@@ -309,9 +329,13 @@ const AssistantListPanel: React.FC<AssistantListPanelProps> = ({
         return;
       }
 
+      const activeAssistant = listAssistants.find((assistant) => assistant.id === active.id);
+      const overAssistant = listAssistants.find((assistant) => assistant.id === over.id);
+      if (activeAssistant?.source === 'managed' || overAssistant?.source === 'managed') return;
+
       void onReorder(String(active.id), String(over.id));
     },
-    [onReorder, sortingEnabled]
+    [listAssistants, onReorder, sortingEnabled]
   );
 
   const renderList = (sectionAssistants: AssistantListItem[]) => {

@@ -1,0 +1,134 @@
+.libraryShell {
+  width: 100%;
+  min-width: 0;
+}
+
+.catalogToolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, auto);
+  gap: 12px;
+  align-items: end;
+}
+
+.catalogGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.catalogCard {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  white-space: normal;
+}
+
+.catalogCardContent {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: left;
+}
+
+.detailLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  gap: 24px;
+  align-items: start;
+}
+
+.identityHeader,
+.detailMain,
+.ownershipRail,
+.detailSection {
+  min-width: 0;
+}
+
+.identityHeader {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.detailMain {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.detailSection + .detailSection {
+  margin-top: 24px;
+}
+
+.ownershipRail {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  position: sticky;
+  top: 0;
+  padding-left: 20px;
+  border-left: 1px solid var(--color-border-2);
+}
+
+.actionRow,
+.setupFooter {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.setupFooter {
+  justify-content: flex-end;
+}
+
+.setupBody {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.setupDrawer :global(.arco-drawer) {
+  width: min(480px, 100vw) !important;
+  max-width: 100vw;
+}
+
+@media (max-width: 768px) {
+  .catalogToolbar,
+  .catalogGrid,
+  .detailLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ownershipRail {
+    grid-column: 1;
+    grid-row: 2;
+    position: static;
+    padding-top: 18px;
+    padding-left: 0;
+    border-top: 1px solid var(--color-border-2);
+    border-left: 0;
+  }
+
+  .identityHeader {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .detailMain {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .setupDrawer :global(.arco-drawer) {
+    width: 100vw !important;
+  }
+}
+
+@media (max-width: 390px) {
+  .actionRow > *,
+  .setupFooter > * {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+}

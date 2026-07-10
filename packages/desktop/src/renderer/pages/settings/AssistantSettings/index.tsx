@@ -26,7 +26,7 @@ import AssistantEditorPage from './AssistantEditorPage';
 import AssistantHomeTabs from './home/AssistantHomeTabs';
 import DeleteAssistantModal from './DeleteAssistantModal';
 import SkillConfirmModals from './SkillConfirmModals';
-import type { AssistantEditorViewModel, AssistantListItem } from './types';
+import type { AssistantEditorViewModel, AssistantHomeTab, AssistantListItem } from './types';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -46,11 +46,12 @@ const AssistantSettings: React.FC = () => {
 
   // Which home tab to show when returning from the editor. Editing an official
   // assistant should land back on the Official tab; everything else on Mine.
-  const [homeTab, setHomeTab] = React.useState<'mine' | 'official'>('mine');
+  const [homeTab, setHomeTab] = React.useState<AssistantHomeTab>('mine');
+  const [pendingManagedDetailId, setPendingManagedDetailId] = React.useState<string | null>(null);
 
   // "Chat" on an assistant → open a new conversation with it preselected.
   const handleStartChat = useCallback(
-    (assistant: AssistantListItem) => {
+    (assistant: Pick<AssistantListItem, 'id'>) => {
       navigate('/guid', { state: { selectedAssistantId: assistant.id } });
     },
     [navigate]
@@ -209,6 +210,11 @@ const AssistantSettings: React.FC = () => {
     } catch (error) {
       console.error('[AssistantManagement] Failed to clear assistant open intent:', error);
     }
+    if (targetAssistant.source === 'managed') {
+      setHomeTab('library');
+      setPendingManagedDetailId(targetAssistant.id);
+      return;
+    }
     void editor.handleEdit(targetAssistant);
   }, [assistants, editor, navigationState]);
 
@@ -229,29 +235,60 @@ const AssistantSettings: React.FC = () => {
               localeKey={localeKey}
               initialTab={homeTab}
               onTabChange={setHomeTab}
+              initialManagedDetailId={pendingManagedDetailId}
+              onManagedDetailConsumed={() => setPendingManagedDetailId(null)}
+              onAdoptionChanged={loadAssistants}
+              onOpenManagedDetail={(id) => {
+                setHomeTab('library');
+                setPendingManagedDetailId(id);
+              }}
               onOpenDetail={(assistant) => {
+                if (assistant.source === 'managed') {
+                  setHomeTab('library');
+                  setPendingManagedDetailId(assistant.id);
+                  return;
+                }
                 if (assistant.source === 'builtin') setHomeTab('official');
                 setActiveAssistantId(assistant.id);
                 void editor.handleEdit(assistant);
               }}
               onOpenSettings={(assistant) => {
+                if (assistant.source === 'managed') {
+                  setHomeTab('library');
+                  setPendingManagedDetailId(assistant.id);
+                  return;
+                }
                 if (assistant.source === 'builtin') setHomeTab('official');
                 setActiveAssistantId(assistant.id);
                 void editor.handleEdit(assistant);
               }}
               onDuplicate={(assistant) => {
+                if (assistant.source === 'managed') {
+                  setHomeTab('library');
+                  setPendingManagedDetailId(assistant.id);
+                  return;
+                }
                 // A duplicate becomes a new user assistant, so return to My
                 // Assistants after saving — not the Official tab it came from.
                 setHomeTab('mine');
                 void editor.handleDuplicate(assistant);
               }}
-              onDelete={(assistant) => editor.handleDeleteRequest(assistant)}
+              onDelete={(assistant) => {
+                if (assistant.source !== 'managed') editor.handleDeleteRequest(assistant);
+              }}
               onCreate={() => {
                 setHomeTab('mine');
                 void editor.handleCreate();
               }}
-              onToggleEnabled={(assistant, checked) => void editor.handleToggleEnabled(assistant, checked)}
-              onReorder={(activeId, overId) => void reorderAssistants(activeId, overId)}
+              onToggleEnabled={(assistant, checked) => {
+                if (assistant.source !== 'managed') void editor.handleToggleEnabled(assistant, checked);
+              }}
+              onReorder={(activeId, overId) => {
+                const active = assistants.find((assistant) => assistant.id === activeId);
+                const over = assistants.find((assistant) => assistant.id === overId);
+                if (active?.source === 'managed' || over?.source === 'managed') return;
+                void reorderAssistants(activeId, overId);
+              }}
               onStartChat={handleStartChat}
             />
           )}
