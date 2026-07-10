@@ -14,12 +14,13 @@ import { emitter } from '@/renderer/utils/emitter';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { mutate as swrMutate } from 'swr';
+import type { AssistantListLoadResult } from './useAssistantList';
 
 type UseAssistantEditorParams = {
   localeKey: string;
   activeAssistant: AssistantListItem | null;
   setActiveAssistantId: (id: string | null) => void;
-  loadAssistants: () => Promise<void>;
+  loadAssistants: () => Promise<AssistantListLoadResult>;
   message: ReturnType<typeof Message.useMessage>[0];
 };
 

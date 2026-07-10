@@ -177,7 +177,7 @@ describe('ManagedPersonalSetup', () => {
     });
   });
 
-  it('renders only controls allowed by the published personalization policy', () => {
+  it('omits skill and model controls until safe option metadata is available', () => {
     renderSetup({
       detail: createDetail({
         personalization_policy: {
@@ -189,8 +189,12 @@ describe('ManagedPersonalSetup', () => {
     });
 
     expect(screen.getByLabelText('Nickname')).toBeInTheDocument();
-    expect(screen.getByText('Optional capabilities')).toBeInTheDocument();
-    expect(screen.getByText('Model preference')).toBeInTheDocument();
+    expect(screen.queryByText('Optional capabilities')).not.toBeInTheDocument();
+    expect(screen.queryByText('Model preference')).not.toBeInTheDocument();
+    expect(screen.queryByText('email-tone')).not.toBeInTheDocument();
+    expect(screen.queryByText('managed-default')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'email-tone' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Model preference' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Preferred language')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Response style')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Default project folder')).not.toBeInTheDocument();

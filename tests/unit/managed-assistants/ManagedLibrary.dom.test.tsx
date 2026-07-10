@@ -1,11 +1,13 @@
 import type { Assistant, AssistantDetail } from '@/common/types/agent/assistantTypes';
 import type { ManagedAssistantDetail, ManagedAssistantSummary } from '@/common/types/agent/managedAssistantTypes';
+import { useAssistantList } from '@/renderer/hooks/assistant/useAssistantList';
+import type { AssistantListLoadResult } from '@/renderer/hooks/assistant/useAssistantList';
 import AssistantHomeTabs from '@/renderer/pages/settings/AssistantSettings/home/AssistantHomeTabs';
 import ManagedLibrary from '@/renderer/pages/settings/AssistantSettings/home/ManagedLibrary';
 import MyAssistantRow from '@/renderer/pages/settings/AssistantSettings/home/MyAssistantRow';
 import { ConfigProvider } from '@arco-design/web-react';
 import { DndContext } from '@dnd-kit/core';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,17 +17,25 @@ const getManagedAssistant = vi.fn();
 const setManagedAdoption = vi.fn();
 const updateManagedPreferences = vi.fn();
 const resetManagedPreferences = vi.fn();
+const listAssistants = vi.fn();
+
+let translationOverrides: Record<string, string> = {};
 
 const deferred = <T,>() => {
   let resolve: (value: T) => void;
-  const promise = new Promise<T>((promiseResolve) => {
+  let reject: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve;
+    reject = promiseReject;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 };
 
 vi.mock('@/common', () => ({
   ipcBridge: {
+    assistants: {
+      list: { invoke: (...args: unknown[]) => listAssistants(...args) },
+    },
     managedAssistants: {
       list: { invoke: (...args: unknown[]) => listManagedAssistants(...args) },
       get: { invoke: (...args: unknown[]) => getManagedAssistant(...args) },
@@ -38,7 +48,7 @@ vi.mock('@/common', () => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    i18n: { language: 'en-US' },
+    i18n: { language: 'en-US', dir: (locale: string) => (locale === 'fa-IR' ? 'rtl' : 'ltr') },
     t: (key: string, options?: { defaultValue?: string; version?: number }) => {
       const labels: Record<string, string> = {
         'settings.managedTeammates.pageTitle': 'Teammates',
@@ -51,8 +61,8 @@ vi.mock('react-i18next', () => ({
         'settings.managedTeammates.libraryTitle': 'VNG Library',
         'settings.managedTeammates.libraryLead': 'Virtual workers, trained and managed by VNG.',
         'settings.managedTeammates.searchPlaceholder': 'Search Teammates',
-        'settings.managedTeammates.filterAll': 'All functions',
-        'settings.managedTeammates.filterLabel': 'Business function',
+        'settings.managedTeammates.ownerFilterAll': 'All owners',
+        'settings.managedTeammates.ownerFilterLabel': 'Business owner',
         'settings.managedTeammates.sourceManaged': 'Managed by VNG',
         'settings.managedTeammates.owner': 'Business owner',
         'settings.managedTeammates.viewDetails': 'View details',
@@ -96,7 +106,7 @@ vi.mock('react-i18next', () => ({
         'common.retry': 'Retry',
       };
       if (key === 'settings.managedTeammates.version') return `Version ${options?.version ?? ''}`;
-      return labels[key] ?? options?.defaultValue ?? key;
+      return translationOverrides[key] ?? labels[key] ?? options?.defaultValue ?? key;
     },
   }),
 }));
@@ -223,16 +233,38 @@ const createDetail = (overrides: Partial<ManagedAssistantDetail> = {}): ManagedA
   };
 };
 
+const loadSuccess = (...assistants: Assistant[]): AssistantListLoadResult => ({ ok: true, assistants });
+
+const createDetailFor = (
+  id: string,
+  name: string,
+  overrides: Partial<ManagedAssistantDetail> = {}
+): ManagedAssistantDetail => {
+  const assistant = createAssistant({ id, name, name_i18n: { 'en-US': name } });
+  return createDetail({ assistant: createAssistantDetail(assistant), ...overrides });
+};
+
 const renderLibrary = (props: Partial<React.ComponentProps<typeof ManagedLibrary>> = {}) =>
   render(
     <ConfigProvider>
-      <ManagedLibrary localeKey='en-US' onAdoptionChanged={vi.fn()} onStartChat={vi.fn()} {...props} />
+      <ManagedLibrary
+        localeKey='en-US'
+        onAdoptionChanged={vi.fn(async () => loadSuccess(createAssistant()))}
+        onStartChat={vi.fn()}
+        {...props}
+      />
     </ConfigProvider>
   );
+
+const ManagedLibraryWithRealAssistantList: React.FC = () => {
+  const { loadAssistants } = useAssistantList();
+  return <ManagedLibrary localeKey='en-US' onAdoptionChanged={loadAssistants} onStartChat={vi.fn()} />;
+};
 
 describe('ManagedLibrary', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    translationOverrides = {};
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -251,6 +283,7 @@ describe('ManagedLibrary', () => {
     setManagedAdoption.mockResolvedValue(createDetail({ adoption: { active: true, adopted_at: 1_788_192_100 } }));
     updateManagedPreferences.mockResolvedValue(createDetail());
     resetManagedPreferences.mockResolvedValue(createDetail());
+    listAssistants.mockResolvedValue([]);
   });
 
   it('loads the audience-approved catalog only from the managed assistant bridge', async () => {
@@ -287,9 +320,14 @@ describe('ManagedLibrary', () => {
     expect(screen.getByText('VNG has not published a Teammate for your current audience.')).toBeInTheDocument();
   });
 
-  it('filters returned summaries by business function without refetching', async () => {
+  it('groups and filters by business owner without fabricating a business function', async () => {
     listManagedAssistants.mockResolvedValue([
-      createSummary(),
+      createSummary({
+        governance: {
+          ...createSummary().governance,
+          business_owner: 'Linh Nguyen',
+        },
+      }),
       createSummary({
         assistant: createAssistant({
           id: 'contract-review',
@@ -298,15 +336,17 @@ describe('ManagedLibrary', () => {
         }),
         governance: {
           ...createSummary().governance,
-          business_owner: 'Legal Ops',
+          business_owner: 'Morgan Lee',
         },
       }),
     ]);
 
     renderLibrary();
     await screen.findByText('Finance Close Coordinator');
-    await userEvent.click(screen.getByRole('combobox', { name: 'Business function' }));
-    fireEvent.click(await screen.findByRole('option', { name: 'Legal Ops' }));
+    expect(screen.getAllByText('Linh Nguyen').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Morgan Lee').length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole('combobox', { name: 'Business owner' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Morgan Lee' }));
 
     expect(screen.getByText('Contract Review Teammate')).toBeInTheDocument();
     expect(screen.queryByText('Finance Close Coordinator')).not.toBeInTheDocument();
@@ -343,6 +383,67 @@ describe('ManagedLibrary', () => {
     expect(screen.queryByText('secret-connector-id')).not.toBeInTheDocument();
   });
 
+  it('moves focus into loaded detail and restores it to the originating card on Back', async () => {
+    renderLibrary();
+    const card = await screen.findByRole('button', { name: /Finance Close Coordinator/i });
+    card.focus();
+
+    await userEvent.click(card);
+    const back = await screen.findByRole('button', { name: 'Back to VNG Library' });
+    await waitFor(() => expect(document.activeElement).toBe(back));
+
+    await userEvent.click(back);
+    const restoredCard = await screen.findByRole('button', { name: /Finance Close Coordinator/i });
+    await waitFor(() => expect(document.activeElement).toBe(restoredCard));
+  });
+
+  it('moves focus into a detail error and restores it to the originating card on Back', async () => {
+    getManagedAssistant.mockRejectedValue(new Error('private detail failure'));
+    renderLibrary();
+    const card = await screen.findByRole('button', { name: /Finance Close Coordinator/i });
+
+    await userEvent.click(card);
+    await screen.findByText('Teammate details could not be loaded');
+    const back = screen.getByRole('button', { name: 'Back to VNG Library' });
+    await waitFor(() => expect(document.activeElement).toBe(back));
+
+    await userEvent.click(back);
+    const restoredCard = await screen.findByRole('button', { name: /Finance Close Coordinator/i });
+    await waitFor(() => expect(document.activeElement).toBe(restoredCard));
+  });
+
+  it('keeps long RTL owner copy navigable and marks directional icons for mirroring', async () => {
+    const longOwner = 'مسئول ارشد فرآیندهای مالی و کنترل‌های سازمانی بسیار طولانی';
+    translationOverrides = {
+      'settings.managedTeammates.libraryLead':
+        'همکاران مجازی که توسط سازمان آموزش دیده‌اند و به صورت مداوم مدیریت می‌شوند.',
+      'settings.managedTeammates.backToLibrary': 'بازگشت به کتابخانه مدیریت‌شده سازمان',
+    };
+    listManagedAssistants.mockResolvedValue([
+      createSummary({ governance: { ...createSummary().governance, business_owner: longOwner } }),
+    ]);
+
+    render(
+      <ConfigProvider>
+        <div style={{ width: 390 }}>
+          <ManagedLibrary
+            localeKey='fa-IR'
+            onAdoptionChanged={vi.fn(async () => loadSuccess(createAssistant()))}
+            onStartChat={vi.fn()}
+          />
+        </div>
+      </ConfigProvider>
+    );
+
+    expect((await screen.findAllByText(longOwner)).length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole('button', { name: /Finance Close Coordinator/i }));
+    const back = await screen.findByRole('button', {
+      name: translationOverrides['settings.managedTeammates.backToLibrary'],
+    });
+    expect(back.querySelector('[class*="directionalIcon"]')).not.toBeNull();
+    expect(back.closest('[dir="rtl"]')).not.toBeNull();
+  });
+
   it('retries a failed detail request without exposing backend error text', async () => {
     getManagedAssistant
       .mockRejectedValueOnce(new Error('private detail failure'))
@@ -359,7 +460,7 @@ describe('ManagedLibrary', () => {
   });
 
   it('awaits the generic assistant refresh before exposing Start working after adoption', async () => {
-    const refreshRequest = deferred<void>();
+    const refreshRequest = deferred<AssistantListLoadResult>();
     const onAdoptionChanged = vi.fn(() => refreshRequest.promise);
 
     renderLibrary({ onAdoptionChanged });
@@ -370,25 +471,37 @@ describe('ManagedLibrary', () => {
     expect(onAdoptionChanged).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button', { name: 'Start working' })).not.toBeInTheDocument();
 
-    refreshRequest.resolve();
+    refreshRequest.resolve(loadSuccess(createAssistant()));
     expect(await screen.findByRole('button', { name: 'Start working' })).toBeInTheDocument();
   });
 
-  it('uses the already-active managed detail without repeating adoption', async () => {
+  it('verifies the generic projection for an already-active managed detail', async () => {
     getManagedAssistant.mockResolvedValue(createDetail({ adoption: { active: true, adopted_at: 1_788_192_100 } }));
+    const onAdoptionChanged = vi.fn(async () => loadSuccess(createAssistant()));
 
-    renderLibrary({ initialDetailId: 'finance-close' });
+    renderLibrary({ initialDetailId: 'finance-close', onAdoptionChanged });
 
     expect(await screen.findByRole('button', { name: 'Start working' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add to My Teammates' })).not.toBeInTheDocument();
     expect(setManagedAdoption).not.toHaveBeenCalled();
+    expect(onAdoptionChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps an already-active detail retryable when its generic projection is absent', async () => {
+    getManagedAssistant.mockResolvedValue(createDetail({ adoption: { active: true, adopted_at: 1_788_192_100 } }));
+
+    renderLibrary({ initialDetailId: 'finance-close', onAdoptionChanged: vi.fn(async () => loadSuccess()) });
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start working' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add to My Teammates' })).not.toBeInTheDocument();
   });
 
   it('retains successful adoption and retries only the generic refresh when refresh fails', async () => {
     const onAdoptionChanged = vi
       .fn()
-      .mockRejectedValueOnce(new Error('refresh failed'))
-      .mockResolvedValueOnce(undefined);
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce(loadSuccess(createAssistant()));
 
     renderLibrary({ onAdoptionChanged });
     await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
@@ -406,6 +519,44 @@ describe('ManagedLibrary', () => {
     expect(onAdoptionChanged).toHaveBeenCalledTimes(2);
   });
 
+  it('uses the real assistant-list success result to reject a stale projection', async () => {
+    listAssistants
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([createAssistant({ id: 'different-id', name: 'Different Teammate' })]);
+
+    render(
+      <ConfigProvider>
+        <ManagedLibraryWithRealAssistantList />
+      </ConfigProvider>
+    );
+    await waitFor(() => expect(listAssistants).toHaveBeenCalledTimes(1));
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add to My Teammates' }));
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start working' })).not.toBeInTheDocument();
+    expect(listAssistants).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the real assistant-list failure result to keep adoption retryable', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    listAssistants.mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('generic list failed'));
+
+    render(
+      <ConfigProvider>
+        <ManagedLibraryWithRealAssistantList />
+      </ConfigProvider>
+    );
+    await waitFor(() => expect(listAssistants).toHaveBeenCalledTimes(1));
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add to My Teammates' }));
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start working' })).not.toBeInTheDocument();
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to load assistants:', expect.any(Error));
+    consoleErrorSpy.mockRestore();
+  });
+
   it('keeps adoption retryable when the adoption request fails', async () => {
     setManagedAdoption.mockRejectedValue(new Error('private backend failure'));
 
@@ -416,6 +567,182 @@ describe('ManagedLibrary', () => {
     expect(await screen.findByText('Could not add this Teammate')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add to My Teammates' })).toBeEnabled();
     expect(screen.queryByText('private backend failure')).not.toBeInTheDocument();
+  });
+
+  it('ignores a late adoption response after navigating from A to B', async () => {
+    const adoptionRequest = deferred<ManagedAssistantDetail>();
+    const assistantB = createAssistant({
+      id: 'contract-review',
+      name: 'Contract Review Teammate',
+      name_i18n: { 'en-US': 'Contract Review Teammate' },
+    });
+    listManagedAssistants.mockResolvedValue([createSummary(), createSummary({ assistant: assistantB })]);
+    getManagedAssistant.mockImplementation(({ id }: { id: string }) =>
+      Promise.resolve(
+        id === assistantB.id
+          ? createDetailFor(assistantB.id, assistantB.name)
+          : createDetailFor('finance-close', 'Finance Close Coordinator')
+      )
+    );
+    setManagedAdoption.mockReturnValue(adoptionRequest.promise);
+
+    renderLibrary();
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add to My Teammates' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Back to VNG Library' }));
+    await userEvent.click(await screen.findByRole('button', { name: /Contract Review Teammate/i }));
+    expect(await screen.findByRole('heading', { name: 'Contract Review Teammate' })).toBeInTheDocument();
+
+    await act(async () => {
+      adoptionRequest.resolve(
+        createDetailFor('finance-close', 'Finance Close Coordinator', {
+          adoption: { active: true },
+          personalization_policy: {
+            allowed_fields: ['nickname'],
+            optional_skill_ids: [],
+            allowed_model_ids: [],
+          },
+        })
+      );
+      await adoptionRequest.promise;
+    });
+
+    expect(screen.getByRole('heading', { name: 'Contract Review Teammate' })).toBeInTheDocument();
+    expect(screen.queryByText('Your setup')).not.toBeInTheDocument();
+  });
+
+  it('ignores a late preference save after setup closes and B is selected', async () => {
+    const saveRequest = deferred<ManagedAssistantDetail>();
+    const assistantB = createAssistant({
+      id: 'contract-review',
+      name: 'Contract Review Teammate',
+      name_i18n: { 'en-US': 'Contract Review Teammate' },
+    });
+    const adoptedA = createDetailFor('finance-close', 'Finance Close Coordinator', {
+      adoption: { active: true },
+      personalization_policy: { allowed_fields: ['nickname'], optional_skill_ids: [], allowed_model_ids: [] },
+    });
+    listManagedAssistants.mockResolvedValue([createSummary(), createSummary({ assistant: assistantB })]);
+    getManagedAssistant.mockImplementation(({ id }: { id: string }) =>
+      Promise.resolve(id === assistantB.id ? createDetailFor(assistantB.id, assistantB.name) : createDetail())
+    );
+    setManagedAdoption.mockResolvedValue(adoptedA);
+    updateManagedPreferences.mockReturnValue(saveRequest.promise);
+
+    renderLibrary({ onAdoptionChanged: vi.fn(async () => loadSuccess(createAssistant())) });
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add to My Teammates' }));
+    await userEvent.type(await screen.findByLabelText('Nickname'), 'Close buddy');
+    await userEvent.click(screen.getByRole('button', { name: 'Save setup' }));
+    fireEvent.keyDown(document.querySelector('.arco-drawer-wrapper') as HTMLElement, {
+      key: 'Escape',
+      code: 'Escape',
+      keyCode: 27,
+      which: 27,
+    });
+    await waitFor(() => expect(screen.queryByText('Your setup')).not.toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Back to VNG Library' }));
+    await userEvent.click(await screen.findByRole('button', { name: /Contract Review Teammate/i }));
+
+    await act(async () => {
+      saveRequest.resolve({ ...adoptedA, preferences: { nickname: 'Close buddy' } });
+      await saveRequest.promise;
+    });
+
+    expect(screen.getByRole('heading', { name: 'Contract Review Teammate' })).toBeInTheDocument();
+    expect(screen.queryByText('Your setup')).not.toBeInTheDocument();
+    expect(screen.queryByText('Personal setup saved')).not.toBeInTheDocument();
+  });
+
+  it('does not reopen setup when reset completes after the drawer closes', async () => {
+    const resetRequest = deferred<ManagedAssistantDetail>();
+    const adoptedDetail = createDetail({
+      adoption: { active: true },
+      personalization_policy: { allowed_fields: ['nickname'], optional_skill_ids: [], allowed_model_ids: [] },
+      preferences: { nickname: 'Close buddy' },
+    });
+    setManagedAdoption.mockResolvedValue(adoptedDetail);
+    resetManagedPreferences.mockReturnValue(resetRequest.promise);
+
+    renderLibrary({ onAdoptionChanged: vi.fn(async () => loadSuccess(createAssistant())) });
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add to My Teammates' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Reset personal setup' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+    fireEvent.keyDown(document.querySelector('.arco-drawer-wrapper') as HTMLElement, {
+      key: 'Escape',
+      code: 'Escape',
+      keyCode: 27,
+      which: 27,
+    });
+    await waitFor(() => expect(screen.queryByText('Your setup')).not.toBeInTheDocument());
+
+    await act(async () => {
+      resetRequest.resolve({ ...adoptedDetail, preferences: {} });
+      await resetRequest.promise;
+    });
+
+    expect(screen.queryByText('Your setup')).not.toBeInTheDocument();
+    expect(screen.queryByText('Personal setup reset')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['success', loadSuccess(createAssistant())],
+    ['failure', { ok: false } as AssistantListLoadResult],
+  ])('ignores a late projection refresh %s after navigating from A to B', async (_case, refreshResult) => {
+    const refreshRequest = deferred<AssistantListLoadResult>();
+    const assistantB = createAssistant({
+      id: 'contract-review',
+      name: 'Contract Review Teammate',
+      name_i18n: { 'en-US': 'Contract Review Teammate' },
+    });
+    const adoptedA = createDetailFor('finance-close', 'Finance Close Coordinator', {
+      adoption: { active: true },
+      personalization_policy: { allowed_fields: ['nickname'], optional_skill_ids: [], allowed_model_ids: [] },
+    });
+    listManagedAssistants.mockResolvedValue([createSummary(), createSummary({ assistant: assistantB })]);
+    getManagedAssistant.mockImplementation(({ id }: { id: string }) =>
+      Promise.resolve(id === assistantB.id ? createDetailFor(assistantB.id, assistantB.name) : createDetail())
+    );
+    setManagedAdoption.mockResolvedValue(adoptedA);
+
+    renderLibrary({ onAdoptionChanged: vi.fn(() => refreshRequest.promise) });
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add to My Teammates' }));
+    await waitFor(() => expect(setManagedAdoption).toHaveBeenCalledTimes(1));
+    await userEvent.click(screen.getByRole('button', { name: 'Back to VNG Library' }));
+    await userEvent.click(await screen.findByRole('button', { name: /Contract Review Teammate/i }));
+
+    await act(async () => {
+      refreshRequest.resolve(refreshResult);
+      await refreshRequest.promise;
+    });
+
+    expect(screen.getByRole('heading', { name: 'Contract Review Teammate' })).toBeInTheDocument();
+    expect(screen.queryByText('Your setup')).not.toBeInTheDocument();
+    expect(screen.queryByText(/My Teammates could not be refreshed/)).not.toBeInTheDocument();
+  });
+
+  it('does not open an empty setup drawer when only skill and model fields are allowed', async () => {
+    setManagedAdoption.mockResolvedValue(
+      createDetail({
+        adoption: { active: true },
+        personalization_policy: {
+          allowed_fields: ['optional_skills', 'model'],
+          optional_skill_ids: ['email-tone'],
+          allowed_model_ids: ['managed-default'],
+        },
+      })
+    );
+
+    renderLibrary();
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add to My Teammates' }));
+
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeInTheDocument();
+    expect(screen.queryByText('Your setup')).not.toBeInTheDocument();
+    expect(screen.queryByText('email-tone')).not.toBeInTheDocument();
+    expect(screen.queryByText('managed-default')).not.toBeInTheDocument();
   });
 
   it('saves allowed setup fields through the managed preferences bridge', async () => {
@@ -433,7 +760,7 @@ describe('ManagedLibrary', () => {
       preferences: { nickname: 'Close buddy' },
     });
 
-    renderLibrary({ onAdoptionChanged: vi.fn().mockResolvedValue(undefined) });
+    renderLibrary({ onAdoptionChanged: vi.fn().mockResolvedValue(loadSuccess(createAssistant())) });
     await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
     await userEvent.click(await screen.findByRole('button', { name: 'Add to My Teammates' }));
     await userEvent.type(await screen.findByLabelText('Nickname'), 'Close buddy');
@@ -459,7 +786,7 @@ describe('ManagedLibrary', () => {
     setManagedAdoption.mockResolvedValue(adoptedDetail);
     resetManagedPreferences.mockResolvedValue({ ...adoptedDetail, preferences: {} });
 
-    renderLibrary({ onAdoptionChanged: vi.fn().mockResolvedValue(undefined) });
+    renderLibrary({ onAdoptionChanged: vi.fn().mockResolvedValue(loadSuccess(createAssistant())) });
     await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
     await userEvent.click(await screen.findByRole('button', { name: 'Add to My Teammates' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Reset personal setup' }));
@@ -492,6 +819,10 @@ describe('managed assistant entry points', () => {
 
     expect(screen.getByRole('tab', { name: 'My Teammates' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'VNG Library' })).toBeInTheDocument();
+    expect(
+      screen.queryByText('Managed Teammates stay fixed; drag your own Teammates to reorder them.')
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('created-empty')).not.toHaveClass('rounded-14px');
     await userEvent.click(screen.getByRole('tab', { name: 'Official' }));
     expect(
       screen.getByText(

@@ -30,15 +30,25 @@ const mk = (id: string, source: Assistant['source'], sort_order: number, enabled
   }) as Assistant;
 
 describe('selectableAssistants', () => {
-  it('orders by group (generated → user → builtin), then sort_order within a group', () => {
+  it('orders by group (generated → user → managed → builtin), then sort_order within a group', () => {
     const result = selectableAssistants([
       mk('builtin-a', 'builtin', 5),
+      mk('managed-b', 'managed', 1),
       mk('user-b', 'user', 20),
       mk('cli-a', 'generated', 30),
+      mk('managed-a', 'managed', 999),
       mk('user-a', 'user', 10),
       mk('cli-b', 'generated', 40),
     ]);
-    expect(result.map((a) => a.id)).toEqual(['cli-a', 'cli-b', 'user-a', 'user-b', 'builtin-a']);
+    expect(result.map((a) => a.id)).toEqual([
+      'cli-a',
+      'cli-b',
+      'user-a',
+      'user-b',
+      'managed-b',
+      'managed-a',
+      'builtin-a',
+    ]);
   });
 
   it('drops disabled assistants', () => {

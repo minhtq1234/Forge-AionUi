@@ -23,6 +23,9 @@ const localizedDescription = (summary: ManagedAssistantSummary, localeKey: strin
   summary.assistant.description ??
   '';
 
+export const managedTeammateCardDomId = (assistantId: string): string =>
+  `managed-teammate-card-${encodeURIComponent(assistantId)}`;
+
 const ManagedTeammateList: React.FC<ManagedTeammateListProps> = ({
   summaries,
   localeKey,
@@ -33,9 +36,9 @@ const ManagedTeammateList: React.FC<ManagedTeammateListProps> = ({
 }) => {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
-  const [businessFunction, setBusinessFunction] = useState('all');
+  const [businessOwner, setBusinessOwner] = useState('all');
 
-  const businessFunctions = useMemo(
+  const businessOwners = useMemo(
     () => [...new Set(summaries.map((summary) => summary.governance.business_owner).filter(Boolean))].toSorted(),
     [summaries]
   );
@@ -43,7 +46,7 @@ const ManagedTeammateList: React.FC<ManagedTeammateListProps> = ({
   const filteredSummaries = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return summaries.filter((summary) => {
-      if (businessFunction !== 'all' && summary.governance.business_owner !== businessFunction) return false;
+      if (businessOwner !== 'all' && summary.governance.business_owner !== businessOwner) return false;
       if (!normalizedQuery) return true;
       const searchableText = [
         resolveAssistantDisplayName(summary.assistant, localeKey, t, summary.assistant.name),
@@ -54,7 +57,7 @@ const ManagedTeammateList: React.FC<ManagedTeammateListProps> = ({
         .toLowerCase();
       return searchableText.includes(normalizedQuery);
     });
-  }, [businessFunction, localeKey, query, summaries, t]);
+  }, [businessOwner, localeKey, query, summaries, t]);
 
   const groupedSummaries = useMemo(() => {
     const groups = new Map<string, ManagedAssistantSummary[]>();
@@ -112,7 +115,7 @@ const ManagedTeammateList: React.FC<ManagedTeammateListProps> = ({
                 <div className='text-14px font-600 text-t-primary'>
                   {t('settings.managedTeammates.libraryEmptyTitle')}
                 </div>
-                <div className='mt-6px text-13px leading-20px text-t-secondary'>
+                <div className='mt-6px text-14px leading-22px text-t-secondary'>
                   {t('settings.managedTeammates.libraryEmptyBody')}
                 </div>
               </div>
@@ -131,16 +134,16 @@ const ManagedTeammateList: React.FC<ManagedTeammateListProps> = ({
             />
             <div className='min-w-0'>
               <div className='mb-4px text-12px font-500 text-t-secondary'>
-                {t('settings.managedTeammates.filterLabel')}
+                {t('settings.managedTeammates.ownerFilterLabel')}
               </div>
               <Select
-                aria-label={t('settings.managedTeammates.filterLabel')}
-                value={businessFunction}
-                onChange={setBusinessFunction}
+                aria-label={t('settings.managedTeammates.ownerFilterLabel')}
+                value={businessOwner}
+                onChange={setBusinessOwner}
                 className='w-full'
                 options={[
-                  { label: t('settings.managedTeammates.filterAll'), value: 'all' },
-                  ...businessFunctions.map((owner) => ({ label: owner, value: owner })),
+                  { label: t('settings.managedTeammates.ownerFilterAll'), value: 'all' },
+                  ...businessOwners.map((owner) => ({ label: owner, value: owner })),
                 ]}
               />
             </div>
@@ -159,6 +162,7 @@ const ManagedTeammateList: React.FC<ManagedTeammateListProps> = ({
                     {group.map((summary) => (
                       <Button
                         key={summary.assistant.id}
+                        id={managedTeammateCardDomId(summary.assistant.id)}
                         type='text'
                         className={`${styles.catalogCard} !h-auto !rounded-8px !border !border-solid !border-border-2 !bg-base !p-14px hover:!bg-fill-1`}
                         onClick={() => onSelect(summary.assistant.id)}
@@ -170,7 +174,7 @@ const ManagedTeammateList: React.FC<ManagedTeammateListProps> = ({
                               <div className='text-14px font-600 leading-20px text-t-primary'>
                                 {resolveAssistantDisplayName(summary.assistant, localeKey, t, summary.assistant.name)}
                               </div>
-                              <div className='mt-3px line-clamp-2 text-13px leading-20px text-t-secondary'>
+                              <div className='mt-3px line-clamp-2 text-14px leading-22px text-t-secondary'>
                                 {localizedDescription(summary, localeKey)}
                               </div>
                             </div>

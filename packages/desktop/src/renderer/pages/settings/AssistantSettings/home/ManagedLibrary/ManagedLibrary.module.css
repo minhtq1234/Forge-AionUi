@@ -29,7 +29,7 @@
   height: 100%;
   flex-direction: column;
   align-items: stretch;
-  text-align: left;
+  text-align: start;
 }
 
 .detailLayout {
@@ -65,8 +65,20 @@
   grid-row: 1 / span 2;
   position: sticky;
   top: 0;
-  padding-left: 20px;
-  border-left: 1px solid var(--color-border-2);
+  padding-inline-start: 20px;
+  border-inline-start: 1px solid var(--color-border-2);
+}
+
+.detailList {
+  padding-inline-start: 20px;
+}
+
+.directionalIcon {
+  display: inline-flex;
+}
+
+:global([dir='rtl']) .directionalIcon {
+  transform: scaleX(-1);
 }
 
 .actionRow,
@@ -105,9 +117,9 @@
     grid-row: 2;
     position: static;
     padding-top: 18px;
-    padding-left: 0;
+    padding-inline-start: 0;
     border-top: 1px solid var(--color-border-2);
-    border-left: 0;
+    border-inline-start: 0;
   }
 
   .identityHeader {

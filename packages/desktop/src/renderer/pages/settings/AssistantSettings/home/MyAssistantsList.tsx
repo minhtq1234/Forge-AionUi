@@ -12,7 +12,7 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from 
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useTalkToButler } from '@/renderer/hooks/assistant/useTalkToButler';
 import { Dropdown, Menu, Button } from '@arco-design/web-react';
-import { Down, SortTwo } from '@icon-park/react';
+import { Down } from '@icon-park/react';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -92,7 +92,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
         <div className='mb-10px flex items-center gap-8px px-2px'>
           <span className={`h-13px w-3px rounded-2px ${barClass}`} />
           <span className='text-12px font-600 text-t-secondary'>{title}</span>
-          <span className='rounded-999px bg-fill-2 px-6px py-1px text-10px font-500 text-t-quaternary'>
+          <span className='rounded-999px bg-fill-2 px-6px py-1px text-12px font-500 text-t-quaternary'>
             {list.length}
           </span>
         </div>
@@ -126,11 +126,11 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
 
   const renderCreatedEmpty = () => (
     <div
-      className='flex flex-col items-center rounded-14px border border-dashed border-border-2 bg-fill-1/40 px-20px py-28px text-center'
+      className='flex flex-col items-center rounded-8px border border-dashed border-border-2 bg-fill-1/40 px-20px py-28px text-center'
       data-testid='created-empty'
     >
-      <div className='mb-6px text-13px font-600 text-t-primary'>{t('settings.managedTeammates.customEmptyTitle')}</div>
-      <p className='mb-16px max-w-360px text-12px leading-[1.6] text-t-secondary'>
+      <div className='mb-6px text-14px font-600 text-t-primary'>{t('settings.managedTeammates.customEmptyTitle')}</div>
+      <p className='mb-16px max-w-360px text-14px leading-22px text-t-secondary'>
         {t('settings.managedTeammates.customEmptyBody')}
       </p>
       <div className='flex items-center gap-10px'>
@@ -152,19 +152,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
 
   return (
     <div data-testid='my-assistants-pane'>
-      {/* Compact toolbar: a quiet reorder hint (icon + tooltip) on the left, the
-          enabled filter on the right — no full-width banner hogging a row. */}
-      <div className='mb-4px flex items-center justify-between'>
-        <span className='inline-flex min-w-0 items-center gap-6px text-12px text-t-tertiary'>
-          <SortTwo
-            theme='outline'
-            size={14}
-            fill='currentColor'
-            className='block shrink-0 leading-none text-t-quaternary'
-            style={{ lineHeight: 0 }}
-          />
-          <span className='truncate'>{t('settings.managedTeammates.mineHint')}</span>
-        </span>
+      <div className='mb-4px flex items-center justify-end'>
         <Dropdown droplist={filterMenu} trigger='click' position='br'>
           <Button
             size='mini'
@@ -186,7 +174,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
           <div className='mb-10px flex items-center gap-8px px-2px'>
             <span className='h-13px w-3px rounded-2px bg-primary-5' />
             <span className='text-12px font-600 text-t-secondary'>{t('settings.managedTeammates.sourceManaged')}</span>
-            <span className='rounded-999px bg-fill-2 px-6px py-1px text-10px font-500 text-t-quaternary'>
+            <span className='rounded-999px bg-fill-2 px-6px py-1px text-12px font-500 text-t-quaternary'>
               {managedAssistants.length}
             </span>
           </div>
@@ -217,7 +205,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
           <span className='h-13px w-3px rounded-2px bg-primary-5' />
           <span className='text-12px font-600 text-t-secondary'>{t('settings.managedTeammates.sourceCreated')}</span>
           {createdAssistants.length > 0 ? (
-            <span className='rounded-999px bg-fill-2 px-6px py-1px text-10px font-500 text-t-quaternary'>
+            <span className='rounded-999px bg-fill-2 px-6px py-1px text-12px font-500 text-t-quaternary'>
               {createdAssistants.length}
             </span>
           ) : null}

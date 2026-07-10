@@ -9,9 +9,11 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+export type AssistantListLoadResult = { ok: true; assistants: Assistant[] } | { ok: false };
+
 /**
  * Manages the assistant list: loading from backend, sorting, and tracking the
- * active selection. The backend returns a single ordered builtin + user catalog,
+ * active selection. The backend returns a single ordered assistant catalog,
  * so no client-side merge logic is needed.
  */
 export const useAssistantList = () => {
@@ -21,7 +23,7 @@ export const useAssistantList = () => {
   const localeKey = resolveLocaleKey(i18n.language);
   const previousLocaleKeyRef = useRef(localeKey);
 
-  const loadAssistants = useCallback(async () => {
+  const loadAssistants = useCallback(async (): Promise<AssistantListLoadResult> => {
     try {
       const list = await ipcBridge.assistants.list.invoke();
       setAssistants(list);
@@ -29,8 +31,10 @@ export const useAssistantList = () => {
         if (prev && list.some((a) => a.id === prev)) return prev;
         return list[0]?.id ?? null;
       });
+      return { ok: true, assistants: list };
     } catch (error) {
       console.error('Failed to load assistants:', error);
+      return { ok: false };
     }
   }, []);
 

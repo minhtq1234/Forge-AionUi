@@ -42,7 +42,7 @@ describe('useAssistantList', () => {
       { id: '1', name: 'Claude', sort_order: 1, source: 'builtin', enabled: true },
       { id: '2', name: 'GPT', sort_order: 2, source: 'user', enabled: true },
     ];
-    (ipcBridge.assistants.list.invoke as any).mockResolvedValue(mockList);
+    vi.mocked(ipcBridge.assistants.list.invoke).mockResolvedValue(mockList);
 
     const { result } = renderHook(() => useAssistantList());
 
@@ -58,7 +58,7 @@ describe('useAssistantList', () => {
       { id: 'cowork', name: 'Cowork', sort_order: 2000, source: 'builtin', enabled: true },
       { id: 'writer', name: 'Writer', sort_order: 1000, source: 'user', enabled: true },
     ];
-    (ipcBridge.assistants.list.invoke as any).mockResolvedValue(mockList);
+    vi.mocked(ipcBridge.assistants.list.invoke).mockResolvedValue(mockList);
 
     const { result } = renderHook(() => useAssistantList());
 
@@ -68,7 +68,7 @@ describe('useAssistantList', () => {
   });
 
   it('handles empty list', async () => {
-    (ipcBridge.assistants.list.invoke as any).mockResolvedValue([]);
+    vi.mocked(ipcBridge.assistants.list.invoke).mockResolvedValue([]);
 
     const { result } = renderHook(() => useAssistantList());
 
@@ -79,12 +79,29 @@ describe('useAssistantList', () => {
     expect(result.current.activeAssistant).toBeNull();
   });
 
+  it('returns the fetched assistants in an explicit success result', async () => {
+    const mockList: Assistant[] = [
+      { id: 'managed-1', name: 'Managed', sort_order: 1, source: 'managed', enabled: true },
+    ];
+    vi.mocked(ipcBridge.assistants.list.invoke).mockResolvedValue(mockList);
+
+    const { result } = renderHook(() => useAssistantList());
+    await waitFor(() => expect(result.current.assistants).toHaveLength(1));
+
+    let loadResult: Awaited<ReturnType<typeof result.current.loadAssistants>> | undefined;
+    await act(async () => {
+      loadResult = await result.current.loadAssistants();
+    });
+
+    expect(loadResult).toEqual({ ok: true, assistants: mockList });
+  });
+
   it('preserves active selection if still present after reload', async () => {
     const mockList: Assistant[] = [
       { id: '1', name: 'A', sort_order: 1, source: 'user', enabled: true },
       { id: '2', name: 'B', sort_order: 2, source: 'user', enabled: true },
     ];
-    (ipcBridge.assistants.list.invoke as any).mockResolvedValue(mockList);
+    vi.mocked(ipcBridge.assistants.list.invoke).mockResolvedValue(mockList);
 
     const { result } = renderHook(() => useAssistantList());
     await waitFor(() => expect(result.current.assistants).toHaveLength(2));
@@ -109,7 +126,7 @@ describe('useAssistantList', () => {
       { id: '1', name: 'A', sort_order: 1, source: 'user', enabled: true },
       { id: '2', name: 'B', sort_order: 2, source: 'user', enabled: true },
     ];
-    (ipcBridge.assistants.list.invoke as any).mockResolvedValue(initialList);
+    vi.mocked(ipcBridge.assistants.list.invoke).mockResolvedValue(initialList);
 
     const { result } = renderHook(() => useAssistantList());
     await waitFor(() => expect(result.current.assistants).toHaveLength(2));
@@ -120,7 +137,7 @@ describe('useAssistantList', () => {
 
     // Now '2' is removed from backend
     const updatedList: Assistant[] = [{ id: '1', name: 'A', sort_order: 1, source: 'user', enabled: true }];
-    (ipcBridge.assistants.list.invoke as any).mockResolvedValue(updatedList);
+    vi.mocked(ipcBridge.assistants.list.invoke).mockResolvedValue(updatedList);
 
     await act(async () => {
       await result.current.loadAssistants();
@@ -132,7 +149,7 @@ describe('useAssistantList', () => {
 
   it('logs error and does not crash on load failure', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    (ipcBridge.assistants.list.invoke as any).mockRejectedValue(new Error('Backend down'));
+    vi.mocked(ipcBridge.assistants.list.invoke).mockRejectedValue(new Error('Backend down'));
 
     const { result } = renderHook(() => useAssistantList());
 
@@ -140,6 +157,12 @@ describe('useAssistantList', () => {
 
     expect(result.current.assistants).toHaveLength(0);
     expect(result.current.activeAssistantId).toBeNull();
+
+    let loadResult: Awaited<ReturnType<typeof result.current.loadAssistants>> | undefined;
+    await act(async () => {
+      loadResult = await result.current.loadAssistants();
+    });
+    expect(loadResult).toEqual({ ok: false });
 
     consoleErrorSpy.mockRestore();
   });
@@ -150,8 +173,8 @@ describe('useAssistantList', () => {
       { id: '2', name: 'B', sort_order: 2, source: 'user', enabled: true },
       { id: '3', name: 'C', sort_order: 3, source: 'user', enabled: true },
     ];
-    (ipcBridge.assistants.list.invoke as any).mockResolvedValue(initialList);
-    (ipcBridge.assistants.setState.invoke as any).mockResolvedValue(undefined);
+    vi.mocked(ipcBridge.assistants.list.invoke).mockResolvedValue(initialList);
+    vi.mocked(ipcBridge.assistants.setState.invoke).mockResolvedValue(undefined);
 
     const { result } = renderHook(() => useAssistantList());
     await waitFor(() => expect(result.current.assistants).toHaveLength(3));
@@ -172,8 +195,8 @@ describe('useAssistantList', () => {
       { id: '1', name: 'A', sort_order: 1, source: 'user', enabled: true },
       { id: '2', name: 'B', sort_order: 2, source: 'user', enabled: true },
     ];
-    (ipcBridge.assistants.list.invoke as any).mockResolvedValue(initialList);
-    (ipcBridge.assistants.setState.invoke as any).mockRejectedValue(new Error('persist failed'));
+    vi.mocked(ipcBridge.assistants.list.invoke).mockResolvedValue(initialList);
+    vi.mocked(ipcBridge.assistants.setState.invoke).mockRejectedValue(new Error('persist failed'));
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { result } = renderHook(() => useAssistantList());

@@ -5,6 +5,7 @@
  */
 
 import type { AssistantHomeTab, AssistantListItem } from '../types';
+import type { AssistantListLoadResult } from '@/renderer/hooks/assistant/useAssistantList';
 import ManagedLibrary from './ManagedLibrary';
 import MyAssistantsList from './MyAssistantsList';
 import OfficialAssistantsGrid from './OfficialAssistantsGrid';
@@ -27,7 +28,7 @@ type AssistantHomeTabsProps = {
   onToggleEnabled: (assistant: AssistantListItem, checked: boolean) => void;
   onReorder: (activeId: string, overId: string) => void | Promise<void>;
   onStartChat: (assistant: Pick<AssistantListItem, 'id'>) => void;
-  onAdoptionChanged: () => Promise<void>;
+  onAdoptionChanged: () => Promise<AssistantListLoadResult>;
   initialManagedDetailId?: string | null;
   onManagedDetailConsumed?: () => void;
   initialTab?: AssistantHomeTab;
@@ -99,12 +100,7 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
               data-testid='btn-create-assistant'
             />
           </div>
-          <p
-            className={classNames(
-              'm-0 mt-8px w-full text-t-secondary',
-              isMobile ? 'text-13px leading-20px' : 'text-14px leading-22px'
-            )}
-          >
+          <p className='m-0 mt-8px w-full text-14px leading-22px text-t-secondary'>
             {t('settings.managedTeammates.pageLead')}
           </p>
           <Tabs
@@ -112,7 +108,7 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
             onChange={(key) => selectTab(key as AssistantHomeTab)}
             type='line'
             size='small'
-            className='mt-12px [&_.arco-tabs-content]:!hidden [&_.arco-tabs-header-title]:!mr-22px [&_.arco-tabs-nav]:!overflow-x-auto'
+            className='mt-12px [&_.arco-tabs-content]:!hidden [&_.arco-tabs-header-title]:![margin-inline-end:22px] [&_.arco-tabs-nav]:!overflow-x-auto'
           >
             <Tabs.TabPane
               key='mine'

@@ -125,7 +125,7 @@ const SortableAssistantCard: React.FC<SortableAssistantCardProps> = ({
       key={assistant.id}
       style={style}
       data-testid={`assistant-card-${assistant.id}`}
-      className={`group flex items-center justify-between gap-12px rounded-12px border border-solid px-14px py-10px transition-all duration-180 ${isManaged ? 'cursor-default' : 'cursor-pointer hover:border-border-1 hover:bg-fill-1'} ${highlightedId === assistant.id ? 'border-primary-5 bg-primary-1' : 'border-transparent bg-base'}`}
+      className={`group flex items-center justify-between gap-12px border border-solid px-14px py-10px transition-all duration-180 ${isManaged ? 'cursor-default rounded-8px' : 'cursor-pointer rounded-12px hover:border-border-1 hover:bg-fill-1'} ${highlightedId === assistant.id ? 'border-primary-5 bg-primary-1' : 'border-transparent bg-base'}`}
       onClick={
         isManaged
           ? undefined
@@ -304,7 +304,7 @@ const AssistantListPanel: React.FC<AssistantListPanelProps> = ({
         <Tag
           size='small'
           bordered={false}
-          className='!rounded-10px !bg-fill-1 !px-8px !py-1px !text-10px !font-600 !leading-16px !text-primary-6'
+          className='!rounded-8px !bg-fill-1 !px-8px !py-1px !text-12px !font-600 !leading-18px !text-primary-6'
         >
           {t('settings.managedTeammates.sourceManaged')}
         </Tag>

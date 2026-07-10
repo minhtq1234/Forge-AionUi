@@ -2,9 +2,10 @@ import type { ManagedAssistantDetail, ManagedPersonalizationField } from '@/comm
 import { isEmoji, resolveAvatarImageSrc } from '../../assistantUtils';
 import { Alert, Avatar, Button, Result, Spin, Tag } from '@arco-design/web-react';
 import { Check, Left, Lock, Play, Refresh, Shield } from '@icon-park/react';
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import styles from './ManagedLibrary.module.css';
+import { getRenderablePersonalizationFields } from './useManagedLibrary';
 import type { ManagedMutationError, ManagedReadError } from './useManagedLibrary';
 
 type ManagedTeammateDetailProps = {
@@ -47,7 +48,7 @@ const DetailSection: React.FC<{ title: string; values?: string[]; body?: string 
       <h3 className='m-0 text-14px font-600 leading-20px text-t-primary'>{title}</h3>
       {body ? <p className='m-0 mt-8px text-14px leading-22px text-t-secondary'>{body}</p> : null}
       {values && values.length > 0 ? (
-        <ul className='m-0 mt-8px space-y-6px pl-20px text-14px leading-22px text-t-secondary'>
+        <ul className={`${styles.detailList} m-0 mt-8px space-y-6px text-14px leading-22px text-t-secondary`}>
           {values.map((value) => (
             <li key={value}>{value}</li>
           ))}
@@ -73,8 +74,14 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
   onStartChat,
 }) => {
   const { t } = useTranslation();
+  const backButtonRef = useRef<HTMLButtonElement | null>(null);
 
-  if (isLoading) {
+  useEffect(() => {
+    if (isLoading || (!detail && !error)) return;
+    backButtonRef.current?.focus();
+  }, [detail?.assistant.id, error, isLoading]);
+
+  if (isLoading || (!detail && !error)) {
     return (
       <div className='flex min-h-240px items-center justify-center' aria-live='polite'>
         <Spin tip={t('settings.managedTeammates.loadingDetails')} />
@@ -86,7 +93,12 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
     const unauthorized = error === 'unauthorized';
     return (
       <div>
-        <Button type='text' icon={<Left theme='outline' size={16} fill='currentColor' />} onClick={onBack}>
+        <Button
+          ref={backButtonRef}
+          type='text'
+          icon={<Left className={styles.directionalIcon} theme='outline' size={16} fill='currentColor' />}
+          onClick={onBack}
+        >
           {t('settings.managedTeammates.backToLibrary')}
         </Button>
         <Result
@@ -120,13 +132,14 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
     profile.description_i18n[localeKey] ?? profile.description_i18n['en-US'] ?? profile.description ?? '';
   const avatar = profile.avatar?.trim();
   const avatarImage = resolveAvatarImageSrc(avatar);
-  const personalizableFields = detail.personalization_policy.allowed_fields;
+  const personalizableFields = getRenderablePersonalizationFields(detail);
 
   return (
     <div className={styles.libraryShell}>
       <Button
+        ref={backButtonRef}
         type='text'
-        icon={<Left theme='outline' size={16} fill='currentColor' />}
+        icon={<Left className={styles.directionalIcon} theme='outline' size={16} fill='currentColor' />}
         className='!mb-14px !px-0'
         onClick={onBack}
       >
@@ -143,7 +156,7 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
             </Avatar>
             <div className='min-w-0 flex-1'>
               <h2 className='m-0 break-words text-20px font-600 leading-28px text-t-primary'>{name}</h2>
-              {description ? <p className='m-0 mt-4px text-13px leading-20px text-t-secondary'>{description}</p> : null}
+              {description ? <p className='m-0 mt-4px text-14px leading-22px text-t-secondary'>{description}</p> : null}
               <Tag
                 bordered={false}
                 icon={<Shield theme='outline' size={13} fill='currentColor' />}
@@ -171,14 +184,14 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
           <dl className='m-0 mt-12px space-y-12px'>
             <div>
               <dt className='text-12px text-t-tertiary'>{t('settings.managedTeammates.owner')}</dt>
-              <dd className='m-0 mt-2px break-words text-13px font-500 text-t-primary'>
+              <dd className='m-0 mt-2px break-words text-14px font-500 text-t-primary'>
                 {detail.governance.business_owner}
               </dd>
             </div>
             {detail.governance.published_version ? (
               <div>
                 <dt className='text-12px text-t-tertiary'>{t('settings.managedTeammates.versionLabel')}</dt>
-                <dd className='m-0 mt-2px text-13px font-500 text-t-primary'>
+                <dd className='m-0 mt-2px text-14px font-500 text-t-primary'>
                   {t('settings.managedTeammates.version', { version: detail.governance.published_version })}
                 </dd>
               </div>
@@ -186,11 +199,11 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
           </dl>
 
           <div className='mt-20px'>
-            <div className='flex items-center gap-6px text-13px font-600 text-t-primary'>
+            <div className='flex items-center gap-6px text-14px font-600 text-t-primary'>
               <Lock theme='outline' size={15} fill='currentColor' />
               {t('settings.managedTeammates.vngManages')}
             </div>
-            <ul className='m-0 mt-8px space-y-5px pl-20px text-13px leading-20px text-t-secondary'>
+            <ul className={`${styles.detailList} m-0 mt-8px space-y-5px text-14px leading-22px text-t-secondary`}>
               <li>{t('settings.managedTeammates.managedJob')}</li>
               <li>{t('settings.managedTeammates.managedTraining')}</li>
               <li>{t('settings.managedTeammates.managedSafety')}</li>
@@ -198,18 +211,18 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
           </div>
 
           <div className='mt-20px'>
-            <div className='flex items-center gap-6px text-13px font-600 text-t-primary'>
+            <div className='flex items-center gap-6px text-14px font-600 text-t-primary'>
               <Check theme='outline' size={15} fill='currentColor' />
               {t('settings.managedTeammates.youCanPersonalize')}
             </div>
             {personalizableFields.length > 0 ? (
-              <ul className='m-0 mt-8px space-y-5px pl-20px text-13px leading-20px text-t-secondary'>
+              <ul className={`${styles.detailList} m-0 mt-8px space-y-5px text-14px leading-22px text-t-secondary`}>
                 {personalizableFields.map((field) => (
                   <li key={field}>{t(`settings.managedTeammates.${PERSONALIZATION_LABELS[field]}`)}</li>
                 ))}
               </ul>
             ) : (
-              <p className='m-0 mt-8px text-13px leading-20px text-t-secondary'>
+              <p className='m-0 mt-8px text-14px leading-22px text-t-secondary'>
                 {t('settings.managedTeammates.noPersonalSetup')}
               </p>
             )}

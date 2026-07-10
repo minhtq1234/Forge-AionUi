@@ -1,12 +1,13 @@
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 import type { ManagedAssistantDetail } from '@/common/types/agent/managedAssistantTypes';
+import type { AssistantListLoadResult } from '@/renderer/hooks/assistant/useAssistantList';
 import { Message } from '@arco-design/web-react';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ManagedPersonalSetup from './ManagedPersonalSetup';
 import ManagedTeammateDetail from './ManagedTeammateDetail';
-import ManagedTeammateList from './ManagedTeammateList';
-import useManagedLibrary, { hasPersonalSetup } from './useManagedLibrary';
+import ManagedTeammateList, { managedTeammateCardDomId } from './ManagedTeammateList';
+import useManagedLibrary, { hasRenderablePersonalSetup } from './useManagedLibrary';
 
 type ManagedLibraryView = 'catalog' | 'detail';
 
@@ -14,7 +15,7 @@ type ManagedLibraryProps = {
   localeKey: string;
   initialDetailId?: string | null;
   onInitialDetailConsumed?: () => void;
-  onAdoptionChanged: () => Promise<void>;
+  onAdoptionChanged: () => Promise<AssistantListLoadResult>;
   onStartChat: (assistant: Pick<Assistant, 'id'>) => void;
 };
 
@@ -25,11 +26,13 @@ const ManagedLibrary: React.FC<ManagedLibraryProps> = ({
   onAdoptionChanged,
   onStartChat,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [message, messageContext] = Message.useMessage({ maxCount: 3 });
   const [view, setView] = useState<ManagedLibraryView>(initialDetailId ? 'detail' : 'catalog');
   const [selectedId, setSelectedId] = useState<string | null>(initialDetailId ?? null);
   const [setupDetail, setSetupDetail] = useState<ManagedAssistantDetail | null>(null);
+  const originatingCardIdRef = useRef<string | null>(null);
+  const restoreFocusIdRef = useRef<string | null>(null);
   const library = useManagedLibrary({ localeKey, onAdoptionChanged });
 
   useEffect(() => {
@@ -44,12 +47,20 @@ const ManagedLibrary: React.FC<ManagedLibraryProps> = ({
     void library.loadDetail(selectedId);
   }, [library.loadDetail, selectedId, view]);
 
+  useLayoutEffect(() => {
+    if (view !== 'catalog' || !restoreFocusIdRef.current) return;
+    document.getElementById(managedTeammateCardDomId(restoreFocusIdRef.current))?.focus();
+    restoreFocusIdRef.current = null;
+  }, [view]);
+
   const handleSelect = useCallback((id: string) => {
+    originatingCardIdRef.current = id;
     setSelectedId(id);
     setView('detail');
   }, []);
 
   const handleBack = useCallback(() => {
+    restoreFocusIdRef.current = originatingCardIdRef.current;
     setView('catalog');
     setSelectedId(null);
     setSetupDetail(null);
@@ -60,14 +71,14 @@ const ManagedLibrary: React.FC<ManagedLibraryProps> = ({
     if (!selectedId) return;
     const result = await library.adopt(selectedId);
     if (!result) return;
-    if (hasPersonalSetup(result.detail)) {
+    if (hasRenderablePersonalSetup(result.detail)) {
       setSetupDetail(result.detail);
     }
   };
 
   const handleSetupClose = () => {
     setSetupDetail(null);
-    library.clearMutationError();
+    library.invalidateCurrentView();
   };
 
   const handleSetupSave = async (request: Parameters<typeof library.updatePreferences>[1]) => {
@@ -77,6 +88,7 @@ const ManagedLibrary: React.FC<ManagedLibraryProps> = ({
     setSetupDetail(detail);
     message.success(t('settings.managedTeammates.setupSaved'));
     setSetupDetail(null);
+    library.invalidateCurrentView();
   };
 
   const handleSetupReset = async () => {
@@ -88,7 +100,7 @@ const ManagedLibrary: React.FC<ManagedLibraryProps> = ({
   };
 
   return (
-    <>
+    <div dir={i18n.dir(localeKey)}>
       {messageContext}
       {view === 'catalog' ? (
         <ManagedTeammateList
@@ -131,7 +143,7 @@ const ManagedLibrary: React.FC<ManagedLibraryProps> = ({
           onReset={handleSetupReset}
         />
       ) : null}
-    </>
+    </div>
   );
 };
 

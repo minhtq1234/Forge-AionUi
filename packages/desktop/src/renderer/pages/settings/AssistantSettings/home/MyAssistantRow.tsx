@@ -14,6 +14,7 @@ import { Button, Dropdown, Menu, Switch, Tooltip } from '@arco-design/web-react'
 import { Attention, Drag, MoreOne, Play, Right, Shield } from '@icon-park/react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import styles from './ManagedLibrary/ManagedLibrary.module.css';
 
 type MyAssistantRowProps = {
   assistant: AssistantListItem;
@@ -44,7 +45,7 @@ const ManagedAssistantRow: React.FC<MyAssistantRowProps> = ({
           <div className='truncate text-14px font-600 text-t-primary'>
             {resolveAssistantDisplayName(assistant, localeKey, t, assistant.name)}
           </div>
-          <div className='mt-2px truncate text-12px text-t-secondary'>
+          <div className='mt-2px truncate text-14px leading-22px text-t-secondary'>
             {assistant.description_i18n?.[localeKey] || assistant.description || ''}
           </div>
           <div className='mt-6px inline-flex items-center gap-5px text-12px font-500 text-primary-6'>
@@ -56,7 +57,7 @@ const ManagedAssistantRow: React.FC<MyAssistantRowProps> = ({
       <div className='flex min-w-0 flex-wrap items-center justify-end gap-8px'>
         <Button
           size='small'
-          icon={<Right theme='outline' size={14} fill='currentColor' />}
+          icon={<Right className={styles.directionalIcon} theme='outline' size={14} fill='currentColor' />}
           onClick={() => onOpenManagedDetail(assistant.id)}
         >
           {t('settings.managedTeammates.viewDetails')}
@@ -128,7 +129,7 @@ const SortableAssistantRow: React.FC<MyAssistantRowProps> = ({
       ref={setNodeRef}
       style={style}
       data-testid={`assistant-card-${assistant.id}`}
-      className='group flex cursor-pointer items-center justify-between gap-12px rounded-12px border border-solid border-transparent bg-base px-14px py-12px transition-all duration-180 hover:border-border-2'
+      className='group flex cursor-pointer items-center justify-between gap-12px rounded-8px border border-solid border-transparent bg-base px-14px py-12px transition-all duration-180 hover:border-border-2'
       onClick={() => onOpenDetail(assistant)}
     >
       <div className='flex min-w-0 flex-1 items-center gap-12px'>
@@ -180,7 +181,7 @@ const SortableAssistantRow: React.FC<MyAssistantRowProps> = ({
         </div>
       </div>
       <div
-        className='ml-10px flex flex-shrink-0 items-center gap-8px text-t-secondary sm:gap-14px'
+        className='[margin-inline-start:10px] flex flex-shrink-0 items-center gap-8px text-t-secondary sm:gap-14px'
         onClick={(e) => e.stopPropagation()}
       >
         {/* Chat reveals on row hover to stay quiet at rest. Hidden on narrow widths to give the name room. */}

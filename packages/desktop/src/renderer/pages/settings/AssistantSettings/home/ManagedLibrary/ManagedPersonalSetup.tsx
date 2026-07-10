@@ -3,11 +3,12 @@ import type {
   ManagedAssistantPreferencesRequest,
   ManagedPersonalizationField,
 } from '@/common/types/agent/managedAssistantTypes';
-import { Alert, Button, Checkbox, Drawer, Form, Input, Popconfirm, Select } from '@arco-design/web-react';
+import { Alert, Button, Drawer, Form, Input, Popconfirm } from '@arco-design/web-react';
 import { Close, Refresh } from '@icon-park/react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import styles from './ManagedLibrary.module.css';
+import { getRenderablePersonalizationFields } from './useManagedLibrary';
 import type { ManagedMutationError } from './useManagedLibrary';
 
 type ManagedPersonalSetupProps = {
@@ -44,12 +45,10 @@ const ManagedPersonalSetup: React.FC<ManagedPersonalSetupProps> = ({
   const [recurringContext, setRecurringContext] = useState('');
   const [defaultWorkspace, setDefaultWorkspace] = useState('');
   const [personalPrompts, setPersonalPrompts] = useState('');
-  const [optionalSkillIds, setOptionalSkillIds] = useState<string[]>([]);
-  const [model, setModel] = useState('');
 
   const allowedFields = useMemo(
-    () => new Set<ManagedPersonalizationField>(detail.personalization_policy.allowed_fields),
-    [detail.personalization_policy.allowed_fields]
+    () => new Set<ManagedPersonalizationField>(getRenderablePersonalizationFields(detail)),
+    [detail]
   );
 
   useEffect(() => {
@@ -59,8 +58,6 @@ const ManagedPersonalSetup: React.FC<ManagedPersonalSetupProps> = ({
     setRecurringContext(detail.preferences.recurring_context ?? '');
     setDefaultWorkspace(detail.preferences.default_workspace ?? '');
     setPersonalPrompts((detail.preferences.personal_prompts ?? []).join('\n'));
-    setOptionalSkillIds(detail.preferences.optional_skill_ids ?? []);
-    setModel(detail.preferences.model ?? '');
   }, [detail]);
 
   const handleSave = async () => {
@@ -71,8 +68,6 @@ const ManagedPersonalSetup: React.FC<ManagedPersonalSetupProps> = ({
     if (allowedFields.has('recurring_context')) request.recurring_context = recurringContext.trim();
     if (allowedFields.has('default_workspace')) request.default_workspace = defaultWorkspace.trim();
     if (allowedFields.has('personal_prompts')) request.personal_prompts = splitPrompts(personalPrompts);
-    if (allowedFields.has('optional_skills')) request.optional_skill_ids = optionalSkillIds;
-    if (allowedFields.has('model')) request.model = model;
     await onSave(request);
   };
 
@@ -84,9 +79,9 @@ const ManagedPersonalSetup: React.FC<ManagedPersonalSetupProps> = ({
       placement='right'
       wrapClassName={styles.setupDrawer}
       title={
-        <div className='min-w-0 pr-8px'>
+        <div className='min-w-0 [padding-inline-end:8px]'>
           <div className='text-16px font-600 text-t-primary'>{t('settings.managedTeammates.setupTitle')}</div>
-          <div className='mt-4px text-13px font-normal leading-20px text-t-secondary'>
+          <div className='mt-4px text-14px font-normal leading-22px text-t-secondary'>
             {t('settings.managedTeammates.setupLead')}
           </div>
         </div>
@@ -184,37 +179,6 @@ const ManagedPersonalSetup: React.FC<ManagedPersonalSetupProps> = ({
                 value={personalPrompts}
                 onChange={setPersonalPrompts}
                 autoSize={{ minRows: 3, maxRows: 7 }}
-                disabled={isSaving || isResetting}
-              />
-            </Form.Item>
-          ) : null}
-
-          {allowedFields.has('optional_skills') ? (
-            <Form.Item label={fieldLabel('fieldOptionalSkills')}>
-              <Checkbox.Group
-                direction='vertical'
-                value={optionalSkillIds}
-                onChange={(values) => setOptionalSkillIds(values.map(String))}
-                options={detail.personalization_policy.optional_skill_ids.map((skillId) => ({
-                  label: skillId,
-                  value: skillId,
-                }))}
-                disabled={isSaving || isResetting}
-              />
-            </Form.Item>
-          ) : null}
-
-          {allowedFields.has('model') ? (
-            <Form.Item label={fieldLabel('fieldModel')}>
-              <Select
-                aria-label={fieldLabel('fieldModel')}
-                value={model || undefined}
-                onChange={(value) => setModel(value ?? '')}
-                allowClear
-                options={detail.personalization_policy.allowed_model_ids.map((modelId) => ({
-                  label: modelId,
-                  value: modelId,
-                }))}
                 disabled={isSaving || isResetting}
               />
             </Form.Item>
