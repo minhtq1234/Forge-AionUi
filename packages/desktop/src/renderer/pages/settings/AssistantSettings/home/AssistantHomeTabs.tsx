@@ -74,13 +74,9 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
 
   useEffect(() => {
     const managedAssistants = assistants.filter((assistant) => assistant.source === 'managed');
-    if (managedAssistants.length === 0) return;
+    setVerifiedManagedAssistantIds(new Set(managedAssistants.map((assistant) => assistant.id)));
 
-    setVerifiedManagedAssistantIds((current) => {
-      const next = new Set(current);
-      managedAssistants.forEach((assistant) => next.add(assistant.id));
-      return next;
-    });
+    if (managedAssistants.length === 0) return;
 
     setRetainedManagedAssistants((current) => {
       const next = new Map(current);
@@ -104,15 +100,19 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
 
       try {
         const result = await onAdoptionChanged();
-        if (managedVerificationSequenceRef.current.get(id) === nextSequence) {
-          const isVerified = result.ok && result.assistants.some((assistant) => assistant.id === id);
+        if (!result.authoritative || managedVerificationSequenceRef.current.get(id) !== nextSequence) {
+          return result;
+        }
+
+        if (result.ok) {
+          const managedIds = result.assistants
+            .filter((assistant) => assistant.source === 'managed')
+            .map((assistant) => assistant.id);
+          setVerifiedManagedAssistantIds(new Set(managedIds));
+        } else {
           setVerifiedManagedAssistantIds((current) => {
             const next = new Set(current);
-            if (isVerified) {
-              next.add(id);
-            } else {
-              next.delete(id);
-            }
+            next.delete(id);
             return next;
           });
         }

@@ -9,7 +9,10 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-export type AssistantListLoadResult = { ok: true; assistants: Assistant[] } | { ok: false };
+export type AssistantListLoadResult =
+  | { ok: true; authoritative: true; assistants: Assistant[] }
+  | { ok: false; authoritative: true }
+  | { ok: false; authoritative: false };
 
 /**
  * Manages the assistant list: loading from backend, sorting, and tracking the
@@ -30,17 +33,22 @@ export const useAssistantList = () => {
 
     try {
       const list = await ipcBridge.assistants.list.invoke();
-      if (refreshGeneration === refreshGenerationRef.current) {
-        setAssistants(list);
-        setActiveAssistantId((prev) => {
-          if (prev && list.some((a) => a.id === prev)) return prev;
-          return list[0]?.id ?? null;
-        });
+      if (refreshGeneration !== refreshGenerationRef.current) {
+        return { ok: false, authoritative: false };
       }
-      return { ok: true, assistants: list };
+
+      setAssistants(list);
+      setActiveAssistantId((prev) => {
+        if (prev && list.some((a) => a.id === prev)) return prev;
+        return list[0]?.id ?? null;
+      });
+      return { ok: true, authoritative: true, assistants: list };
     } catch (error) {
+      if (refreshGeneration !== refreshGenerationRef.current) {
+        return { ok: false, authoritative: false };
+      }
       console.error('Failed to load assistants:', error);
-      return { ok: false };
+      return { ok: false, authoritative: true };
     }
   }, []);
 

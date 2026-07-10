@@ -89,7 +89,7 @@ describe('useAssistantList', () => {
     expect(result.current.activeAssistant).toBeNull();
   });
 
-  it('returns the fetched assistants in an explicit success result', async () => {
+  it('returns the fetched assistants in an authoritative success result', async () => {
     const mockList: Assistant[] = [
       { id: 'managed-1', name: 'Managed', sort_order: 1, source: 'managed', enabled: true },
     ];
@@ -103,10 +103,10 @@ describe('useAssistantList', () => {
       loadResult = await result.current.loadAssistants();
     });
 
-    expect(loadResult).toEqual({ ok: true, assistants: mockList });
+    expect(loadResult).toEqual({ ok: true, authoritative: true, assistants: mockList });
   });
 
-  it('keeps the newest assistant list when an older refresh completes last', async () => {
+  it('returns a non-authoritative result when an older successful refresh completes last', async () => {
     const initialList: Assistant[] = [{ id: 'initial', name: 'Initial', sort_order: 1, source: 'user', enabled: true }];
     const obsoleteList: Assistant[] = [
       { id: 'obsolete', name: 'Obsolete', sort_order: 1, source: 'user', enabled: true },
@@ -137,15 +137,56 @@ describe('useAssistantList', () => {
       newerRefresh.resolve(newestList);
       await newerRefresh.promise;
     });
-    await waitFor(() => expect(newerResult).toEqual({ ok: true, assistants: newestList }));
+    await waitFor(() => expect(newerResult).toEqual({ ok: true, authoritative: true, assistants: newestList }));
 
     await act(async () => {
       olderRefresh.resolve(obsoleteList);
       await olderRefresh.promise;
     });
 
-    await waitFor(() => expect(olderResult).toEqual({ ok: true, assistants: obsoleteList }));
+    await waitFor(() => expect(olderResult).toEqual({ ok: false, authoritative: false }));
     expect(result.current.assistants).toEqual(newestList);
+  });
+
+  it('returns a non-authoritative result when an older failed refresh completes last', async () => {
+    const initialList: Assistant[] = [{ id: 'initial', name: 'Initial', sort_order: 1, source: 'user', enabled: true }];
+    const newestList: Assistant[] = [{ id: 'newest', name: 'Newest', sort_order: 1, source: 'user', enabled: true }];
+    const olderRefresh = deferred<Assistant[]>();
+    const newerRefresh = deferred<Assistant[]>();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(ipcBridge.assistants.list.invoke)
+      .mockResolvedValueOnce(initialList)
+      .mockReturnValueOnce(olderRefresh.promise)
+      .mockReturnValueOnce(newerRefresh.promise);
+
+    const { result } = renderHook(() => useAssistantList());
+    await waitFor(() => expect(result.current.assistants).toEqual(initialList));
+
+    let olderResult: Awaited<ReturnType<typeof result.current.loadAssistants>> | undefined;
+    let newerResult: Awaited<ReturnType<typeof result.current.loadAssistants>> | undefined;
+    act(() => {
+      void result.current.loadAssistants().then((value) => {
+        olderResult = value;
+      });
+      void result.current.loadAssistants().then((value) => {
+        newerResult = value;
+      });
+    });
+
+    await act(async () => {
+      newerRefresh.resolve(newestList);
+      await newerRefresh.promise;
+    });
+    await waitFor(() => expect(newerResult).toEqual({ ok: true, authoritative: true, assistants: newestList }));
+
+    await act(async () => {
+      olderRefresh.reject(new Error('obsolete refresh failed'));
+      await olderRefresh.promise.catch(() => undefined);
+    });
+
+    await waitFor(() => expect(olderResult).toEqual({ ok: false, authoritative: false }));
+    expect(result.current.assistants).toEqual(newestList);
+    consoleErrorSpy.mockRestore();
   });
 
   it('preserves active selection if still present after reload', async () => {
@@ -214,7 +255,7 @@ describe('useAssistantList', () => {
     await act(async () => {
       loadResult = await result.current.loadAssistants();
     });
-    expect(loadResult).toEqual({ ok: false });
+    expect(loadResult).toEqual({ ok: false, authoritative: true });
 
     consoleErrorSpy.mockRestore();
   });

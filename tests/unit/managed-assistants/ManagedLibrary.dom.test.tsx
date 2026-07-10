@@ -233,7 +233,13 @@ const createDetail = (overrides: Partial<ManagedAssistantDetail> = {}): ManagedA
   };
 };
 
-const loadSuccess = (...assistants: Assistant[]): AssistantListLoadResult => ({ ok: true, assistants });
+const loadSuccess = (...assistants: Assistant[]): AssistantListLoadResult => ({
+  ok: true,
+  authoritative: true,
+  assistants,
+});
+
+const loadFailure = (): AssistantListLoadResult => ({ ok: false, authoritative: true });
 
 const createDetailFor = (
   id: string,
@@ -264,9 +270,19 @@ const ManagedLibraryWithRealAssistantList: React.FC = () => {
 const AssistantHomeTabsWithRealAssistantList: React.FC<{
   localeKey?: string;
   onStartChat: (assistant: Pick<Assistant, 'id'>) => void;
-}> = ({ localeKey: requestedLocaleKey, onStartChat }) => {
+  onLoadAssistantsReady?: (loadAssistants: () => Promise<AssistantListLoadResult>) => void;
+  onOpenManagedDetailReady?: (openManagedDetail: (id: string) => void) => void;
+}> = ({ localeKey: requestedLocaleKey, onStartChat, onLoadAssistantsReady, onOpenManagedDetailReady }) => {
   const { assistants, loadAssistants, localeKey } = useAssistantList();
   const [managedDetailId, setManagedDetailId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    onLoadAssistantsReady?.(loadAssistants);
+  }, [loadAssistants, onLoadAssistantsReady]);
+
+  React.useEffect(() => {
+    onOpenManagedDetailReady?.(setManagedDetailId);
+  }, [onOpenManagedDetailReady]);
 
   return (
     <AssistantHomeTabs
@@ -716,7 +732,7 @@ describe('ManagedLibrary', () => {
 
   it.each([
     ['success', loadSuccess(createAssistant())],
-    ['failure', { ok: false } as AssistantListLoadResult],
+    ['failure', loadFailure()],
   ])('ignores a late projection refresh %s after navigating from A to B', async (_case, refreshResult) => {
     const refreshRequest = deferred<AssistantListLoadResult>();
     const assistantB = createAssistant({
@@ -829,7 +845,7 @@ describe('managed assistant entry points', () => {
     listAssistants.mockReset();
   });
 
-  it('keeps managed A visible and unavailable until a current exact-A refresh succeeds', async () => {
+  it('ignores a stale A success after a newer B projection becomes current', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const assistantA = createAssistant();
     const assistantB = createAssistant({
@@ -837,70 +853,181 @@ describe('managed assistant entry points', () => {
       name: 'Contract Review Teammate',
       name_i18n: { 'en-US': 'Contract Review Teammate' },
     });
-    const refreshOne = deferred<Assistant[]>();
-    const refreshTwo = deferred<Assistant[]>();
-    getManagedAssistant.mockResolvedValue(createDetail({ adoption: { active: true, adopted_at: 1_788_192_100 } }));
+    const staleARefresh = deferred<Assistant[]>();
+    const currentBRefresh = deferred<Assistant[]>();
+    let openManagedDetail: ((id: string) => void) | undefined;
+    listManagedAssistants.mockResolvedValue([createSummary(), createSummary({ assistant: assistantB })]);
+    getManagedAssistant.mockImplementation(({ id }: { id: string }) =>
+      Promise.resolve(
+        id === assistantB.id
+          ? createDetailFor(assistantB.id, assistantB.name, { adoption: { active: true, adopted_at: 1_788_192_100 } })
+          : createDetail({ adoption: { active: true, adopted_at: 1_788_192_100 } })
+      )
+    );
     listAssistants
       .mockResolvedValueOnce([assistantA])
-      .mockReturnValueOnce(refreshOne.promise)
-      .mockReturnValueOnce(refreshTwo.promise)
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([assistantB])
-      .mockResolvedValueOnce([assistantA]);
+      .mockReturnValueOnce(staleARefresh.promise)
+      .mockReturnValueOnce(currentBRefresh.promise);
 
     render(
       <ConfigProvider>
-        <AssistantHomeTabsWithRealAssistantList onStartChat={vi.fn()} />
+        <AssistantHomeTabsWithRealAssistantList
+          onStartChat={vi.fn()}
+          onOpenManagedDetailReady={(nextOpenManagedDetail) => {
+            openManagedDetail = nextOpenManagedDetail;
+          }}
+        />
       </ConfigProvider>
     );
 
     await screen.findByTestId('assistant-card-finance-close');
+    await waitFor(() => expect(openManagedDetail).toBeDefined());
     await userEvent.click(screen.getByRole('button', { name: 'View details' }));
     await waitFor(() => expect(listAssistants).toHaveBeenCalledTimes(2));
-
-    await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'View details' }));
+    act(() => {
+      openManagedDetail?.(assistantB.id);
+    });
     await waitFor(() => expect(listAssistants).toHaveBeenCalledTimes(3));
     await act(async () => {
-      refreshTwo.reject(new Error('generic list failed'));
-      await refreshTwo.promise.catch(() => undefined);
+      currentBRefresh.resolve([assistantB]);
+      await currentBRefresh.promise;
     });
-    await screen.findByRole('button', { name: 'Retry' });
 
     await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
-    const start = await screen.findByRole('button', { name: 'Start working' });
-    expect(start).toBeDisabled();
+    const staleAStart = within(screen.getByTestId('assistant-card-finance-close')).getByRole('button', {
+      name: 'Start working',
+    });
+    expect(staleAStart).toBeDisabled();
+    expect(
+      within(screen.getByTestId('assistant-card-contract-review')).getByRole('button', { name: 'Start working' })
+    ).toBeEnabled();
 
     await act(async () => {
-      refreshOne.resolve([assistantA]);
-      await refreshOne.promise;
+      staleARefresh.resolve([assistantA]);
+      await staleARefresh.promise;
     });
-    await waitFor(() => expect(start).toBeDisabled());
+    expect(screen.getAllByTestId('assistant-card-finance-close')).toHaveLength(1);
+    expect(staleAStart).toBeDisabled();
+    consoleErrorSpy.mockRestore();
+  });
 
-    await userEvent.click(screen.getByRole('button', { name: 'View details' }));
-    await screen.findByRole('button', { name: 'Retry' });
-    await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
-    expect(screen.getByTestId('assistant-card-finance-close')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Start working' })).toBeDisabled();
+  it('ignores a stale A failure after an external current catalog refresh retains A', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const assistantA = createAssistant();
+    const staleARefresh = deferred<Assistant[]>();
+    const externalRefresh = deferred<Assistant[]>();
+    let loadAssistants: (() => Promise<AssistantListLoadResult>) | undefined;
+    getManagedAssistant.mockResolvedValue(createDetail({ adoption: { active: true, adopted_at: 1_788_192_100 } }));
+    listAssistants
+      .mockResolvedValueOnce([assistantA])
+      .mockReturnValueOnce(staleARefresh.promise)
+      .mockReturnValueOnce(externalRefresh.promise);
 
-    await userEvent.click(screen.getByRole('button', { name: 'View details' }));
-    await screen.findByRole('button', { name: 'Retry' });
-    await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
-    expect(screen.getByTestId('assistant-card-finance-close')).toBeInTheDocument();
-    expect(screen.getByTestId('assistant-card-contract-review')).toBeInTheDocument();
-    expect(
-      within(screen.getByTestId('assistant-card-finance-close')).getByRole('button', { name: 'Start working' })
-    ).toBeDisabled();
-
-    await userEvent.click(
-      within(screen.getByTestId('assistant-card-finance-close')).getByRole('button', { name: 'View details' })
+    render(
+      <ConfigProvider>
+        <AssistantHomeTabsWithRealAssistantList
+          onStartChat={vi.fn()}
+          onLoadAssistantsReady={(nextLoadAssistants) => {
+            loadAssistants = nextLoadAssistants;
+          }}
+        />
+      </ConfigProvider>
     );
-    await screen.findByRole('button', { name: 'Start working' });
+
+    await screen.findByTestId('assistant-card-finance-close');
+    await waitFor(() => expect(loadAssistants).toBeDefined());
+    await userEvent.click(screen.getByRole('button', { name: 'View details' }));
+    await waitFor(() => expect(listAssistants).toHaveBeenCalledTimes(2));
+    let externalResult: Promise<AssistantListLoadResult> | undefined;
+    act(() => {
+      externalResult = loadAssistants?.();
+    });
+    await waitFor(() => expect(listAssistants).toHaveBeenCalledTimes(3));
+
+    await act(async () => {
+      externalRefresh.resolve([assistantA]);
+      await externalResult;
+    });
+    await act(async () => {
+      staleARefresh.reject(new Error('stale projection failed'));
+      await staleARefresh.promise.catch(() => undefined);
+    });
+
     await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
     expect(
       within(screen.getByTestId('assistant-card-finance-close')).getByRole('button', { name: 'Start working' })
     ).toBeEnabled();
     consoleErrorSpy.mockRestore();
+  });
+
+  it('replaces retained managed readiness for empty, other-ID-only, and later exact-ID catalog results', async () => {
+    const assistantA = createAssistant();
+    const assistantB = createAssistant({
+      id: 'contract-review',
+      name: 'Contract Review Teammate',
+      name_i18n: { 'en-US': 'Contract Review Teammate' },
+    });
+    const missingRefresh = deferred<Assistant[]>();
+    const otherIdRefresh = deferred<Assistant[]>();
+    const exactIdRefresh = deferred<Assistant[]>();
+    let loadAssistants: (() => Promise<AssistantListLoadResult>) | undefined;
+    listAssistants
+      .mockResolvedValueOnce([assistantA])
+      .mockReturnValueOnce(missingRefresh.promise)
+      .mockReturnValueOnce(otherIdRefresh.promise)
+      .mockReturnValueOnce(exactIdRefresh.promise);
+
+    render(
+      <ConfigProvider>
+        <AssistantHomeTabsWithRealAssistantList
+          onStartChat={vi.fn()}
+          onLoadAssistantsReady={(nextLoadAssistants) => {
+            loadAssistants = nextLoadAssistants;
+          }}
+        />
+      </ConfigProvider>
+    );
+
+    await screen.findByTestId('assistant-card-finance-close');
+    await waitFor(() => expect(loadAssistants).toBeDefined());
+
+    let missingResult: Promise<AssistantListLoadResult> | undefined;
+    act(() => {
+      missingResult = loadAssistants?.();
+    });
+    await act(async () => {
+      missingRefresh.resolve([]);
+      await missingResult;
+    });
+    expect(screen.getAllByTestId('assistant-card-finance-close')).toHaveLength(1);
+    expect(
+      within(screen.getByTestId('assistant-card-finance-close')).getByRole('button', { name: 'Start working' })
+    ).toBeDisabled();
+
+    let otherIdResult: Promise<AssistantListLoadResult> | undefined;
+    act(() => {
+      otherIdResult = loadAssistants?.();
+    });
+    await act(async () => {
+      otherIdRefresh.resolve([assistantB]);
+      await otherIdResult;
+    });
+    expect(screen.getAllByTestId('assistant-card-finance-close')).toHaveLength(1);
+    expect(
+      within(screen.getByTestId('assistant-card-finance-close')).getByRole('button', { name: 'Start working' })
+    ).toBeDisabled();
+
+    let exactIdResult: Promise<AssistantListLoadResult> | undefined;
+    act(() => {
+      exactIdResult = loadAssistants?.();
+    });
+    await act(async () => {
+      exactIdRefresh.resolve([assistantA]);
+      await exactIdResult;
+    });
+    expect(
+      within(screen.getByTestId('assistant-card-finance-close')).getByRole('button', { name: 'Start working' })
+    ).toBeEnabled();
   });
 
   it('keeps a stale managed row visible but blocks Start until its exact generic projection refreshes', async () => {
