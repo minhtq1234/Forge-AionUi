@@ -13,7 +13,7 @@ import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import TalkToButlerButton from '@/renderer/components/base/TalkToButlerButton';
 import { Alert, Tabs } from '@arco-design/web-react';
 import classNames from 'classnames';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 type AssistantHomeTabsProps = {
@@ -53,14 +53,65 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
   initialTab = 'mine',
   onTabChange,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
   const [tab, setTab] = useState<AssistantHomeTab>(initialTab);
+  const [verifiedManagedAssistantIds, setVerifiedManagedAssistantIds] = useState<Set<string>>(
+    () => new Set(assistants.filter((assistant) => assistant.source === 'managed').map((assistant) => assistant.id))
+  );
+  const managedVerificationSequenceRef = useRef(new Map<string, number>());
 
   useEffect(() => {
     setTab(initialTab);
   }, [initialTab]);
+
+  useEffect(() => {
+    const managedAssistantIds = assistants
+      .filter((assistant) => assistant.source === 'managed')
+      .map((assistant) => assistant.id);
+    if (managedAssistantIds.length === 0) return;
+
+    setVerifiedManagedAssistantIds((current) => {
+      const next = new Set(current);
+      managedAssistantIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }, [assistants]);
+
+  const verifyManagedAssistantProjection = useCallback(
+    async (id: string): Promise<AssistantListLoadResult> => {
+      const nextSequence = (managedVerificationSequenceRef.current.get(id) ?? 0) + 1;
+      managedVerificationSequenceRef.current.set(id, nextSequence);
+
+      try {
+        const result = await onAdoptionChanged();
+        if (managedVerificationSequenceRef.current.get(id) === nextSequence) {
+          const isVerified = result.ok && result.assistants.some((assistant) => assistant.id === id);
+          setVerifiedManagedAssistantIds((current) => {
+            const next = new Set(current);
+            if (isVerified) {
+              next.add(id);
+            } else {
+              next.delete(id);
+            }
+            return next;
+          });
+        }
+        return result;
+      } catch (error) {
+        if (managedVerificationSequenceRef.current.get(id) === nextSequence) {
+          setVerifiedManagedAssistantIds((current) => {
+            const next = new Set(current);
+            next.delete(id);
+            return next;
+          });
+        }
+        throw error;
+      }
+    },
+    [onAdoptionChanged]
+  );
 
   const selectTab = (next: AssistantHomeTab) => {
     setTab(next);
@@ -75,6 +126,7 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
   return (
     <div
       data-testid='assistant-home-shell'
+      dir={i18n.dir(localeKey)}
       className='flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-transparent'
     >
       <div
@@ -141,6 +193,7 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
               onToggleEnabled={onToggleEnabled}
               onReorder={onReorder}
               onStartChat={onStartChat}
+              isManagedStartReady={(id) => verifiedManagedAssistantIds.has(id)}
               onGoOfficial={() => selectTab('official')}
             />
           ) : tab === 'library' ? (
@@ -148,7 +201,7 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
               localeKey={localeKey}
               initialDetailId={initialManagedDetailId}
               onInitialDetailConsumed={onManagedDetailConsumed}
-              onAdoptionChanged={onAdoptionChanged}
+              onAdoptionChanged={verifyManagedAssistantProjection}
               onStartChat={onStartChat}
             />
           ) : (

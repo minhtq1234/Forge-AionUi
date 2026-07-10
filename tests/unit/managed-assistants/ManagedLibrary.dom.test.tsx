@@ -261,6 +261,33 @@ const ManagedLibraryWithRealAssistantList: React.FC = () => {
   return <ManagedLibrary localeKey='en-US' onAdoptionChanged={loadAssistants} onStartChat={vi.fn()} />;
 };
 
+const AssistantHomeTabsWithRealAssistantList: React.FC<{
+  localeKey?: string;
+  onStartChat: (assistant: Pick<Assistant, 'id'>) => void;
+}> = ({ localeKey: requestedLocaleKey, onStartChat }) => {
+  const { assistants, loadAssistants, localeKey } = useAssistantList();
+  const [managedDetailId, setManagedDetailId] = React.useState<string | null>(null);
+
+  return (
+    <AssistantHomeTabs
+      assistants={assistants}
+      localeKey={requestedLocaleKey ?? localeKey}
+      onOpenDetail={vi.fn()}
+      onOpenManagedDetail={setManagedDetailId}
+      onOpenSettings={vi.fn()}
+      onDuplicate={vi.fn()}
+      onDelete={vi.fn()}
+      onCreate={vi.fn()}
+      onToggleEnabled={vi.fn()}
+      onReorder={vi.fn()}
+      onStartChat={onStartChat}
+      onAdoptionChanged={loadAssistants}
+      initialManagedDetailId={managedDetailId}
+      onManagedDetailConsumed={() => setManagedDetailId(null)}
+    />
+  );
+};
+
 describe('ManagedLibrary', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -797,6 +824,62 @@ describe('ManagedLibrary', () => {
 });
 
 describe('managed assistant entry points', () => {
+  it('keeps a stale managed row visible but blocks Start until its exact generic projection refreshes', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const onStartChat = vi.fn();
+    const assistant = createAssistant();
+    getManagedAssistant.mockResolvedValue(createDetail({ adoption: { active: true, adopted_at: 1_788_192_100 } }));
+    listAssistants
+      .mockResolvedValueOnce([assistant])
+      .mockRejectedValueOnce(new Error('generic list failed'))
+      .mockResolvedValueOnce([assistant]);
+
+    render(
+      <ConfigProvider>
+        <AssistantHomeTabsWithRealAssistantList onStartChat={onStartChat} />
+      </ConfigProvider>
+    );
+
+    await waitFor(() => expect(listAssistants).toHaveBeenCalledTimes(1));
+    await userEvent.click(await screen.findByRole('button', { name: 'View details' }));
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
+    const start = await screen.findByRole('button', { name: 'Start working' });
+    expect(screen.getByTestId('assistant-card-finance-close')).toBeInTheDocument();
+    expect(start).toBeDisabled();
+    await userEvent.click(start);
+    expect(onStartChat).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'View details' }));
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeInTheDocument();
+    expect(listAssistants).toHaveBeenCalledTimes(3);
+
+    await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Start working' }));
+    expect(onStartChat).toHaveBeenCalledWith(assistant);
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('sets RTL direction across the assistant home shell and mirrors the managed View icon', async () => {
+    listAssistants.mockResolvedValue([createAssistant()]);
+
+    render(
+      <ConfigProvider>
+        <AssistantHomeTabsWithRealAssistantList localeKey='fa-IR' onStartChat={vi.fn()} />
+      </ConfigProvider>
+    );
+
+    const shell = screen.getByTestId('assistant-home-shell');
+    expect(shell).toHaveAttribute('dir', 'rtl');
+    expect(screen.getByRole('heading', { name: 'Teammates' }).closest('[dir="rtl"]')).toBe(shell);
+    expect(screen.getByRole('tab', { name: 'My Teammates' }).closest('[dir="rtl"]')).toBe(shell);
+
+    const viewDetails = await screen.findByRole('button', { name: 'View details' });
+    expect(viewDetails.closest('[dir="rtl"]')).toBe(shell);
+    expect(viewDetails.querySelector('[class*="directionalIcon"]')).not.toBeNull();
+  });
+
   it('renders three Arco tabs and explains Official ownership', async () => {
     render(
       <ConfigProvider>

@@ -25,6 +25,7 @@ type MyAssistantsListProps = {
   onToggleEnabled: (assistant: AssistantListItem, checked: boolean) => void;
   onReorder: (activeId: string, overId: string) => void | Promise<void>;
   onStartChat: (assistant: AssistantListItem) => void;
+  isManagedStartReady: (id: string) => boolean;
   /** Switch to the Official tab (to duplicate an official assistant). */
   onGoOfficial: () => void;
 };
@@ -40,6 +41,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
   onToggleEnabled,
   onReorder,
   onStartChat,
+  isManagedStartReady,
   onGoOfficial,
 }) => {
   const { t } = useTranslation();
@@ -190,6 +192,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
                 onDelete={onDelete}
                 onToggleEnabled={onToggleEnabled}
                 onStartChat={onStartChat}
+                managedStartReady={isManagedStartReady(assistant.id)}
               />
             ))}
           </div>

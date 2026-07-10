@@ -14,7 +14,7 @@ export type ManagedMutationError = 'adoption' | 'preferences' | 'reset' | null;
 
 type UseManagedLibraryParams = {
   localeKey: string;
-  onAdoptionChanged: () => Promise<AssistantListLoadResult>;
+  onAdoptionChanged: (id: string) => Promise<AssistantListLoadResult>;
 };
 
 type AdoptionResult = {
@@ -99,7 +99,7 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
       setIsStartReady(false);
 
       try {
-        const result = await onAdoptionChanged();
+        const result = await onAdoptionChanged(context.assistantId);
         if (!isCurrentView(context)) return false;
         const ready = result.ok && result.assistants.some((assistant) => assistant.id === context.assistantId);
         setIsStartReady(ready);

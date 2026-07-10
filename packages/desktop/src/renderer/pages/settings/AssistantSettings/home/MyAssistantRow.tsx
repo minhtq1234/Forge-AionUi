@@ -25,6 +25,7 @@ type MyAssistantRowProps = {
   onDelete: (assistant: AssistantListItem) => void;
   onToggleEnabled: (assistant: AssistantListItem, checked: boolean) => void;
   onStartChat: (assistant: AssistantListItem) => void;
+  managedStartReady?: boolean;
 };
 
 const ManagedAssistantRow: React.FC<MyAssistantRowProps> = ({
@@ -32,6 +33,7 @@ const ManagedAssistantRow: React.FC<MyAssistantRowProps> = ({
   localeKey,
   onOpenManagedDetail,
   onStartChat,
+  managedStartReady = true,
 }) => {
   const { t } = useTranslation();
   return (
@@ -68,6 +70,7 @@ const ManagedAssistantRow: React.FC<MyAssistantRowProps> = ({
             size='small'
             icon={<Play theme='outline' size={14} fill='currentColor' />}
             onClick={() => onStartChat(assistant)}
+            disabled={!managedStartReady}
           >
             {t('settings.managedTeammates.startWorking')}
           </Button>

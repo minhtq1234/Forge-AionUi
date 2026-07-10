@@ -15,7 +15,7 @@ type ManagedLibraryProps = {
   localeKey: string;
   initialDetailId?: string | null;
   onInitialDetailConsumed?: () => void;
-  onAdoptionChanged: () => Promise<AssistantListLoadResult>;
+  onAdoptionChanged: (id: string) => Promise<AssistantListLoadResult>;
   onStartChat: (assistant: Pick<Assistant, 'id'>) => void;
 };
 
