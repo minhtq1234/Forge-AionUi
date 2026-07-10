@@ -112,6 +112,7 @@ const createDetail = (overrides: Partial<ManagedAssistantDetail> = {}): ManagedA
     acknowledgement_required: false,
     changed_categories: [],
   },
+  start_state: { can_start_new_work: true },
   employee_brief: {
     job_summary: 'Close support',
     job_summary_i18n: {},

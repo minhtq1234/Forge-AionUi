@@ -6,9 +6,15 @@ import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type {
   ManagedAssistantAdminDetail,
   ManagedAssistantAdminSummary,
+  ManagedAssistantChangeCategory,
   ManagedAssistantDetail,
   ManagedAssistantDraftRequest,
+  ManagedAssistantRequiredAcknowledgement,
+  ManagedAssistantStartBlocker,
+  ManagedAssistantStartState,
   ManagedAssistantSummary,
+  ManagedAssistantUnavailableReason,
+  ManagedAssistantUpdateState,
 } from '@/common/types/agent/managedAssistantTypes';
 import { managedAssistantAdmin, managedAssistants } from '@/common/adapter/ipcBridge';
 
@@ -120,12 +126,59 @@ const draftRequest: ManagedAssistantDraftRequest = {
 const locale = 'vi VN/2026?x=y&z';
 const encodedLocale = 'vi%20VN%2F2026%3Fx%3Dy%26z';
 
+const managedReadinessResponseFixture = {
+  start_state: {
+    can_start_new_work: false,
+    blocker: 'temporarily_unavailable',
+    unavailable_reason: 'mcp',
+    expected_recovery_at: 1_788_192_000_000,
+  },
+  update: {
+    required_acknowledgement: {
+      version: 5,
+      release_notes: 'Review the updated access policy.',
+      published_at: 1_788_192_000_000,
+      changed_categories: ['permission', 'required_skills'],
+    },
+  },
+} satisfies {
+  start_state: ManagedAssistantStartState;
+  update: Pick<ManagedAssistantUpdateState, 'required_acknowledgement'>;
+};
+
 describe('managed assistant IPC bridge clients', () => {
   beforeEach(() => {
     httpBridgeMocks.calls.length = 0;
   });
 
   it('exposes the managed assistant response types', () => {
+    expectTypeOf<ManagedAssistantStartBlocker>().toEqualTypeOf<
+      'acknowledgement_required' | 'retired' | 'temporarily_unavailable'
+    >();
+    expectTypeOf<ManagedAssistantUnavailableReason>().toEqualTypeOf<'agent' | 'skill' | 'model' | 'mcp'>();
+    expectTypeOf<'unsupported'>().not.toMatchTypeOf<ManagedAssistantStartBlocker>();
+    expectTypeOf<'provider'>().not.toMatchTypeOf<ManagedAssistantUnavailableReason>();
+    expectTypeOf<ManagedAssistantStartState>().toEqualTypeOf<{
+      can_start_new_work: boolean;
+      blocker?: ManagedAssistantStartBlocker;
+      unavailable_reason?: ManagedAssistantUnavailableReason;
+      expected_recovery_at?: number;
+    }>();
+    expectTypeOf<ManagedAssistantRequiredAcknowledgement>().toEqualTypeOf<{
+      version: number;
+      release_notes: string;
+      published_at: number;
+      changed_categories: ManagedAssistantChangeCategory[];
+    }>();
+    expectTypeOf<ManagedAssistantUpdateState['required_acknowledgement']>().toEqualTypeOf<
+      ManagedAssistantRequiredAcknowledgement | undefined
+    >();
+    expectTypeOf<ManagedAssistantSummary['start_state']>().toEqualTypeOf<ManagedAssistantStartState>();
+    expectTypeOf<ManagedAssistantDetail['start_state']>().toEqualTypeOf<ManagedAssistantStartState>();
+    expectTypeOf(managedReadinessResponseFixture).toMatchTypeOf<{
+      start_state: ManagedAssistantStartState;
+      update: { required_acknowledgement: ManagedAssistantRequiredAcknowledgement };
+    }>();
     expectTypeOf(managedAssistants.list.invoke).returns.toEqualTypeOf<Promise<ManagedAssistantSummary[]>>();
     expectTypeOf(managedAssistants.get.invoke).returns.toEqualTypeOf<Promise<ManagedAssistantDetail>>();
     expectTypeOf(managedAssistants.setAdoption.invoke).returns.toEqualTypeOf<Promise<ManagedAssistantDetail>>();

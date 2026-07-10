@@ -20,6 +20,21 @@ export type ManagedAssistantChangeCategory =
   | 'personalization_policy'
   | 'content';
 
+export type ManagedAssistantStartBlocker = 'acknowledgement_required' | 'retired' | 'temporarily_unavailable';
+export type ManagedAssistantUnavailableReason = 'agent' | 'skill' | 'model' | 'mcp';
+export type ManagedAssistantStartState = {
+  can_start_new_work: boolean;
+  blocker?: ManagedAssistantStartBlocker;
+  unavailable_reason?: ManagedAssistantUnavailableReason;
+  expected_recovery_at?: number;
+};
+export type ManagedAssistantRequiredAcknowledgement = {
+  version: number;
+  release_notes: string;
+  published_at: number;
+  changed_categories: ManagedAssistantChangeCategory[];
+};
+
 export type ManagedAssistantAudience = {
   all_members: boolean;
   user_ids: string[];
@@ -77,18 +92,21 @@ export type ManagedAssistantUpdateState = {
   acknowledgement_required: boolean;
   change_impact?: ManagedAssistantChangeImpact;
   changed_categories: ManagedAssistantChangeCategory[];
+  required_acknowledgement?: ManagedAssistantRequiredAcknowledgement;
 };
 export type ManagedAssistantSummary = {
   assistant: Assistant;
   governance: ManagedAssistantGovernance;
   adoption: ManagedAssistantAdoptionState;
   update: ManagedAssistantUpdateState;
+  start_state: ManagedAssistantStartState;
 };
 export type ManagedAssistantDetail = {
   assistant: AssistantDetail;
   governance: ManagedAssistantGovernance;
   adoption: ManagedAssistantAdoptionState;
   update: ManagedAssistantUpdateState;
+  start_state: ManagedAssistantStartState;
   employee_brief: ManagedAssistantEmployeeBrief;
   personalization_policy: ManagedAssistantPersonalizationPolicy;
   preferences: ManagedAssistantUserPreferences;

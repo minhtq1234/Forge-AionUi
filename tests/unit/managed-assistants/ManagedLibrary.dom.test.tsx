@@ -204,6 +204,7 @@ const createSummary = (overrides: Partial<ManagedAssistantSummary> = {}): Manage
     acknowledgement_required: false,
     changed_categories: [],
   },
+  start_state: { can_start_new_work: false },
   ...overrides,
 });
 
@@ -214,6 +215,7 @@ const createDetail = (overrides: Partial<ManagedAssistantDetail> = {}): ManagedA
     governance: summary.governance,
     adoption: summary.adoption,
     update: summary.update,
+    start_state: summary.start_state,
     employee_brief: {
       job_summary: 'Keeps the monthly close on track without posting or approving entries.',
       job_summary_i18n: {},
