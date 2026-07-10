@@ -7,10 +7,13 @@ const CSRF_COOKIE_NAME = 'csrf-token';
 
 type AuthStatus = 'checking' | 'authenticated' | 'unauthenticated';
 
-export interface AuthUser {
+export type AuthRole = 'admin' | 'member';
+
+export type AuthUser = {
   id: string;
   username: string;
-}
+  role: AuthRole;
+};
 
 interface LoginParams {
   username: string;
@@ -32,6 +35,18 @@ interface LoginResult {
   code?: LoginErrorCode;
   shouldClearCache?: boolean;
 }
+
+type CurrentUserResponse = {
+  success: boolean;
+  user?: AuthUser;
+};
+
+type LoginResponse = {
+  success: boolean;
+  message?: string;
+  user?: AuthUser;
+  token?: string;
+};
 
 interface AuthContextValue {
   ready: boolean;
@@ -85,10 +100,7 @@ async function fetchCurrentUser(signal?: AbortSignal): Promise<AuthUser | null> 
       return null;
     }
 
-    const data = (await response.json()) as {
-      success: boolean;
-      user?: AuthUser;
-    };
+    const data = (await response.json()) as CurrentUserResponse;
     if (data.success && data.user) {
       return data.user;
     }
@@ -166,11 +178,7 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
         body: JSON.stringify(withCsrfToken({ username, password, remember })),
       });
 
-      const data = (await response.json()) as {
-        success: boolean;
-        message?: string;
-        user?: AuthUser;
-      };
+      const data = (await response.json()) as LoginResponse;
 
       if (!response.ok || !data.success || !data.user) {
         let code: LoginErrorCode = 'unknown';

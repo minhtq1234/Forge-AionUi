@@ -34,6 +34,19 @@ import type {
   SetAssistantStateRequest,
   UpdateAssistantRequest,
 } from '../types/agent/assistantTypes';
+import type {
+  ManagedAssistantAcknowledgementRequest,
+  ManagedAssistantAdminDetail,
+  ManagedAssistantAdminSummary,
+  ManagedAssistantAdoptionRequest,
+  ManagedAssistantDetail,
+  ManagedAssistantDraftRequest,
+  ManagedAssistantNoticeSeenRequest,
+  ManagedAssistantPreferencesRequest,
+  ManagedAssistantPublishRequest,
+  ManagedAssistantRetireRequest,
+  ManagedAssistantSummary,
+} from '../types/agent/managedAssistantTypes';
 import type { PreviewHistoryTarget, PreviewSnapshotInfo } from '../types/office/preview';
 import type {
   EnsureConversationRuntimeResponse,
@@ -168,6 +181,59 @@ export const assistants = {
     }
   ),
   import: httpPost<ImportAssistantsResult, ImportAssistantsRequest>('/api/assistants/import'),
+};
+
+type ManagedId = { id: string };
+type ManagedDetailParams = ManagedId & { locale?: string };
+
+export const managedAssistants = {
+  list: httpGet<ManagedAssistantSummary[], void>('/api/managed-assistants'),
+  get: httpGet<ManagedAssistantDetail, ManagedDetailParams>(
+    ({ id, locale }) =>
+      `/api/managed-assistants/${encodeURIComponent(id)}${locale ? `?locale=${encodeURIComponent(locale)}` : ''}`
+  ),
+  setAdoption: httpPut<ManagedAssistantDetail, ManagedId & ManagedAssistantAdoptionRequest>(
+    ({ id }) => `/api/managed-assistants/${encodeURIComponent(id)}/adoption`,
+    ({ id: _id, ...body }) => body
+  ),
+  updatePreferences: httpPut<ManagedAssistantDetail, ManagedId & ManagedAssistantPreferencesRequest>(
+    ({ id }) => `/api/managed-assistants/${encodeURIComponent(id)}/preferences`,
+    ({ id: _id, ...body }) => body
+  ),
+  resetPreferences: httpDelete<ManagedAssistantDetail, ManagedId>(
+    ({ id }) => `/api/managed-assistants/${encodeURIComponent(id)}/preferences`
+  ),
+  acknowledge: httpPost<ManagedAssistantDetail, ManagedId & ManagedAssistantAcknowledgementRequest>(
+    ({ id }) => `/api/managed-assistants/${encodeURIComponent(id)}/acknowledgements`,
+    ({ id: _id, ...body }) => body
+  ),
+  markNoticeSeen: httpPost<ManagedAssistantDetail, ManagedId & ManagedAssistantNoticeSeenRequest>(
+    ({ id }) => `/api/managed-assistants/${encodeURIComponent(id)}/notices/seen`,
+    ({ id: _id, ...body }) => body
+  ),
+};
+
+export const managedAssistantAdmin = {
+  list: httpGet<ManagedAssistantAdminSummary[], { locale?: string }>(
+    ({ locale }) => `/api/admin/managed-assistants${locale ? `?locale=${encodeURIComponent(locale)}` : ''}`
+  ),
+  createDraft: httpPost<ManagedAssistantAdminDetail, ManagedAssistantDraftRequest>('/api/admin/managed-assistants'),
+  get: httpGet<ManagedAssistantAdminDetail, ManagedDetailParams>(
+    ({ id, locale }) =>
+      `/api/admin/managed-assistants/${encodeURIComponent(id)}${locale ? `?locale=${encodeURIComponent(locale)}` : ''}`
+  ),
+  saveDraft: httpPut<ManagedAssistantAdminDetail, ManagedId & ManagedAssistantDraftRequest>(
+    ({ id }) => `/api/admin/managed-assistants/${encodeURIComponent(id)}/draft`,
+    ({ id: _id, ...body }) => body
+  ),
+  publish: httpPost<ManagedAssistantAdminDetail, ManagedId & ManagedAssistantPublishRequest>(
+    ({ id }) => `/api/admin/managed-assistants/${encodeURIComponent(id)}/publish`,
+    ({ id: _id, ...body }) => body
+  ),
+  retire: httpPost<ManagedAssistantAdminDetail, ManagedId & ManagedAssistantRetireRequest>(
+    ({ id }) => `/api/admin/managed-assistants/${encodeURIComponent(id)}/retire`,
+    ({ id: _id, ...body }) => body
+  ),
 };
 
 // ---------------------------------------------------------------------------

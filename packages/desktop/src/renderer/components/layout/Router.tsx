@@ -52,6 +52,16 @@ const ProtectedLayout: React.FC<{ layout: React.ReactElement }> = ({ layout }) =
   return React.cloneElement(layout);
 };
 
+export const AdminRoute: React.FC<React.PropsWithChildren> = ({ children }) => {
+  const { status, user } = useAuth();
+
+  if (status === 'checking') return <AppLoader />;
+  if (status !== 'authenticated') return <Navigate to='/login' replace />;
+  if (user?.role !== 'admin') return <Navigate to='/guid' replace />;
+
+  return <>{children}</>;
+};
+
 const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
   const { status } = useAuth();
 
