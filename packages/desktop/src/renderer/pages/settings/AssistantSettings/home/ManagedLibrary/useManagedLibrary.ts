@@ -95,12 +95,10 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
   const verifyManagedProjection = useCallback(
     async (context: ManagedViewContext): Promise<boolean> => {
       if (!isCurrentView(context)) return false;
-      setStartRefreshFailed(false);
-      setIsStartReady(false);
 
       try {
         const result = await onAdoptionChanged(context.assistantId);
-        if (!isCurrentView(context)) return false;
+        if (!isCurrentView(context) || !result.authoritative) return false;
         const ready = result.ok && result.assistants.some((assistant) => assistant.id === context.assistantId);
         setIsStartReady(ready);
         setStartRefreshFailed(!ready);

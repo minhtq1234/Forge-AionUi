@@ -4,6 +4,8 @@ import { useAssistantList } from '@/renderer/hooks/assistant/useAssistantList';
 import type { AssistantListLoadResult } from '@/renderer/hooks/assistant/useAssistantList';
 import AssistantHomeTabs from '@/renderer/pages/settings/AssistantSettings/home/AssistantHomeTabs';
 import ManagedLibrary from '@/renderer/pages/settings/AssistantSettings/home/ManagedLibrary';
+import ManagedTeammateDetail from '@/renderer/pages/settings/AssistantSettings/home/ManagedLibrary/ManagedTeammateDetail';
+import useManagedLibrary from '@/renderer/pages/settings/AssistantSettings/home/ManagedLibrary/useManagedLibrary';
 import MyAssistantRow from '@/renderer/pages/settings/AssistantSettings/home/MyAssistantRow';
 import { ConfigProvider } from '@arco-design/web-react';
 import { DndContext } from '@dnd-kit/core';
@@ -265,6 +267,49 @@ const renderLibrary = (props: Partial<React.ComponentProps<typeof ManagedLibrary
 const ManagedLibraryWithRealAssistantList: React.FC = () => {
   const { loadAssistants } = useAssistantList();
   return <ManagedLibrary localeKey='en-US' onAdoptionChanged={loadAssistants} onStartChat={vi.fn()} />;
+};
+
+const ManagedDetailProjectionHarness: React.FC<{
+  onLoadAssistantsReady: (loadAssistants: () => Promise<AssistantListLoadResult>) => void;
+  onRefreshReady: (refresh: () => Promise<boolean>) => void;
+}> = ({ onLoadAssistantsReady, onRefreshReady }) => {
+  const { assistants, loadAssistants } = useAssistantList();
+  const library = useManagedLibrary({ localeKey: 'en-US', onAdoptionChanged: loadAssistants });
+
+  React.useEffect(() => {
+    onLoadAssistantsReady(loadAssistants);
+  }, [loadAssistants, onLoadAssistantsReady]);
+
+  React.useEffect(() => {
+    onRefreshReady(library.refreshAfterAdoption);
+  }, [library.refreshAfterAdoption, onRefreshReady]);
+
+  React.useEffect(() => {
+    if (assistants.length === 0) return;
+    void library.loadDetail('finance-close');
+  }, [assistants.length, library.loadDetail]);
+
+  if (library.isDetailLoading || (!library.selectedDetail && !library.detailError)) {
+    return <div data-testid='managed-detail-loading'>Loading</div>;
+  }
+
+  return (
+    <ManagedTeammateDetail
+      detail={library.selectedDetail}
+      localeKey='en-US'
+      isLoading={library.isDetailLoading}
+      isAdopting={library.isAdopting}
+      isStartReady={library.isStartReady}
+      startRefreshFailed={library.startRefreshFailed}
+      error={library.detailError}
+      mutationError={library.mutationError}
+      onBack={() => undefined}
+      onRetry={() => undefined}
+      onAdopt={() => undefined}
+      onRetryStartRefresh={() => void library.refreshAfterAdoption()}
+      onStartChat={() => undefined}
+    />
+  );
 };
 
 const AssistantHomeTabsWithRealAssistantList: React.FC<{
@@ -544,7 +589,7 @@ describe('ManagedLibrary', () => {
   it('retains successful adoption and retries only the generic refresh when refresh fails', async () => {
     const onAdoptionChanged = vi
       .fn()
-      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce(loadFailure())
       .mockResolvedValueOnce(loadSuccess(createAssistant()));
 
     renderLibrary({ onAdoptionChanged });
@@ -561,6 +606,138 @@ describe('ManagedLibrary', () => {
     expect(await screen.findByRole('button', { name: 'Start working' })).toBeInTheDocument();
     expect(setManagedAdoption).toHaveBeenCalledTimes(1);
     expect(onAdoptionChanged).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a ready active detail after a superseded successful projection and recovers after current failure', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const assistantA = createAssistant();
+    const staleRefresh = deferred<Assistant[]>();
+    const externalRefresh = deferred<Assistant[]>();
+    let loadAssistants: (() => Promise<AssistantListLoadResult>) | undefined;
+    let refreshProjection: (() => Promise<boolean>) | undefined;
+    listAssistants
+      .mockResolvedValueOnce([assistantA])
+      .mockResolvedValueOnce([assistantA])
+      .mockReturnValueOnce(staleRefresh.promise)
+      .mockReturnValueOnce(externalRefresh.promise)
+      .mockRejectedValueOnce(new Error('current projection failed'))
+      .mockResolvedValueOnce([assistantA]);
+    getManagedAssistant.mockResolvedValue(createDetail({ adoption: { active: true, adopted_at: 1_788_192_100 } }));
+
+    render(
+      <ConfigProvider>
+        <ManagedDetailProjectionHarness
+          onLoadAssistantsReady={(nextLoadAssistants) => {
+            loadAssistants = nextLoadAssistants;
+          }}
+          onRefreshReady={(nextRefresh) => {
+            refreshProjection = nextRefresh;
+          }}
+        />
+      </ConfigProvider>
+    );
+
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(loadAssistants).toBeDefined();
+      expect(refreshProjection).toBeDefined();
+      expect(listAssistants).toHaveBeenCalledTimes(2);
+    });
+
+    const staleResult = refreshProjection?.();
+    expect(staleResult).toBeDefined();
+    await waitFor(() => expect(listAssistants).toHaveBeenCalledTimes(3));
+    const externalResult = loadAssistants?.();
+    expect(externalResult).toBeDefined();
+    if (!staleResult || !externalResult) throw new Error('Projection callbacks were not exposed');
+
+    await act(async () => {
+      externalRefresh.resolve([assistantA]);
+      await expect(externalResult).resolves.toEqual(loadSuccess(assistantA));
+    });
+    await act(async () => {
+      staleRefresh.resolve([assistantA]);
+      await expect(staleResult).resolves.toBe(false);
+    });
+
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+
+    const failedResult = refreshProjection();
+    expect(await failedResult).toBe(false);
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start working' })).not.toBeInTheDocument();
+
+    const recoveredResult = refreshProjection();
+    expect(await recoveredResult).toBe(true);
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeInTheDocument();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('keeps a ready active detail after a superseded failed projection and recovers after current failure', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const assistantA = createAssistant();
+    const staleRefresh = deferred<Assistant[]>();
+    const externalRefresh = deferred<Assistant[]>();
+    let loadAssistants: (() => Promise<AssistantListLoadResult>) | undefined;
+    let refreshProjection: (() => Promise<boolean>) | undefined;
+    listAssistants
+      .mockResolvedValueOnce([assistantA])
+      .mockResolvedValueOnce([assistantA])
+      .mockReturnValueOnce(staleRefresh.promise)
+      .mockReturnValueOnce(externalRefresh.promise)
+      .mockRejectedValueOnce(new Error('current projection failed'))
+      .mockResolvedValueOnce([assistantA]);
+    getManagedAssistant.mockResolvedValue(createDetail({ adoption: { active: true, adopted_at: 1_788_192_100 } }));
+
+    render(
+      <ConfigProvider>
+        <ManagedDetailProjectionHarness
+          onLoadAssistantsReady={(nextLoadAssistants) => {
+            loadAssistants = nextLoadAssistants;
+          }}
+          onRefreshReady={(nextRefresh) => {
+            refreshProjection = nextRefresh;
+          }}
+        />
+      </ConfigProvider>
+    );
+
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(loadAssistants).toBeDefined();
+      expect(refreshProjection).toBeDefined();
+      expect(listAssistants).toHaveBeenCalledTimes(2);
+    });
+
+    const staleResult = refreshProjection?.();
+    expect(staleResult).toBeDefined();
+    await waitFor(() => expect(listAssistants).toHaveBeenCalledTimes(3));
+    const externalResult = loadAssistants?.();
+    expect(externalResult).toBeDefined();
+    if (!staleResult || !externalResult) throw new Error('Projection callbacks were not exposed');
+
+    await act(async () => {
+      externalRefresh.resolve([assistantA]);
+      await expect(externalResult).resolves.toEqual(loadSuccess(assistantA));
+    });
+    await act(async () => {
+      staleRefresh.reject(new Error('superseded projection failed'));
+      await expect(staleResult).resolves.toBe(false);
+    });
+
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+
+    const failedResult = refreshProjection();
+    expect(await failedResult).toBe(false);
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start working' })).not.toBeInTheDocument();
+
+    const recoveredResult = refreshProjection();
+    expect(await recoveredResult).toBe(true);
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeInTheDocument();
+    consoleErrorSpy.mockRestore();
   });
 
   it('uses the real assistant-list success result to reject a stale projection', async () => {
