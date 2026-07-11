@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ADAPTER_BRIDGE_EVENT_KEY } from '@/common/adapter/constant';
+import { ADAPTER_BRIDGE_EVENT_KEY } from '@/common/adapter/native/constants';
 import { initMainAdapterWithWindow } from '@/common/adapter/main';
 
 type FakeWebContents = {
