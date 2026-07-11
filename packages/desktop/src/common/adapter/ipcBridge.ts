@@ -47,21 +47,6 @@ import type {
   ManagedAssistantRetireRequest,
   ManagedAssistantSummary,
 } from '../types/agent/managedAssistantTypes';
-import type {
-  OfficeArtifactApplyRequest,
-  OfficeArtifactGetStateRequest,
-  OfficeArtifactInspectRequest,
-  OfficeArtifactInspectResult,
-  OfficeArtifactMutationResult,
-  OfficeArtifactPreparePreviewRequest,
-  OfficeArtifactPreparePreviewResult,
-  OfficeArtifactReleasePreviewRequest,
-  OfficeArtifactReleasePreviewResult,
-  OfficeArtifactStateResult,
-  OfficeArtifactStartPreviewRequest,
-  OfficeArtifactStartPreviewResult,
-  OfficeArtifactUndoRequest,
-} from '../types/office/artifactEditor';
 import type { PreviewHistoryTarget, PreviewSnapshotInfo } from '../types/office/preview';
 import type {
   EnsureConversationRuntimeResponse,
@@ -1234,22 +1219,6 @@ export const document = {
 // ---------------------------------------------------------------------------
 // Office Previews — routed to /api/*-preview/*
 // ---------------------------------------------------------------------------
-
-export const officeArtifact = {
-  getState: bridge.buildProvider<OfficeArtifactStateResult, OfficeArtifactGetStateRequest>('office-artifact.get-state'),
-  preparePreview: bridge.buildProvider<OfficeArtifactPreparePreviewResult, OfficeArtifactPreparePreviewRequest>(
-    'office-artifact.prepare-preview'
-  ),
-  startPreview: bridge.buildProvider<OfficeArtifactStartPreviewResult, OfficeArtifactStartPreviewRequest>(
-    'office-artifact.start-preview'
-  ),
-  releasePreview: bridge.buildProvider<OfficeArtifactReleasePreviewResult, OfficeArtifactReleasePreviewRequest>(
-    'office-artifact.release-preview'
-  ),
-  inspect: bridge.buildProvider<OfficeArtifactInspectResult, OfficeArtifactInspectRequest>('office-artifact.inspect'),
-  apply: bridge.buildProvider<OfficeArtifactMutationResult, OfficeArtifactApplyRequest>('office-artifact.apply'),
-  undo: bridge.buildProvider<OfficeArtifactMutationResult, OfficeArtifactUndoRequest>('office-artifact.undo'),
-};
 
 export const pptPreview = {
   start: httpPost<{ url: string; error?: string }, { file_path: string; workspace?: string }>('/api/ppt-preview/start'),

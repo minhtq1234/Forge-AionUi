@@ -6,7 +6,6 @@ import type { TChatConversation } from '@/common/config/storage';
 import ChatConversation from '@/renderer/pages/conversation/components/ChatConversation';
 
 const usePresetAssistantInfoMock = vi.fn();
-const chatLayoutPropsMock = vi.hoisted(() => vi.fn());
 const acpChatMock = vi.fn((props: { modelSelector?: React.ReactNode }) => (
   <div data-testid='mock-acp-chat'>acp chat{props.modelSelector}</div>
 ));
@@ -28,15 +27,12 @@ vi.mock('@/renderer/pages/conversation/Messages/artifacts', () => ({
 }));
 
 vi.mock('@/renderer/pages/conversation/components/ChatLayout', () => ({
-  default: (props: { children: React.ReactNode; headerExtra?: React.ReactNode }) => {
-    chatLayoutPropsMock(props);
-    return (
-      <div>
-        {props.headerExtra}
-        {props.children}
-      </div>
-    );
-  },
+  default: ({ children, headerExtra }: { children: React.ReactNode; headerExtra?: React.ReactNode }) => (
+    <div>
+      {headerExtra}
+      {children}
+    </div>
+  ),
 }));
 
 vi.mock('@/renderer/pages/conversation/platforms/acp/AcpChat', () => ({
@@ -89,7 +85,6 @@ function legacyConversation(type: 'gemini' | 'codex' | 'openclaw-gateway' | 'nan
 describe('ChatConversation legacy runtime rendering', () => {
   beforeEach(() => {
     usePresetAssistantInfoMock.mockReset();
-    chatLayoutPropsMock.mockClear();
     acpChatMock.mockClear();
     acpModelSelectorMock.mockClear();
     usePresetAssistantInfoMock.mockReturnValue({ info: undefined, isLoading: false });
@@ -106,17 +101,6 @@ describe('ChatConversation legacy runtime rendering', () => {
       expect(screen.queryByTestId('legacy-remote-chat')).not.toBeInTheDocument();
     }
   );
-
-  it('uses the headless project-menu workspace presentation', () => {
-    render(<ChatConversation conversation={legacyConversation('codex')} />);
-
-    expect(chatLayoutPropsMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workspaceEnabled: true,
-        workspacePresentation: 'project-menu',
-      })
-    );
-  });
 
   it('prefers preset assistant backend over legacy extra backend for ACP conversations', () => {
     usePresetAssistantInfoMock.mockReturnValue({

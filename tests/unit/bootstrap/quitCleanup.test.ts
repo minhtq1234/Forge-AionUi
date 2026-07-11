@@ -11,10 +11,10 @@ type BeforeQuitEvent = {
   preventDefault: () => void;
 };
 
-const flushMicrotasks = async (remaining = 10): Promise<void> => {
-  if (remaining === 0) return;
-  await Promise.resolve();
-  await flushMicrotasks(remaining - 1);
+const flushMicrotasks = async () => {
+  for (let i = 0; i < 6; i += 1) {
+    await Promise.resolve();
+  }
 };
 
 describe('installQuitCleanup', () => {
@@ -41,7 +41,6 @@ describe('installQuitCleanup', () => {
       markExplicitQuit: () => calls.push('mark-explicit-quit'),
       destroyTray: () => calls.push('destroy-tray'),
       disposeCronResumeListener: () => calls.push('dispose-cron'),
-      disposeOfficeArtifacts: async () => calls.push('dispose-office-artifacts'),
       stopBackend,
       destroyPetWindow: () => calls.push('destroy-pet'),
       logInfo: vi.fn(),
@@ -73,7 +72,6 @@ describe('installQuitCleanup', () => {
       'destroy-tray',
       'dispose-cron',
       'stop-backend-start',
-      'dispose-office-artifacts',
       'destroy-pet',
       'quit-app',
     ]);
@@ -91,7 +89,6 @@ describe('installQuitCleanup', () => {
       markExplicitQuit: vi.fn(),
       destroyTray: vi.fn(),
       disposeCronResumeListener: vi.fn(),
-      disposeOfficeArtifacts: async () => {},
       stopBackend: async () => {},
       destroyPetWindow: vi.fn(),
       logInfo: vi.fn(),
