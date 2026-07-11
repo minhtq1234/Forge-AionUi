@@ -58,6 +58,7 @@ import Layout from '@renderer/components/layout/Layout';
 const renderLayout = () => render(<Layout sider={<div>sider</div>} />);
 
 const BACK_KEY = 'common.back';
+const BRAND_KEY = 'login.brand';
 
 describe('Layout sider brand Home button', () => {
   beforeEach(() => {
@@ -140,7 +141,7 @@ describe('Layout sider brand Home button', () => {
 
     // No actionable role/label in chat routes.
     expect(screen.queryByLabelText(BACK_KEY)).toBeNull();
-    const wordmark = screen.getByText('Forge');
+    const wordmark = screen.getByText(BRAND_KEY);
     fireEvent.click(wordmark);
     expect(navigate).not.toHaveBeenCalled();
   });
@@ -149,7 +150,7 @@ describe('Layout sider brand Home button', () => {
     currentPathname = '/conversation/xyz';
     renderLayout();
 
-    fireEvent.click(screen.getByText('Forge'));
+    fireEvent.click(screen.getByText(BRAND_KEY));
     expect(navigate).not.toHaveBeenCalled();
   });
 
