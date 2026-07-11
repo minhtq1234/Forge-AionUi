@@ -11,7 +11,7 @@ export const ADAPTER_BRIDGE_EVENT_KEY = 'office-ai-bridge-adapter';
  * HTTP/WS-backed providers are intentionally absent because they never cross
  * the Electron IPC boundary.
  */
-const NATIVE_BRIDGE_PROVIDER_KEYS = [
+export const NATIVE_BRIDGE_PROVIDER_KEYS = [
   'restart-app',
   'open-dev-tools',
   'is-dev-tools-opened',
@@ -59,10 +59,19 @@ const NATIVE_BRIDGE_PROVIDER_KEYS = [
   'webui.stop',
 ] as const;
 
-const NATIVE_BRIDGE_REQUEST_NAMES = new Set<string>(NATIVE_BRIDGE_PROVIDER_KEYS.map((key) => `subscribe-${key}`));
+export type NativeBridgeProviderKey = (typeof NATIVE_BRIDGE_PROVIDER_KEYS)[number];
+
+const NATIVE_BRIDGE_PROVIDER_KEY_SET = new Set<string>(NATIVE_BRIDGE_PROVIDER_KEYS);
+const NATIVE_BRIDGE_REQUEST_PREFIX = 'subscribe-';
+
+export function getNativeBridgeProviderKey(name: string): NativeBridgeProviderKey | null {
+  if (!name.startsWith(NATIVE_BRIDGE_REQUEST_PREFIX)) return null;
+  const providerKey = name.slice(NATIVE_BRIDGE_REQUEST_PREFIX.length);
+  return NATIVE_BRIDGE_PROVIDER_KEY_SET.has(providerKey) ? (providerKey as NativeBridgeProviderKey) : null;
+}
 
 export function isAllowedNativeBridgeRequestName(name: string): boolean {
-  return NATIVE_BRIDGE_REQUEST_NAMES.has(name);
+  return getNativeBridgeProviderKey(name) !== null;
 }
 
 /**
