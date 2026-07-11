@@ -20,10 +20,19 @@ import {
 let mockAssistants: Assistant[] = [];
 let mockManagedAgents: ManagedAgent[] = [];
 
-const { configGetMock, configSetMock } = vi.hoisted(() => ({
+const { configGetMock, configSetMock, swrMutateMock } = vi.hoisted(() => ({
   configGetMock: vi.fn(),
   configSetMock: vi.fn(),
+  swrMutateMock: vi.fn(),
 }));
+
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+};
 
 vi.mock('@/common/config/configService', () => ({
   configService: {
@@ -31,6 +40,14 @@ vi.mock('@/common/config/configService', () => ({
     set: configSetMock,
   },
 }));
+
+vi.mock('swr', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('swr')>();
+  return {
+    ...actual,
+    mutate: swrMutateMock,
+  };
+});
 
 vi.mock('@/renderer/pages/guid/hooks/useCustomAgentsLoader', () => ({
   useCustomAgentsLoader: () => ({
@@ -46,6 +63,8 @@ describe('useGuidAssistantSelection', () => {
   beforeEach(() => {
     configGetMock.mockReturnValue(undefined);
     configSetMock.mockResolvedValue(undefined);
+    swrMutateMock.mockReset();
+    swrMutateMock.mockResolvedValue(undefined);
     mockManagedAgents = [];
     mockAssistants = [
       {
@@ -160,6 +179,8 @@ describe('useGuidAssistantSelection', () => {
   });
 
   it('waits for the exact navigation assistant instead of selecting a catalog fallback', async () => {
+    const catalogRefresh = deferred<Assistant[] | undefined>();
+    swrMutateMock.mockReturnValue(catalogRefresh.promise);
     mockAssistants = [];
 
     const { result, rerender } = renderHook(() =>
@@ -186,6 +207,113 @@ describe('useGuidAssistantSelection', () => {
     rerender();
 
     await waitFor(() => expect(result.current.selectedAssistantId).toBe('managed-finance-close'));
+
+    await act(async () => {
+      catalogRefresh.resolve(mockAssistants);
+      await catalogRefresh.promise;
+    });
+  });
+
+  it('clears a prior assistant when a same-route exact handoff begins', async () => {
+    const catalogRefresh = deferred<Assistant[] | undefined>();
+    swrMutateMock.mockReturnValue(catalogRefresh.promise);
+    let preselectAssistantId: string | undefined;
+    let locationKey = 'guid-existing';
+
+    const { result, rerender } = renderHook(() =>
+      useGuidAssistantSelection({
+        resetAssistant: false,
+        preselectAssistantId,
+        locationKey,
+      })
+    );
+
+    await waitFor(() => expect(result.current.selectedAssistantId).toBe('assistant-claude'));
+
+    preselectAssistantId = 'managed-finance-close';
+    locationKey = 'managed-handoff';
+    rerender();
+
+    await waitFor(() => expect(result.current.selectedAssistantId).toBeNull());
+    expect(result.current.hasResolvedPreselect).toBe(false);
+
+    await act(async () => {
+      catalogRefresh.resolve(mockAssistants);
+      await catalogRefresh.promise;
+    });
+  });
+
+  it('lets a manual choice consume a pending exact handoff without a later overwrite', async () => {
+    const catalogRefresh = deferred<Assistant[] | undefined>();
+    swrMutateMock.mockReturnValue(catalogRefresh.promise);
+
+    const { result, rerender } = renderHook(() =>
+      useGuidAssistantSelection({
+        resetAssistant: false,
+        preselectAssistantId: 'managed-finance-close',
+        locationKey: 'managed-handoff',
+      })
+    );
+
+    await waitFor(() => expect(result.current.selectedAssistantId).toBeNull());
+
+    act(() => {
+      result.current.setSelectedAssistantId('assistant-claude');
+    });
+
+    expect(result.current.selectedAssistantId).toBe('assistant-claude');
+    expect(result.current.hasResolvedPreselect).toBe(true);
+
+    mockAssistants = [
+      ...mockAssistants,
+      assistantFixture({ id: 'managed-finance-close', runtimeKey: 'claude', source: 'generated', sortOrder: 2 }),
+    ];
+    rerender();
+
+    await act(async () => {
+      catalogRefresh.resolve(mockAssistants);
+      await catalogRefresh.promise;
+    });
+
+    expect(result.current.selectedAssistantId).toBe('assistant-claude');
+  });
+
+  it('consumes an absent exact handoff after catalog settlement without silently falling back', async () => {
+    const catalogRefresh = deferred<Assistant[] | undefined>();
+    swrMutateMock.mockReturnValue(catalogRefresh.promise);
+    let preselectAssistantId: string | undefined = 'managed-finance-close';
+    let locationKey = 'managed-handoff';
+
+    const { result, rerender } = renderHook(() =>
+      useGuidAssistantSelection({
+        resetAssistant: false,
+        preselectAssistantId,
+        locationKey,
+      })
+    );
+
+    await waitFor(() => expect(result.current.selectedAssistantId).toBeNull());
+    expect(result.current.hasResolvedPreselect).toBe(false);
+
+    await act(async () => {
+      catalogRefresh.resolve(mockAssistants);
+      await catalogRefresh.promise;
+    });
+
+    await waitFor(() => expect(result.current.hasResolvedPreselect).toBe(true));
+    expect(result.current.selectedAssistantId).toBeNull();
+
+    preselectAssistantId = undefined;
+    locationKey = 'managed-handoff-cleanup';
+    rerender();
+
+    await waitFor(() => expect(result.current.selectedAssistantId).toBeNull());
+
+    act(() => {
+      result.current.setSelectedAssistantId('assistant-claude');
+    });
+
+    expect(result.current.selectedAssistantId).toBe('assistant-claude');
   });
 
   it('falls back to the default assistant when the persisted guid assistant no longer exists', async () => {

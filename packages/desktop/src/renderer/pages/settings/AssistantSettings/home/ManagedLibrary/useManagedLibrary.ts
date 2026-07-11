@@ -260,18 +260,20 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
       setMutationError(null);
       try {
         const detail = await ipcBridge.managedAssistants.setAdoption.invoke({ id, locale: localeKey, active: true });
-        setAdoptionRefreshPending(id, true);
         if (!isCurrentView(context)) return null;
-        replaceDetail(detail);
+        setAdoptionRefreshPending(id, true);
         try {
-          await onAdoptionChanged(id);
-        } catch {
-          // The post-adoption refresh only gates navigation readiness.
+          replaceDetail(detail);
+          try {
+            await onAdoptionChanged(id);
+          } catch {
+            // The post-adoption refresh only gates navigation readiness.
+          }
+          if (!isCurrentView(context)) return null;
+          return { detail };
         } finally {
           setAdoptionRefreshPending(id, false);
         }
-        if (!isCurrentView(context)) return null;
-        return { detail };
       } catch {
         if (!isCurrentView(context)) return null;
         setMutationError('adoption');

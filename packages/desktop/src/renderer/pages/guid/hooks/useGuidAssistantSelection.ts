@@ -19,6 +19,7 @@ import {
 import type { SlashCommandItem } from '@/common/chat/slash/types';
 import { useManagedAgentRuntimeCatalog } from '@/renderer/hooks/agent/useManagedAgents';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { mutate as swrMutate } from 'swr';
 import { useCustomAgentsLoader } from './useCustomAgentsLoader';
 
 export {
@@ -117,6 +118,20 @@ type UseGuidAssistantSelectionOptions = {
   locationKey?: string;
 };
 
+type ExactPreselectStatus = 'pending' | 'resolved' | 'manual' | 'unavailable' | 'cancelled';
+
+type ExactPreselectIntent = {
+  key: string;
+  assistantId: string;
+  status: ExactPreselectStatus;
+};
+
+type TerminalFallbackSuppression = {
+  cleanupLocationKey: string | null;
+};
+
+const ASSISTANT_CATALOG_SWR_KEY = 'assistants.list';
+
 export const useGuidAssistantSelection = ({
   resetAssistant,
   preselectAssistantId,
@@ -126,8 +141,43 @@ export const useGuidAssistantSelection = ({
   const [selectedMode, _setSelectedMode] = useState<string>('default');
   const [selectedAcpModel, _setSelectedAcpModel] = useState<string | null>(null);
   const [selectedThoughtLevelValue, _setSelectedThoughtLevelValue] = useState<string>('');
+  const [exactPreselectIntent, setExactPreselectIntentState] = useState<ExactPreselectIntent | null>(null);
   const { assistants } = useCustomAgentsLoader();
   const managedAgentRuntimeCatalog = useManagedAgentRuntimeCatalog();
+  const assistantsRef = useRef(assistants);
+  const exactPreselectIntentRef = useRef<ExactPreselectIntent | null>(null);
+  const terminalFallbackSuppressionRef = useRef<TerminalFallbackSuppression | null>(null);
+  assistantsRef.current = assistants;
+
+  const exactPreselectKey = preselectAssistantId ? JSON.stringify([locationKey ?? '', preselectAssistantId]) : null;
+
+  const setExactPreselectIntent = useCallback((intent: ExactPreselectIntent | null) => {
+    exactPreselectIntentRef.current = intent;
+    setExactPreselectIntentState(intent);
+  }, []);
+
+  const settleExactPreselect = useCallback(
+    (intentKey: string, settledAssistants?: Assistant[]) => {
+      const intent = exactPreselectIntentRef.current;
+      if (!intent || intent.key !== intentKey || intent.status !== 'pending') return;
+
+      const currentResolvedId = resolveAssistantSelectionKey(intent.assistantId, assistantsRef.current);
+      if (currentResolvedId) {
+        setExactPreselectIntent({ ...intent, status: 'resolved' });
+        _setSelectedAssistantId(currentResolvedId);
+        return;
+      }
+
+      if (settledAssistants?.some((assistant) => assistant.id === intent.assistantId)) {
+        return;
+      }
+
+      terminalFallbackSuppressionRef.current = { cleanupLocationKey: null };
+      setExactPreselectIntent({ ...intent, status: 'unavailable' });
+      _setSelectedAssistantId(null);
+    },
+    [setExactPreselectIntent]
+  );
 
   const setSelectedMode = useCallback(
     (mode: React.SetStateAction<string>, _options?: { persistPreference?: boolean }) => {
@@ -162,10 +212,15 @@ export const useGuidAssistantSelection = ({
   const setSelectedAssistantId = useCallback(
     (assistantId: string) => {
       const normalizedId = resolveAssistantSelectionKey(assistantId, assistants) ?? assistantId;
+      const intent = exactPreselectIntentRef.current;
+      if (intent?.status === 'pending' || intent?.status === 'unavailable') {
+        setExactPreselectIntent({ ...intent, status: 'manual' });
+      }
+      terminalFallbackSuppressionRef.current = null;
       _setSelectedAssistantId(normalizedId);
       persistGuidAssistantSelectionKey(normalizedId);
     },
-    [assistants]
+    [assistants, setExactPreselectIntent]
   );
 
   const resetHandledRef = useRef(false);
@@ -176,20 +231,62 @@ export const useGuidAssistantSelection = ({
   }
 
   useLayoutEffect(() => {
-    if (assistants.length === 0) return;
-    if (resetHandledRef.current) return;
+    if (!preselectAssistantId || !exactPreselectKey) return;
 
-    if (preselectAssistantId) {
-      const resolvedPreselect = resolveAssistantSelectionKey(preselectAssistantId, assistants);
-      if (resolvedPreselect) {
-        resetHandledRef.current = true;
+    const currentIntent = exactPreselectIntentRef.current;
+    const resolvedPreselect = resolveAssistantSelectionKey(preselectAssistantId, assistants);
+    if (currentIntent?.key === exactPreselectKey && currentIntent.status !== 'cancelled') {
+      if (currentIntent.status === 'pending' && resolvedPreselect) {
+        setExactPreselectIntent({ ...currentIntent, status: 'resolved' });
         _setSelectedAssistantId(resolvedPreselect);
       }
       return;
     }
 
+    terminalFallbackSuppressionRef.current = null;
+    const nextIntent: ExactPreselectIntent = {
+      key: exactPreselectKey,
+      assistantId: preselectAssistantId,
+      status: resolvedPreselect ? 'resolved' : 'pending',
+    };
+    setExactPreselectIntent(nextIntent);
+    _setSelectedAssistantId(resolvedPreselect ?? null);
+
+    if (!resolvedPreselect) {
+      void swrMutate<Assistant[]>(ASSISTANT_CATALOG_SWR_KEY).then(
+        (settledAssistants) => settleExactPreselect(exactPreselectKey, settledAssistants),
+        () => settleExactPreselect(exactPreselectKey)
+      );
+    }
+  }, [assistants, exactPreselectKey, preselectAssistantId, setExactPreselectIntent, settleExactPreselect]);
+
+  useLayoutEffect(() => {
+    if (preselectAssistantId) return;
+
+    const intent = exactPreselectIntentRef.current;
+    if (intent?.status === 'pending') {
+      setExactPreselectIntent({ ...intent, status: 'cancelled' });
+    }
+
+    const suppression = terminalFallbackSuppressionRef.current;
+    if (!suppression) return;
+
+    const currentLocationKey = locationKey ?? '';
+    if (suppression.cleanupLocationKey === null) {
+      suppression.cleanupLocationKey = currentLocationKey;
+    } else if (suppression.cleanupLocationKey !== currentLocationKey) {
+      terminalFallbackSuppressionRef.current = null;
+    }
+  }, [locationKey, preselectAssistantId, setExactPreselectIntent]);
+
+  useLayoutEffect(() => {
+    if (assistants.length === 0) return;
+    if (resetHandledRef.current) return;
+    if (preselectAssistantId) return;
+
     if (resetAssistant) {
       resetHandledRef.current = true;
+      terminalFallbackSuppressionRef.current = null;
       const fallbackId =
         readPersistedGuidAssistantSelectionKey(assistants) ?? pickDefaultAssistantSelectionKey(assistants);
       _setSelectedAssistantId(fallbackId);
@@ -200,12 +297,20 @@ export const useGuidAssistantSelection = ({
     if (assistants.length === 0) return;
     if (resetAssistant) return;
     if (preselectAssistantId) return;
+    if (terminalFallbackSuppressionRef.current) return;
     if (!selectedAssistantIdState || !assistants.some((assistant) => assistant.id === selectedAssistantIdState)) {
       _setSelectedAssistantId(
         readPersistedGuidAssistantSelectionKey(assistants) ?? pickDefaultAssistantSelectionKey(assistants)
       );
     }
-  }, [assistants, preselectAssistantId, resetAssistant, selectedAssistantIdState]);
+  }, [assistants, locationKey, preselectAssistantId, resetAssistant, selectedAssistantIdState]);
+
+  useEffect(
+    () => () => {
+      exactPreselectIntentRef.current = null;
+    },
+    []
+  );
 
   const selectedAssistant = useMemo(
     () =>
@@ -214,7 +319,11 @@ export const useGuidAssistantSelection = ({
   );
   const selectedAssistantId = selectedAssistant?.id ?? null;
   const hasResolvedPreselect =
-    !preselectAssistantId || resolveAssistantSelectionKey(preselectAssistantId, assistants) === selectedAssistantId;
+    !preselectAssistantId ||
+    (exactPreselectIntent?.key === exactPreselectKey &&
+      (exactPreselectIntent.status === 'manual' ||
+        exactPreselectIntent.status === 'unavailable' ||
+        (exactPreselectIntent.status === 'resolved' && selectedAssistantId === preselectAssistantId)));
   const selectedAssistantBackend = assistantRuntimeKey(selectedAssistant);
   const selectedAssistantModels = selectedAssistant?.models ?? [];
   const selectedManagedAgentRuntimeCatalog = useMemo(

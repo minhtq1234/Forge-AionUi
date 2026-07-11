@@ -900,8 +900,9 @@ describe('ManagedLibrary', () => {
     expect(screen.queryByText('private backend failure')).not.toBeInTheDocument();
   });
 
-  it('ignores a late adoption response after navigating from A to B', async () => {
+  it('does not leak the adoption refresh gate when A resolves after navigating to B', async () => {
     const adoptionRequest = deferred<ManagedAssistantDetail>();
+    let assistantADetail = createDetailFor('finance-close', 'Finance Close Coordinator');
     const assistantB = createAssistant({
       id: 'contract-review',
       name: 'Contract Review Teammate',
@@ -909,11 +910,7 @@ describe('ManagedLibrary', () => {
     });
     listManagedAssistants.mockResolvedValue([createSummary(), createSummary({ assistant: assistantB })]);
     getManagedAssistant.mockImplementation(({ id }: { id: string }) =>
-      Promise.resolve(
-        id === assistantB.id
-          ? createDetailFor(assistantB.id, assistantB.name)
-          : createDetailFor('finance-close', 'Finance Close Coordinator')
-      )
+      Promise.resolve(id === assistantB.id ? createDetailFor(assistantB.id, assistantB.name) : assistantADetail)
     );
     setManagedAdoption.mockReturnValue(adoptionRequest.promise);
 
@@ -925,21 +922,25 @@ describe('ManagedLibrary', () => {
     expect(await screen.findByRole('heading', { name: 'Contract Review Teammate' })).toBeInTheDocument();
 
     await act(async () => {
-      adoptionRequest.resolve(
-        createDetailFor('finance-close', 'Finance Close Coordinator', {
-          adoption: { active: true },
-          personalization_policy: {
-            allowed_fields: ['nickname'],
-            optional_skill_ids: [],
-            allowed_model_ids: [],
-          },
-        })
-      );
+      assistantADetail = createDetailFor('finance-close', 'Finance Close Coordinator', {
+        adoption: { active: true },
+        personalization_policy: {
+          allowed_fields: ['nickname'],
+          optional_skill_ids: [],
+          allowed_model_ids: [],
+        },
+      });
+      adoptionRequest.resolve(assistantADetail);
       await adoptionRequest.promise;
     });
 
     expect(screen.getByRole('heading', { name: 'Contract Review Teammate' })).toBeInTheDocument();
     expect(screen.queryByText('Your setup')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back to VNG Library' }));
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeEnabled();
   });
 
   it('ignores a late preference save after setup closes and B is selected', async () => {
