@@ -5,6 +5,10 @@
  */
 
 import { z } from 'zod';
+import {
+  OFFICE_ARTIFACT_MAX_SELECTED_CELLS,
+  OFFICE_ARTIFACT_MAX_SELECTION_MESSAGE_BYTES,
+} from '../../types/office/artifactEditor';
 import type { NativeBridgeProviderKey } from './constants';
 
 const MAX_PATH_LENGTH = 4096;
@@ -14,6 +18,10 @@ const MAX_TEXT_LENGTH = 64 * 1024;
 const MAX_URL_LENGTH = 2048;
 const MAX_THEME_CONTENT_LENGTH = 15 * 1024 * 1024;
 const MAX_THEME_TOKEN_COUNT = 1024;
+const MAX_CONTEXT_MARKDOWN_LENGTH = 24 * 1024;
+const MAX_CONTEXT_PINS = 20;
+const MAX_CONTEXT_PIN_LENGTH = 2_000;
+const MAX_CONTEXT_SNAPSHOT_ITEMS = 256;
 
 const voidPayloadSchema = z.undefined();
 const pathSchema = z.string().min(1).max(MAX_PATH_LENGTH);
@@ -58,6 +66,92 @@ const themeSchema = z
     builtin: z.boolean(),
     created_at: z.number().finite().int().nonnegative(),
     updated_at: z.number().finite().int().nonnegative(),
+  })
+  .strict();
+
+const contextSnapshotItemSchema = z.string().max(MAX_TEXT_LENGTH);
+const contextSnapshotItemsSchema = z.array(contextSnapshotItemSchema).max(MAX_CONTEXT_SNAPSHOT_ITEMS);
+const contextSnapshotSchema = z
+  .object({
+    goal: contextSnapshotItemSchema,
+    current_state: contextSnapshotItemsSchema,
+    decisions: contextSnapshotItemsSchema,
+    artifacts: contextSnapshotItemsSchema,
+    user_preferences: contextSnapshotItemsSchema,
+    open_questions: contextSnapshotItemsSchema,
+    next_steps: contextSnapshotItemsSchema,
+    do_not_forget: contextSnapshotItemsSchema,
+  })
+  .strict();
+const contextPinSchema = z
+  .object({
+    id: identifierSchema,
+    title: z.string().max(MAX_CONTEXT_PIN_LENGTH),
+    content: z.string().max(MAX_CONTEXT_PIN_LENGTH),
+    source: z.enum(['manual', 'context_md']),
+    created_at: z.number().finite().int().nonnegative(),
+    updated_at: z.number().finite().int().nonnegative(),
+  })
+  .strict();
+const localContextCompactionSchema = z
+  .object({
+    conversation_id: identifierSchema,
+    trigger: z.enum(['auto', 'manual', 'handoff']),
+    previous_snapshot: contextSnapshotSchema.optional(),
+    previous_markdown: z.string().max(MAX_CONTEXT_MARKDOWN_LENGTH).optional(),
+    pinned_context: z.array(contextPinSchema).max(MAX_CONTEXT_PINS).optional(),
+    last_compacted_turn_id: identifierSchema.optional(),
+    provider_id: identifierSchema,
+    model: shortTextSchema,
+    target_turn_id: identifierSchema.optional(),
+  })
+  .strict();
+
+const officeArtifactRequestShape = {
+  conversationId: identifierSchema.optional(),
+  workspace: z.string().max(MAX_PATH_LENGTH),
+  filePath: pathSchema,
+};
+const officeWordSelectionSchema = z
+  .object({
+    kind: z.literal('word'),
+    path: pathSchema,
+    paragraphText: z.string().max(OFFICE_ARTIFACT_MAX_SELECTION_MESSAGE_BYTES),
+    selectedText: z.string().max(OFFICE_ARTIFACT_MAX_SELECTION_MESSAGE_BYTES),
+    start: z.number().finite().int().nonnegative(),
+    end: z.number().finite().int().nonnegative(),
+  })
+  .strict();
+const officeExcelCellSchema = z
+  .object({
+    path: shortTextSchema,
+    displayText: z.string().max(OFFICE_ARTIFACT_MAX_SELECTION_MESSAGE_BYTES),
+  })
+  .strict();
+const officeExcelSelectionSchema = z
+  .object({
+    kind: z.literal('excel'),
+    paths: z.array(shortTextSchema).max(OFFICE_ARTIFACT_MAX_SELECTED_CELLS),
+    cells: z.array(officeExcelCellSchema).max(OFFICE_ARTIFACT_MAX_SELECTED_CELLS),
+  })
+  .strict();
+const officeSelectionSchema = z.discriminatedUnion('kind', [officeWordSelectionSchema, officeExcelSelectionSchema]);
+const officeEditSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('replaceText'), value: textSchema }).strict(),
+  z
+    .object({
+      kind: z.literal('formatText'),
+      property: z.enum(['bold', 'italic', 'underline']),
+      enabled: z.boolean(),
+    })
+    .strict(),
+  z.object({ kind: z.literal('setCell'), input: textSchema }).strict(),
+]);
+const officeInspectRequestSchema = z
+  .object({
+    ...officeArtifactRequestShape,
+    expectedVersion: identifierSchema,
+    selection: officeSelectionSchema,
   })
   .strict();
 
@@ -119,6 +213,21 @@ export const nativeBridgePayloadSchemas = {
     })
     .strict()
     .optional(),
+  'context.compaction.generate': localContextCompactionSchema,
+  'office-artifact.get-state': z.object(officeArtifactRequestShape).strict(),
+  'office-artifact.prepare-preview': z.object(officeArtifactRequestShape).strict(),
+  'office-artifact.start-preview': z.object({ leaseId: identifierSchema, url: urlSchema.optional() }).strict(),
+  'office-artifact.release-preview': z.object({ leaseId: identifierSchema }).strict(),
+  'office-artifact.inspect': officeInspectRequestSchema,
+  'office-artifact.apply': z
+    .object({
+      ...officeArtifactRequestShape,
+      expectedVersion: identifierSchema,
+      selection: officeSelectionSchema,
+      edit: officeEditSchema,
+    })
+    .strict(),
+  'office-artifact.undo': z.object({ ...officeArtifactRequestShape, expectedVersion: identifierSchema }).strict(),
   'window-controls:minimize': voidPayloadSchema,
   'window-controls:maximize': voidPayloadSchema,
   'window-controls:unmaximize': voidPayloadSchema,

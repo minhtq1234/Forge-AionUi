@@ -51,6 +51,77 @@ const VALID_PAYLOADS = {
     properties: ['openDirectory', 'createDirectory'],
     filters: [{ name: 'Documents', extensions: ['pdf', 'docx'] }],
   },
+  'context.compaction.generate': {
+    conversation_id: 'conversation-1',
+    trigger: 'manual',
+    previous_snapshot: {
+      goal: 'Ship the security update.',
+      current_state: ['IPC schemas are implemented.'],
+      decisions: [],
+      artifacts: [],
+      user_preferences: [],
+      open_questions: [],
+      next_steps: ['Run verification.'],
+      do_not_forget: [],
+    },
+    pinned_context: [
+      {
+        id: 'pin-1',
+        title: 'Security scope',
+        content: 'Keep the native IPC bridge fail closed.',
+        source: 'manual',
+        created_at: 1,
+        updated_at: 1,
+      },
+    ],
+    provider_id: 'provider-1',
+    model: 'model-1',
+    target_turn_id: 'turn-1',
+  },
+  'office-artifact.get-state': {
+    conversationId: 'conversation-1',
+    workspace: '/tmp/work',
+    filePath: '/tmp/work/report.docx',
+  },
+  'office-artifact.prepare-preview': {
+    conversationId: 'conversation-1',
+    workspace: '/tmp/work',
+    filePath: '/tmp/work/report.docx',
+  },
+  'office-artifact.start-preview': { leaseId: 'lease-1', url: 'http://127.0.0.1:3000/preview' },
+  'office-artifact.release-preview': { leaseId: 'lease-1' },
+  'office-artifact.inspect': {
+    conversationId: 'conversation-1',
+    workspace: '/tmp/work',
+    filePath: '/tmp/work/report.docx',
+    expectedVersion: 'version-1',
+    selection: {
+      kind: 'word',
+      path: '/document/body/p[1]',
+      paragraphText: 'Quarterly report',
+      selectedText: 'Quarterly',
+      start: 0,
+      end: 9,
+    },
+  },
+  'office-artifact.apply': {
+    conversationId: 'conversation-1',
+    workspace: '/tmp/work',
+    filePath: '/tmp/work/report.xlsx',
+    expectedVersion: 'version-1',
+    selection: {
+      kind: 'excel',
+      paths: ['Sheet1!A1'],
+      cells: [{ path: 'Sheet1!A1', displayText: '100' }],
+    },
+    edit: { kind: 'setCell', input: '200' },
+  },
+  'office-artifact.undo': {
+    conversationId: 'conversation-1',
+    workspace: '/tmp/work',
+    filePath: '/tmp/work/report.docx',
+    expectedVersion: 'version-1',
+  },
   'window-controls:minimize': undefined,
   'window-controls:maximize': undefined,
   'window-controls:unmaximize': undefined,
@@ -132,9 +203,10 @@ function collectBridgeBuildProviderKeys(source: string): string[] {
       node.expression.name.text === 'buildProvider'
     ) {
       const [providerKey] = node.arguments;
-      if (providerKey !== undefined && ts.isStringLiteral(providerKey)) {
-        providerKeys.push(providerKey.text);
+      if (providerKey === undefined || !ts.isStringLiteral(providerKey)) {
+        throw new Error('bridge.buildProvider provider key must be a string literal');
       }
+      providerKeys.push(providerKey.text);
     }
 
     ts.forEachChild(node, visit);
@@ -243,6 +315,43 @@ const INVALID_PAYLOADS = [
     { filters: Array.from({ length: 33 }, () => ({ name: 'Documents', extensions: ['pdf'] })) },
   ],
   ['show-open', 'unknown nested filter field', { filters: [{ name: 'Documents', extensions: ['pdf'], extra: true }] }],
+  ['context.compaction.generate', 'omitted conversation identifier', { provider_id: 'provider-1', model: 'model-1' }],
+  [
+    'context.compaction.generate',
+    'too many pinned context items',
+    {
+      conversation_id: 'conversation-1',
+      trigger: 'manual',
+      provider_id: 'provider-1',
+      model: 'model-1',
+      pinned_context: Array.from({ length: 21 }, (_, index) => ({
+        id: `pin-${index}`,
+        title: 'Pin',
+        content: 'Content',
+        source: 'manual',
+        created_at: 1,
+        updated_at: 1,
+      })),
+    },
+  ],
+  ['office-artifact.get-state', 'omitted workspace', { filePath: '/tmp/work/report.docx' }],
+  ['office-artifact.prepare-preview', 'omitted file path', { workspace: '/tmp/work' }],
+  ['office-artifact.start-preview', 'omitted lease identifier', {}],
+  ['office-artifact.release-preview', 'non-string lease identifier', { leaseId: 1 }],
+  [
+    'office-artifact.inspect',
+    'unsupported selection kind',
+    {
+      ...VALID_PAYLOADS['office-artifact.inspect'],
+      selection: { kind: 'slides', path: '/slide/1' },
+    },
+  ],
+  ['office-artifact.apply', 'omitted edit', { ...VALID_PAYLOADS['office-artifact.apply'], edit: undefined }],
+  [
+    'office-artifact.undo',
+    'omitted expected version',
+    { ...VALID_PAYLOADS['office-artifact.undo'], expectedVersion: undefined },
+  ],
   ['theme:set-active', 'omitted required theme identifier', { ...VALID_PAYLOADS['theme:set-active'], id: undefined }],
   ['theme:set-active', 'omitted required theme name', { ...VALID_PAYLOADS['theme:set-active'], name: undefined }],
   ['theme:set-active', 'omitted required appearance', { ...VALID_PAYLOADS['theme:set-active'], appearance: undefined }],
@@ -339,6 +448,12 @@ describe('native bridge payload schemas', () => {
     const providerKeys = collectBridgeBuildProviderKeys(readFileSync(IPC_BRIDGE_PATH, 'utf8'));
 
     expect(providerKeys).toEqual(NATIVE_BRIDGE_PROVIDER_KEYS);
+  });
+
+  it('rejects non-literal native provider declarations in the inventory', () => {
+    expect(() => collectBridgeBuildProviderKeys("const key = 'provider'; bridge.buildProvider(key);")).toThrow(
+      /provider key must be a string literal/i
+    );
   });
 
   it('has exactly one schema for every manifested native provider', () => {
