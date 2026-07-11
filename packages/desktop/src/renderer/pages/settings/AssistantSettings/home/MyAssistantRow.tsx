@@ -28,6 +28,7 @@ type MyAssistantRowProps = {
   onToggleEnabled: (assistant: AssistantListItem, checked: boolean) => void;
   onStartChat: (assistant: AssistantListItem) => void;
   managedSummary?: ManagedAssistantSummary;
+  isAdoptionRefreshPending?: boolean;
 };
 
 const ManagedAssistantRow: React.FC<MyAssistantRowProps> = ({
@@ -36,6 +37,7 @@ const ManagedAssistantRow: React.FC<MyAssistantRowProps> = ({
   onOpenManagedDetail,
   onStartChat,
   managedSummary,
+  isAdoptionRefreshPending = false,
 }) => {
   const { t } = useTranslation();
   const lifecycleState = managedSummary ? getManagedLifecycleState(managedSummary) : 'available';
@@ -51,7 +53,7 @@ const ManagedAssistantRow: React.FC<MyAssistantRowProps> = ({
             : lifecycleState === 'temporarily_unavailable'
               ? t('settings.managedTeammates.lifecycle.temporarilyUnavailableTitle')
               : null;
-  const canStart = managedSummary ? canStartManagedAssistant(managedSummary) : false;
+  const canStart = managedSummary ? !isAdoptionRefreshPending && canStartManagedAssistant(managedSummary) : false;
   return (
     <div
       data-testid={`assistant-card-${assistant.id}`}

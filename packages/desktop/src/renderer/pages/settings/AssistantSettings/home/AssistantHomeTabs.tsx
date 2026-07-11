@@ -178,6 +178,7 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
               onReorder={onReorder}
               onStartChat={onStartChat}
               managedSummaries={managedLibrary.summaries}
+              isAdoptionRefreshPending={managedLibrary.isAdoptionRefreshPending}
               onGoOfficial={() => selectTab('official')}
             />
           ) : tab === 'library' ? (

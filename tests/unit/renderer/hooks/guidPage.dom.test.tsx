@@ -19,6 +19,7 @@ const {
   capturedGuidSendDeps,
   resolveGuidAssistantDefaultsMock,
   sendMock,
+  navigateMock,
 } = vi.hoisted(() => ({
   modelSelectionMock: {
     modelList: [],
@@ -120,6 +121,7 @@ const {
     sendMessageHandler: vi.fn(),
     isButtonDisabled: false,
   },
+  navigateMock: vi.fn(),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -130,7 +132,7 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => navigateMock,
   useLocation: () => locationMock,
 }));
 
@@ -284,6 +286,7 @@ describe('GuidPage', () => {
     capturedGuidInputCardProps.length = 0;
     capturedGuidSendDeps.length = 0;
     useGuidAssistantSelectionMock.mockClear();
+    navigateMock.mockReset();
     resolveGuidAssistantDefaultsMock.mockReturnValue({
       disabledBuiltinSkillIds: [],
       skillIds: [],
@@ -359,6 +362,20 @@ describe('GuidPage', () => {
         preselectAssistantId: undefined,
       })
     );
+  });
+
+  it('retains an exact assistant handoff in location state until selection resolves', () => {
+    locationMock.state = { selectedAssistantId: 'managed-finance-close' };
+    agentSelectionMock.hasResolvedPreselect = false;
+
+    const { rerender } = render(<GuidPage />);
+
+    expect(navigateMock).not.toHaveBeenCalled();
+
+    agentSelectionMock.hasResolvedPreselect = true;
+    rerender(<GuidPage />);
+
+    expect(navigateMock).toHaveBeenCalledWith('/guid', { replace: true, state: null });
   });
 
   it('renders example prompts with wrapping text for long assistant suggestions', () => {

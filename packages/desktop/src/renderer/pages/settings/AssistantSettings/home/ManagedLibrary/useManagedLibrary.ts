@@ -60,6 +60,7 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
   const [isListLoading, setIsListLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isAdopting, setIsAdopting] = useState(false);
+  const [adoptionRefreshPendingIds, setAdoptionRefreshPendingIds] = useState<Set<string>>(() => new Set());
   const [isSavingPreferences, setIsSavingPreferences] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isMarkingNoticeSeen, setIsMarkingNoticeSeen] = useState(false);
@@ -85,6 +86,20 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
     viewContextRef.current = context;
     return context;
   }, []);
+
+  const setAdoptionRefreshPending = useCallback((assistantId: string, pending: boolean) => {
+    setAdoptionRefreshPendingIds((current) => {
+      const next = new Set(current);
+      if (pending) next.add(assistantId);
+      else next.delete(assistantId);
+      return next;
+    });
+  }, []);
+
+  const isAdoptionRefreshPending = useCallback(
+    (assistantId: string): boolean => adoptionRefreshPendingIds.has(assistantId),
+    [adoptionRefreshPendingIds]
+  );
 
   const captureView = useCallback((assistantId: string): ManagedViewContext | null => {
     const current = viewContextRef.current;
@@ -245,9 +260,16 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
       setMutationError(null);
       try {
         const detail = await ipcBridge.managedAssistants.setAdoption.invoke({ id, locale: localeKey, active: true });
+        setAdoptionRefreshPending(id, true);
         if (!isCurrentView(context)) return null;
         replaceDetail(detail);
-        await refreshManagedProjection(context);
+        try {
+          await onAdoptionChanged(id);
+        } catch {
+          // The post-adoption refresh only gates navigation readiness.
+        } finally {
+          setAdoptionRefreshPending(id, false);
+        }
         if (!isCurrentView(context)) return null;
         return { detail };
       } catch {
@@ -258,7 +280,7 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
         if (isCurrentView(context)) setIsAdopting(false);
       }
     },
-    [captureView, isCurrentView, localeKey, refreshManagedProjection, replaceDetail]
+    [captureView, isCurrentView, localeKey, onAdoptionChanged, replaceDetail, setAdoptionRefreshPending]
   );
 
   const updatePreferences = useCallback(
@@ -394,6 +416,7 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
     isListLoading,
     isDetailLoading,
     isAdopting,
+    isAdoptionRefreshPending,
     isSavingPreferences,
     isResetting,
     isMarkingNoticeSeen,

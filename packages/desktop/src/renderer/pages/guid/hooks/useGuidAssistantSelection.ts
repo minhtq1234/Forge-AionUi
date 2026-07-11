@@ -30,6 +30,7 @@ export {
 
 export type GuidAssistantSelectionResult = {
   selectedAssistantId: string | null;
+  hasResolvedPreselect: boolean;
   setSelectedAssistantId: (assistantId: string) => void;
   defaultAssistantId: string | null;
   selectedAssistant: Assistant | undefined;
@@ -183,8 +184,8 @@ export const useGuidAssistantSelection = ({
       if (resolvedPreselect) {
         resetHandledRef.current = true;
         _setSelectedAssistantId(resolvedPreselect);
-        return;
       }
+      return;
     }
 
     if (resetAssistant) {
@@ -198,7 +199,7 @@ export const useGuidAssistantSelection = ({
   useEffect(() => {
     if (assistants.length === 0) return;
     if (resetAssistant) return;
-    if (preselectAssistantId && resolveAssistantSelectionKey(preselectAssistantId, assistants)) return;
+    if (preselectAssistantId) return;
     if (!selectedAssistantIdState || !assistants.some((assistant) => assistant.id === selectedAssistantIdState)) {
       _setSelectedAssistantId(
         readPersistedGuidAssistantSelectionKey(assistants) ?? pickDefaultAssistantSelectionKey(assistants)
@@ -212,6 +213,8 @@ export const useGuidAssistantSelection = ({
     [assistants, selectedAssistantIdState]
   );
   const selectedAssistantId = selectedAssistant?.id ?? null;
+  const hasResolvedPreselect =
+    !preselectAssistantId || resolveAssistantSelectionKey(preselectAssistantId, assistants) === selectedAssistantId;
   const selectedAssistantBackend = assistantRuntimeKey(selectedAssistant);
   const selectedAssistantModels = selectedAssistant?.models ?? [];
   const selectedManagedAgentRuntimeCatalog = useMemo(
@@ -321,6 +324,7 @@ export const useGuidAssistantSelection = ({
 
   return {
     selectedAssistantId,
+    hasResolvedPreselect,
     setSelectedAssistantId,
     defaultAssistantId,
     selectedAssistant,

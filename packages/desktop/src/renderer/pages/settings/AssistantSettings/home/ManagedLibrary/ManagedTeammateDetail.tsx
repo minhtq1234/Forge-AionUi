@@ -15,6 +15,7 @@ type ManagedTeammateDetailProps = {
   localeKey: string;
   isLoading: boolean;
   isAdopting: boolean;
+  isAdoptionRefreshPending: boolean;
   error: ManagedReadError;
   mutationError: ManagedMutationError;
   lifecycleMutationError: ManagedLifecycleMutationError;
@@ -69,6 +70,7 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
   localeKey,
   isLoading,
   isAdopting,
+  isAdoptionRefreshPending,
   error,
   mutationError,
   lifecycleMutationError,
@@ -261,7 +263,7 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
               <Button type='primary' long loading={isAdopting} disabled={isAdopting} onClick={onAdopt}>
                 {t('settings.managedTeammates.add')}
               </Button>
-            ) : !isAdopting && canStartManagedAssistant(detail) ? (
+            ) : !isAdopting && !isAdoptionRefreshPending && canStartManagedAssistant(detail) ? (
               <Button
                 ref={startButtonRef}
                 type='primary'

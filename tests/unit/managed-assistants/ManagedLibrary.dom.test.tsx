@@ -334,6 +334,9 @@ const ManagedDetailProjectionHarness: React.FC<{
       localeKey='en-US'
       isLoading={library.isDetailLoading}
       isAdopting={library.isAdopting}
+      isAdoptionRefreshPending={
+        library.selectedDetail ? library.isAdoptionRefreshPending(library.selectedDetail.assistant.id) : false
+      }
       error={library.detailError}
       mutationError={library.mutationError}
       lifecycleMutationError={library.lifecycleMutationError}
@@ -353,6 +356,18 @@ const ManagedDetailProjectionHarness: React.FC<{
       onOpenReplacement={() => undefined}
     />
   );
+};
+
+const ManagedListOverlayHarness: React.FC<{
+  onReady: (operations: { loadList: () => Promise<void>; loadDetail: (id: string) => Promise<unknown> }) => void;
+}> = ({ onReady }) => {
+  const library = useManagedLibrary({ localeKey: 'en-US', onAdoptionChanged: vi.fn(async () => loadSuccess()) });
+
+  React.useEffect(() => {
+    onReady({ loadList: library.loadList, loadDetail: library.loadDetail });
+  }, [library.loadDetail, library.loadList, onReady]);
+
+  return <div>{library.summaries.map((summary) => summary.governance.business_owner).join(',')}</div>;
 };
 
 const AssistantHomeTabsWithRealAssistantList: React.FC<{
@@ -610,6 +625,62 @@ describe('ManagedLibrary', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Start working' }));
 
     expect(onStartChat).toHaveBeenCalledWith(expect.objectContaining({ id: 'finance-close' }));
+  });
+
+  it('keeps Start unavailable in My Teammates while an adoption refresh is pending', async () => {
+    const managed = createAssistant();
+    const refreshRequest = deferred<AssistantListLoadResult>();
+    const onAdoptionChanged = vi.fn(() => refreshRequest.promise);
+
+    render(
+      <ConfigProvider>
+        <AssistantHomeTabs
+          assistants={[managed]}
+          localeKey='en-US'
+          onOpenDetail={vi.fn()}
+          onOpenManagedDetail={vi.fn()}
+          onOpenSettings={vi.fn()}
+          onDuplicate={vi.fn()}
+          onDelete={vi.fn()}
+          onCreate={vi.fn()}
+          onToggleEnabled={vi.fn()}
+          onReorder={vi.fn()}
+          onStartChat={vi.fn()}
+          initialTab='library'
+          onAdoptionChanged={onAdoptionChanged}
+        />
+      </ConfigProvider>
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add to My Teammates' }));
+    await waitFor(() => expect(onAdoptionChanged).toHaveBeenCalledTimes(1));
+    await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
+
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeDisabled();
+
+    refreshRequest.resolve(loadSuccess(managed));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start working' })).toBeEnabled());
+  });
+
+  it('keeps Start unavailable after detail re-entry while an adoption refresh is pending', async () => {
+    const refreshRequest = deferred<AssistantListLoadResult>();
+    const onAdoptionChanged = vi.fn(() => refreshRequest.promise);
+    getManagedAssistant
+      .mockResolvedValueOnce(createDetail())
+      .mockResolvedValue(createDetail({ adoption: { active: true, adopted_at: 1_788_192_100 } }));
+    renderLibrary({ onAdoptionChanged });
+
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Add to My Teammates' }));
+    await waitFor(() => expect(onAdoptionChanged).toHaveBeenCalledTimes(1));
+    await userEvent.click(screen.getByRole('button', { name: 'Back to VNG Library' }));
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+
+    expect(screen.queryByRole('button', { name: 'Start working' })).not.toBeInTheDocument();
+
+    refreshRequest.resolve(loadSuccess(createAssistant()));
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeEnabled();
   });
 
   it('verifies the generic projection for an already-active managed detail', async () => {
@@ -1867,6 +1938,98 @@ describe('managed assistant entry points', () => {
 
     expect(screen.queryByText('Acknowledgement required')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start working' })).toBeEnabled();
+  });
+
+  it('keeps the latest of two managed-list completions', async () => {
+    const firstList = deferred<ManagedAssistantSummary[]>();
+    const secondList = deferred<ManagedAssistantSummary[]>();
+    let operations: { loadList: () => Promise<void>; loadDetail: (id: string) => Promise<unknown> } | undefined;
+    listManagedAssistants
+      .mockResolvedValueOnce([])
+      .mockReturnValueOnce(firstList.promise)
+      .mockReturnValueOnce(secondList.promise);
+
+    render(<ManagedListOverlayHarness onReady={(nextOperations) => (operations = nextOperations)} />);
+    await waitFor(() => expect(operations).toBeDefined());
+    if (!operations) throw new Error('Managed list operations were not exposed');
+
+    const firstRequest = operations.loadList();
+    const secondRequest = operations.loadList();
+    secondList.resolve([
+      createSummary({ governance: { ...createSummary().governance, business_owner: 'Latest owner' } }),
+    ]);
+    await secondRequest;
+    firstList.resolve([
+      createSummary({ governance: { ...createSummary().governance, business_owner: 'Stale owner' } }),
+    ]);
+    await firstRequest;
+
+    await waitFor(() => expect(screen.getByText('Latest owner')).toBeInTheDocument());
+    expect(screen.queryByText('Stale owner')).not.toBeInTheDocument();
+  });
+
+  it('lets a list begun after an overlay replace and clean that older overlay', async () => {
+    const authoritativeList = deferred<ManagedAssistantSummary[]>();
+    let operations: { loadList: () => Promise<void>; loadDetail: (id: string) => Promise<unknown> } | undefined;
+    getManagedAssistant.mockResolvedValue(
+      createDetail({ governance: { ...createDetail().governance, business_owner: 'Overlay owner' } })
+    );
+    listManagedAssistants
+      .mockResolvedValueOnce([
+        createSummary({ governance: { ...createSummary().governance, business_owner: 'Base owner' } }),
+      ])
+      .mockReturnValueOnce(authoritativeList.promise);
+
+    render(<ManagedListOverlayHarness onReady={(nextOperations) => (operations = nextOperations)} />);
+    await waitFor(() => expect(operations).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Base owner')).toBeInTheDocument());
+    if (!operations) throw new Error('Managed list operations were not exposed');
+
+    await operations.loadDetail('finance-close');
+    const listRequest = operations.loadList();
+    authoritativeList.resolve([
+      createSummary({ governance: { ...createSummary().governance, business_owner: 'Authoritative owner' } }),
+    ]);
+    await listRequest;
+
+    await waitFor(() => expect(screen.getByText('Authoritative owner')).toBeInTheDocument());
+    expect(screen.queryByText('Overlay owner')).not.toBeInTheDocument();
+  });
+
+  it('does not let an older superseded list remove a newer overlay', async () => {
+    const olderList = deferred<ManagedAssistantSummary[]>();
+    const newerList = deferred<ManagedAssistantSummary[]>();
+    let operations: { loadList: () => Promise<void>; loadDetail: (id: string) => Promise<unknown> } | undefined;
+    getManagedAssistant.mockResolvedValue(
+      createDetail({ governance: { ...createDetail().governance, business_owner: 'New overlay owner' } })
+    );
+    listManagedAssistants
+      .mockResolvedValueOnce([
+        createSummary({ governance: { ...createSummary().governance, business_owner: 'Base owner' } }),
+      ])
+      .mockReturnValueOnce(olderList.promise)
+      .mockReturnValueOnce(newerList.promise);
+
+    render(<ManagedListOverlayHarness onReady={(nextOperations) => (operations = nextOperations)} />);
+    await waitFor(() => expect(operations).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Base owner')).toBeInTheDocument());
+    if (!operations) throw new Error('Managed list operations were not exposed');
+
+    const olderRequest = operations.loadList();
+    await operations.loadDetail('finance-close');
+    const newerRequest = operations.loadList();
+    olderList.resolve([
+      createSummary({ governance: { ...createSummary().governance, business_owner: 'Old list owner' } }),
+    ]);
+    await olderRequest;
+
+    await waitFor(() => expect(screen.getByText('New overlay owner')).toBeInTheDocument());
+    expect(screen.queryByText('Old list owner')).not.toBeInTheDocument();
+
+    newerList.resolve([
+      createSummary({ governance: { ...createSummary().governance, business_owner: 'New list owner' } }),
+    ]);
+    await newerRequest;
   });
 
   it('shows and enforces the managed lifecycle blocker in My Teammates', () => {

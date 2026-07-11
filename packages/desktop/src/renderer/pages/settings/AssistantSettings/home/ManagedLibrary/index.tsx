@@ -121,6 +121,9 @@ export const ManagedLibraryContent: React.FC<ManagedLibraryContentProps> = ({
           localeKey={localeKey}
           isLoading={library.isDetailLoading}
           isAdopting={library.isAdopting}
+          isAdoptionRefreshPending={
+            library.selectedDetail ? library.isAdoptionRefreshPending(library.selectedDetail.assistant.id) : false
+          }
           error={library.detailError}
           mutationError={library.mutationError}
           lifecycleMutationError={library.lifecycleMutationError}

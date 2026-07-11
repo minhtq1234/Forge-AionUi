@@ -27,6 +27,7 @@ type MyAssistantsListProps = {
   onReorder: (activeId: string, overId: string) => void | Promise<void>;
   onStartChat: (assistant: AssistantListItem) => void;
   managedSummaries: ManagedAssistantSummary[];
+  isAdoptionRefreshPending: (assistantId: string) => boolean;
   /** Switch to the Official tab (to duplicate an official assistant). */
   onGoOfficial: () => void;
 };
@@ -43,6 +44,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
   onReorder,
   onStartChat,
   managedSummaries,
+  isAdoptionRefreshPending,
   onGoOfficial,
 }) => {
   const { t } = useTranslation();
@@ -117,6 +119,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
                   onDelete={onDelete}
                   onToggleEnabled={onToggleEnabled}
                   onStartChat={onStartChat}
+                  isAdoptionRefreshPending={isAdoptionRefreshPending(assistant.id)}
                 />
               ))}
             </div>
@@ -198,6 +201,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
                 onToggleEnabled={onToggleEnabled}
                 onStartChat={onStartChat}
                 managedSummary={managedSummaryById.get(assistant.id)}
+                isAdoptionRefreshPending={isAdoptionRefreshPending(assistant.id)}
               />
             ))}
           </div>

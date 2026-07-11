@@ -540,9 +540,17 @@ const GuidPage: React.FC = () => {
   // next hard reload, the browser would then request '/guid' directly from
   // the dev server (which has no SPA fallback) and 404.
   useEffect(() => {
-    if (!resetAssistantRequested && !preselectAssistantId) return;
+    if (!resetAssistantRequested && !(preselectAssistantId && agentSelection.hasResolvedPreselect)) return;
     navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: null });
-  }, [resetAssistantRequested, preselectAssistantId, location.pathname, location.search, location.hash, navigate]);
+  }, [
+    agentSelection.hasResolvedPreselect,
+    resetAssistantRequested,
+    preselectAssistantId,
+    location.pathname,
+    location.search,
+    location.hash,
+    navigate,
+  ]);
 
   // Agents that use configured model providers instead of ACP probe-based models.
   // Only aionrs now — Gemini runs as a regular ACP backend with ACP-cached models.

@@ -159,6 +159,35 @@ describe('useGuidAssistantSelection', () => {
     expect(configSetMock).toHaveBeenCalledWith('guid.lastAssistantId', 'assistant-claude');
   });
 
+  it('waits for the exact navigation assistant instead of selecting a catalog fallback', async () => {
+    mockAssistants = [];
+
+    const { result, rerender } = renderHook(() =>
+      useGuidAssistantSelection({
+        resetAssistant: false,
+        preselectAssistantId: 'managed-finance-close',
+        locationKey: 'managed-handoff',
+      })
+    );
+
+    expect(result.current.selectedAssistantId).toBeNull();
+
+    mockAssistants = [
+      assistantFixture({ id: 'assistant-claude', runtimeKey: 'claude', source: 'builtin', sortOrder: 1 }),
+    ];
+    rerender();
+
+    await waitFor(() => expect(result.current.selectedAssistantId).toBeNull());
+
+    mockAssistants = [
+      ...mockAssistants,
+      assistantFixture({ id: 'managed-finance-close', runtimeKey: 'claude', source: 'generated', sortOrder: 2 }),
+    ];
+    rerender();
+
+    await waitFor(() => expect(result.current.selectedAssistantId).toBe('managed-finance-close'));
+  });
+
   it('falls back to the default assistant when the persisted guid assistant no longer exists', async () => {
     mockAssistants = [
       assistantFixture({ id: 'bare-aionrs', runtimeKey: 'aionrs', source: 'generated', sortOrder: 1 }),
