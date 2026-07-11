@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act, cleanup } from '@testing-library/react';
 import React, { type ReactNode } from 'react';
+import { ipcBridge } from '@/common';
 import { PreviewProvider, usePreviewContext } from '@/renderer/pages/conversation/Preview/context/PreviewContext';
 
 vi.mock('@/common', () => ({
@@ -50,6 +51,7 @@ describe('PreviewContext', () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
   });
 
   it('initializes with closed state', () => {
@@ -101,5 +103,38 @@ describe('PreviewContext', () => {
     });
     expect(result.current.activeTab?.content).toBe('modified');
     expect(result.current.activeTab?.isDirty).toBe(true);
+  });
+
+  it('refreshes an Office preview after its file changes without reading binary content', async () => {
+    vi.useFakeTimers();
+    const filePath = '/workspace/reports/forecast.docx';
+    vi.mocked(ipcBridge.fs.getFileMetadata.invoke)
+      .mockResolvedValueOnce({
+        name: 'forecast.docx',
+        path: filePath,
+        size: 128,
+        type: 'file',
+        lastModified: 1,
+      })
+      .mockResolvedValueOnce({
+        name: 'forecast.docx',
+        path: filePath,
+        size: 128,
+        type: 'file',
+        lastModified: 2,
+      });
+    vi.mocked(ipcBridge.fs.readFile.invoke).mockResolvedValue(null);
+
+    const { result } = renderHook(() => usePreviewContext(), { wrapper });
+    act(() => {
+      result.current.openPreview('', 'word', { file_path: filePath, workspace: '/workspace' });
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    expect(result.current.activeTab?.officePreviewRevision).toBe(1);
+    expect(ipcBridge.fs.readFile.invoke).not.toHaveBeenCalled();
   });
 });

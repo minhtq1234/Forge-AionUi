@@ -1,0 +1,164 @@
+.tabsRoot {
+  container-type: inline-size;
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 44px;
+  color: var(--text-secondary);
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border-base);
+}
+
+.tabsRow,
+.tabList,
+.tabItem,
+.tabContent,
+.panelActions {
+  display: flex;
+  align-items: center;
+}
+
+.tabsRow {
+  width: 100%;
+  height: 44px;
+}
+
+.tabList {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  overflow-x: auto;
+}
+
+.tabItem {
+  position: relative;
+  flex: 0 0 auto;
+  height: 100%;
+  color: var(--text-secondary);
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
+}
+
+.tabItem:hover {
+  color: var(--text-primary);
+  background: var(--bg-3);
+}
+
+.tabItem[data-active='true'] {
+  color: var(--text-primary);
+  background: var(--bg-1);
+}
+
+.tabItem[data-active='true']::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  content: '';
+  background: var(--primary);
+}
+
+.tabButton {
+  height: 100% !important;
+  padding: 0 8px 0 12px !important;
+  color: inherit !important;
+  border-radius: 0 !important;
+}
+
+.tabContent {
+  min-width: 0;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.typeBadge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 22px;
+  padding: 0 6px;
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--bg-3);
+  border: 1px solid var(--border-base);
+  border-radius: 5px;
+}
+
+.typeBadge[data-type='word'] {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 9%, var(--bg-1));
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--border-base));
+}
+
+.typeBadge[data-type='excel'] {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 9%, var(--bg-1));
+  border-color: color-mix(in srgb, var(--success) 24%, var(--border-base));
+}
+
+.tabTitle {
+  max-width: 200px;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.dirtyDot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  background: var(--primary);
+  border-radius: 50%;
+}
+
+.closeButton {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  margin-right: 6px;
+  padding: 0 !important;
+}
+
+.panelActions {
+  flex: 0 0 auto;
+  height: 100%;
+  padding: 0 10px;
+}
+
+.panelButton {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 !important;
+}
+
+.fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 32px;
+  pointer-events: none;
+}
+
+.fadeLeft {
+  left: 0;
+  background: linear-gradient(90deg, var(--bg-2) 0%, transparent 100%);
+}
+
+.fadeRight {
+  right: 0;
+  background: linear-gradient(270deg, var(--bg-2) 0%, transparent 100%);
+}
+
+@container (max-width: 520px) {
+  .tabTitle {
+    max-width: 130px;
+  }
+}

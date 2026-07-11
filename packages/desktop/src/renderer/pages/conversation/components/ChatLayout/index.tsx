@@ -40,6 +40,7 @@ const ChatLayout: React.FC<{
   agent_name?: string;
   headerExtra?: React.ReactNode;
   workspaceEnabled?: boolean;
+  workspacePresentation?: 'panel' | 'project-menu';
   /** Conversation ID for mode switching */
   conversation_id?: string;
   /** Custom tabs slot; when provided, replaces the default ConversationTabs */
@@ -60,19 +61,29 @@ const ChatLayout: React.FC<{
   headerLeading?: React.ReactNode;
 }> = (props) => {
   const { conversation_id, workspacePath, isTemporaryWorkspace } = props;
-  const { backend, presetAssistant, agent_name, workspaceEnabled = true, workspacePreferenceKey } = props;
+  const {
+    backend,
+    presetAssistant,
+    agent_name,
+    workspaceEnabled = true,
+    workspacePreferenceKey,
+    workspacePresentation = 'panel',
+  } = props;
+  const workspacePanelEnabled = workspaceEnabled && workspacePresentation === 'panel';
   const layout = useLayoutContext();
   const isMacRuntime = isMacEnvironment();
   const isWindowsRuntime = isWindowsEnvironment();
   const isDesktop = !layout?.isMobile;
   const isMobile = Boolean(layout?.isMobile);
+  const isArtifactEditorPresentation = workspacePresentation === 'project-menu';
+  const isArtifactEditorSplit = isArtifactEditorPresentation && isDesktop;
 
   // Preview panel state
   const { isOpen: isPreviewOpen } = usePreviewContext();
 
   // --- Hook A: workspace collapse ---
   const { rightSiderCollapsed, setRightSiderCollapsed } = useWorkspaceCollapse({
-    workspaceEnabled,
+    workspaceEnabled: workspacePanelEnabled,
     isMobile,
     conversation_id,
     preferenceKey: workspacePreferenceKey ?? conversation_id,
@@ -112,7 +123,7 @@ const ChatLayout: React.FC<{
     containerWidth,
     workspaceWidthPx: workspaceWidthPxPref,
     chatSplitRatio: 60, // placeholder; only dynamicChatMinRatio/dynamicChatMaxRatio are used here
-    workspaceEnabled,
+    workspaceEnabled: workspacePanelEnabled,
     isDesktop,
     isPreviewOpen,
     rightSiderCollapsed,
@@ -124,10 +135,10 @@ const ChatLayout: React.FC<{
     setSplitRatio: setChatSplitRatio,
     createDragHandle: createPreviewDragHandle,
   } = useResizableSplit({
-    defaultWidth: 60,
+    defaultWidth: isArtifactEditorPresentation ? 50 : 60,
     minWidth: dynamicChatMinRatio,
     maxWidth: dynamicChatMaxRatio,
-    storageKey: 'chat-preview-split-ratio',
+    storageKey: isArtifactEditorPresentation ? 'artifact-editor-chat-preview-split-ratio' : 'chat-preview-split-ratio',
   });
 
   // Full metrics with real chatSplitRatio
@@ -135,7 +146,7 @@ const ChatLayout: React.FC<{
     containerWidth,
     workspaceWidthPx: workspaceWidthPxPref,
     chatSplitRatio,
-    workspaceEnabled,
+    workspaceEnabled: workspacePanelEnabled,
     isDesktop,
     isPreviewOpen,
     rightSiderCollapsed,
@@ -145,7 +156,7 @@ const ChatLayout: React.FC<{
   // --- Hook E: layout constraints ---
   useLayoutConstraints({
     containerWidth,
-    workspaceEnabled,
+    workspaceEnabled: workspacePanelEnabled,
     isDesktop,
     isPreviewOpen,
     rightSiderCollapsed,
@@ -208,7 +219,7 @@ const ChatLayout: React.FC<{
       </FlexFullContainer>
       <div className='flex items-center gap-12px shrink-0'>
         {props.headerExtra}
-        {isWindowsRuntime && workspaceEnabled && (
+        {isWindowsRuntime && workspacePanelEnabled && (
           <button
             type='button'
             className='workspace-header__toggle'
@@ -239,6 +250,9 @@ const ChatLayout: React.FC<{
       }}
     >
       <div ref={containerRef} className='flex flex-1 relative w-full overflow-hidden'>
+        {workspaceEnabled && workspacePresentation === 'project-menu' && (
+          <div className='workspace-project-controller'>{props.sider}</div>
+        )}
         {/* Unified layout: single DOM structure prevents children unmount/remount on preview toggle */}
         <div
           className='flex flex-col min-w-0'
@@ -252,6 +266,7 @@ const ChatLayout: React.FC<{
           <div className='flex flex-1 min-h-0 relative'>
             {/* Chat area - always mounted, never unmounted on preview toggle */}
             <div
+              data-testid='chat-layout-chat-pane'
               className='flex flex-col relative'
               style={{
                 flexGrow: isPreviewOpen && isDesktop ? 0 : 1,
@@ -271,15 +286,18 @@ const ChatLayout: React.FC<{
             {/* Preview panel - conditionally rendered */}
             {isPreviewOpen && (
               <div
+                data-testid='chat-layout-preview-pane'
                 className={classNames(
-                  'preview-panel flex flex-col relative overflow-visible rounded-[15px]',
-                  isDesktop ? 'mb-[12px] mr-[12px] ml-[8px]' : 'm-[8px]'
+                  'preview-panel flex flex-col relative overflow-visible',
+                  !isArtifactEditorSplit && 'rounded-[15px]',
+                  isDesktop && !isArtifactEditorSplit ? 'mb-[12px] mr-[12px] ml-[8px]' : isMobile && 'm-[8px]'
                 )}
                 style={{
                   flexGrow: 1,
                   flexShrink: 1,
                   flexBasis: 0,
-                  border: '1px solid var(--bg-3)',
+                  border: isArtifactEditorSplit ? undefined : '1px solid var(--bg-3)',
+                  borderWidth: isArtifactEditorSplit ? 0 : undefined,
                   minWidth: isDesktop ? '260px' : 0,
                   maxWidth: isMobile ? 'calc(100% - 16px)' : undefined,
                   width: isMobile ? 'calc(100% - 16px)' : undefined,
@@ -294,14 +312,16 @@ const ChatLayout: React.FC<{
                     lineClassName: 'opacity-30 group-hover:opacity-100 group-active:opacity-100',
                     lineStyle: { width: '2px' },
                   })}
-                <div className='h-full w-full overflow-hidden rounded-[15px]'>
-                  <PreviewPanel />
+                <div
+                  className={classNames('h-full w-full overflow-hidden', !isArtifactEditorSplit && 'rounded-[15px]')}
+                >
+                  <PreviewPanel fullBleed={isArtifactEditorSplit} />
                 </div>
               </div>
             )}
           </div>
         </div>
-        {workspaceEnabled && !layout?.isMobile && (
+        {workspacePanelEnabled && !layout?.isMobile && (
           <div
             className={classNames('!bg-1 relative chat-layout-right-sider layout-sider')}
             style={{
@@ -334,7 +354,7 @@ const ChatLayout: React.FC<{
         )}
 
         {/* Mobile workspace overlay: backdrop + fixed panel + floating collapse handle */}
-        {workspaceEnabled && layout?.isMobile && (
+        {workspacePanelEnabled && layout?.isMobile && (
           <MobileWorkspaceOverlay
             rightSiderCollapsed={rightSiderCollapsed}
             setRightSiderCollapsed={setRightSiderCollapsed}
@@ -348,7 +368,7 @@ const ChatLayout: React.FC<{
         )}
 
         {/* Desktop expand button when workspace is collapsed */}
-        {!isMacRuntime && !isWindowsRuntime && workspaceEnabled && rightSiderCollapsed && !layout?.isMobile && (
+        {!isMacRuntime && !isWindowsRuntime && workspacePanelEnabled && rightSiderCollapsed && !layout?.isMobile && (
           <DesktopWorkspaceToggle />
         )}
       </div>

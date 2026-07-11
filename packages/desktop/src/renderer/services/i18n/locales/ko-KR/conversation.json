@@ -336,6 +336,9 @@
   },
   "workspace": {
     "title": "프로젝트",
+    "projectMenu": {
+      "trigger": "프로젝트"
+    },
     "pasteConfirm_title": "파일 붙여넣기",
     "pasteConfirm_message": "'{{name}}'을(를) 선택된 폴더({{target}})에 붙여넣으시겠습니까?",
     "pasteConfirm_paste": "붙여넣기",

@@ -336,6 +336,9 @@
   },
   "workspace": {
     "title": "プロジェクト",
+    "projectMenu": {
+      "trigger": "プロジェクト"
+    },
     "pasteConfirm_title": "ファイルを貼り付け",
     "pasteConfirm_message": "'{{name}}' を選択したフォルダー ({{target}}) に貼り付けてもよろしいですか？",
     "pasteConfirm_paste": "貼り付け",

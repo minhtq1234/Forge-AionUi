@@ -336,6 +336,9 @@
   },
   "workspace": {
     "title": "پروژه",
+    "projectMenu": {
+      "trigger": "پروژه"
+    },
     "pasteConfirm_title": "جای‌گذاری فایل‌ها",
     "pasteConfirm_message": "آیا مطمئن هستید که می‌خواهید «{{name}}» را در پوشه انتخاب‌شده ({{target}}) جای‌گذاری کنید؟",
     "pasteConfirm_paste": "جای‌گذاری",

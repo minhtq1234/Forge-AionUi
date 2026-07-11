@@ -336,6 +336,9 @@
   },
   "workspace": {
     "title": "Arbeitsbereich",
+    "projectMenu": {
+      "trigger": "Projekt"
+    },
     "pasteConfirm_title": "Dateien einfügen",
     "pasteConfirm_message": "Soll '{{name}}' wirklich in den ausgewählten Ordner ({{target}}) eingefügt werden?",
     "pasteConfirm_paste": "Einfügen",

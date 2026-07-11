@@ -342,6 +342,9 @@
   },
   "workspace": {
     "title": "Projeto",
+    "projectMenu": {
+      "trigger": "Projeto"
+    },
     "pasteConfirm_title": "Colar arquivos",
     "pasteConfirm_message": "Tem certeza de que deseja colar '{{name}}' na pasta selecionada ({{target}})?",
     "pasteConfirm_paste": "Colar",

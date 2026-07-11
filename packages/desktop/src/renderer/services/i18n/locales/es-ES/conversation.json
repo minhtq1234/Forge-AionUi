@@ -336,6 +336,9 @@
   },
   "workspace": {
     "title": "Proyecto",
+    "projectMenu": {
+      "trigger": "Proyecto"
+    },
     "pasteConfirm_title": "Pegar archivos",
     "pasteConfirm_message": "¿Estás seguro de que deseas pegar '{{name}}' en la carpeta seleccionada ({{target}})?",
     "pasteConfirm_paste": "Pegar",

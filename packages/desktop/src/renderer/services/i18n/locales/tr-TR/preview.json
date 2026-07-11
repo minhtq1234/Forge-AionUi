@@ -76,11 +76,69 @@
       "installFailed": "officecli otomatik olarak yüklenemedi. Arka uç günlüklerini kontrol edip yeniden deneyin.",
       "portTimeout": "Önizleme servisi başladı ancak zamanında hazır olmadı. Yeniden deneyin.",
       "startFailed": "Office önizleme servisi başlatılamadı.",
-      "outsideSandbox": "Bu dosya geçerli çalışma alanı sandbox'ının dışında."
+      "outsideSandbox": "Bu dosya geçerli çalışma alanı sandbox'ının dışında.",
+      "originalSafe": "Çalışma alanındaki özgün dosya değiştirilmedi."
     },
     "serverInstall": {
       "hint": "Forge bir sunucuda çalışıyor. Önizleme bileşeni o sunucuya kurulmalıdır. Aşağıdaki komutu sunucuda çalıştırıp yeniden deneyin:",
       "icuNote": "Yine de başlamazsa sunucuya ICU kitaplığını kurun (Debian/Ubuntu: apt-get install -y libicu-dev)."
+    },
+    "externalEdit": {
+      "editInDefaultApp": "Varsayılan uygulamada düzenle",
+      "editInDefaultAppTooltip": "Bu çalışma alanı dosyasını varsayılan uygulamasında aç",
+      "refreshPreview": "Önizlemeyi yenile",
+      "refreshPreviewTooltip": "Bu Forge önizlemesini çalışma alanı dosyasından yeniden yükle",
+      "revealInFolder": "Klasörde göster",
+      "revealInFolderTooltip": "Bu çalışma alanı dosyasını klasöründe göster",
+      "status": {
+        "ready": "Varsayılan uygulamada düzenlemeye hazır",
+        "opening": "Varsayılan uygulama açılıyor...",
+        "editingExternally": "Harici uygulamada düzenleniyor",
+        "refreshing": "Önizleme yenileniyor...",
+        "refreshed": "Önizleme yenilendi",
+        "openFailed": "Varsayılan uygulama açılamadı",
+        "refreshFailed": "Önizleme yenilenemedi. Dosya bu görünümden daha yeni olabilir."
+      }
+    },
+    "editor": {
+      "editSelection": "Seçimi düzenle",
+      "formulaBar": "Formül çubuğu",
+      "apply": "Uygula",
+      "cancel": "İptal",
+      "bold": "Kalın",
+      "italic": "İtalik",
+      "underline": "Altı çizili",
+      "undo": "Geri al",
+      "askForge": "Forge'a sor",
+      "openDesktop": "Masaüstü uygulamasında aç",
+      "openedDesktop": "Masaüstü uygulamasında açıldı",
+      "more": "Daha fazla",
+      "reveal": "Klasörde göster",
+      "refresh": "Önizlemeyi yenile",
+      "saving": "Kaydediliyor",
+      "saved": "Çalışma alanına kaydedildi",
+      "saveFailed": "Kaydetme başarısız",
+      "fileChanged": "Dosya başka bir yerde değiştirildi",
+      "refreshing": "Önizleme yenileniyor",
+      "previewOutdated": "Önizleme güncel olmayabilir",
+      "unsupported": "Bu seçim için masaüstü uygulaması gerekiyor",
+      "inspecting": "Düzenleme denetimleri hazırlanıyor...",
+      "selectWordToEdit": "Düzenlemek için belgedeki metni seçin",
+      "selectExcelToEdit": "Düzenlemek için bir hücre seçin",
+      "readyToEdit": "Seçili içerik düzenlenmeye hazır",
+      "conflictRecovery": "Düzenlemeniz kaydedilmedi ve hâlâ burada. Çalışma alanı dosyası güvende.",
+      "saveFailureRecovery": "Düzenlemeniz hâlâ burada ve çalışma alanı dosyası değiştirilmedi.",
+      "copyDraft": "Taslağı kopyala",
+      "refreshLatest": "En son sürümü yükle",
+      "requestPlaceholder": "Forge'un yapmasını istediğiniz değişikliği açıklayın.",
+      "askWordContext": "Dosya: {{fileName}}\nParagraf: {{path}}\nSeçili metin: {{text}}\nİstek: {{placeholder}}",
+      "askExcelContext": "Dosya: {{fileName}}\nAralık: {{range}}\nHücreler:\n{{cells}}\nİstek: {{placeholder}}"
+    },
+    "viewer": {
+      "zoomOut": "Uzaklaştır",
+      "zoomIn": "Yakınlaştır",
+      "resetZoom": "Yakınlaştırmayı sıfırla",
+      "fitWidth": "Genişliğe sığdır"
     }
   },
   "word": {

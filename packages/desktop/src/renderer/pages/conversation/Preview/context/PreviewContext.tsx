@@ -8,6 +8,7 @@ import { ipcBridge } from '@/common';
 import type { PreviewContentType } from '@/common/types/office/preview';
 import { emitter } from '@/renderer/utils/emitter';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { isOfficePreviewContentType, nextOfficePreviewRevision } from './officePreviewRevision';
 
 /** DOM 片段数据结构 / DOM snippet data structure */
 export interface DomSnippet {
@@ -41,6 +42,7 @@ export interface PreviewTab {
   title: string; // Tab 标题
   isDirty?: boolean; // 是否有未保存的修改 / Whether there are unsaved changes
   originalContent?: string; // 原始内容，用于对比 / Original content for comparison
+  officePreviewRevision?: number;
 }
 
 export interface OpenPreviewOptions {
@@ -621,6 +623,22 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
           fileMtimeRef.current.set(file_path, metadata.lastModified);
           if (prevMtime === undefined || metadata.lastModified === prevMtime) return;
 
+          if (isOfficePreviewContentType(tab.content_type)) {
+            setTabs((latest) =>
+              latest.map((t) => {
+                if (t.metadata?.file_path !== file_path) return t;
+                if (savingFilesRef.current.has(file_path) || t.isDirty) return t;
+                return {
+                  ...t,
+                  officePreviewRevision: isOfficePreviewContentType(t.content_type)
+                    ? nextOfficePreviewRevision(t.officePreviewRevision)
+                    : t.officePreviewRevision,
+                };
+              })
+            );
+            return;
+          }
+
           const readPromise =
             tab.content_type === 'image'
               ? ipcBridge.fs.getImageBase64.invoke({ path: file_path, workspace: tab.metadata?.workspace })
@@ -633,7 +651,12 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 latest.map((t) => {
                   if (t.metadata?.file_path !== file_path) return t;
                   if (savingFilesRef.current.has(file_path) || t.isDirty) return t;
-                  return { ...t, content, originalContent: content, isDirty: false };
+                  return {
+                    ...t,
+                    content,
+                    originalContent: content,
+                    isDirty: false,
+                  };
                 })
               );
             })

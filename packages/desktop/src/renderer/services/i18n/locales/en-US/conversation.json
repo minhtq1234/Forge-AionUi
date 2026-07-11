@@ -336,6 +336,9 @@
   },
   "workspace": {
     "title": "Project",
+    "projectMenu": {
+      "trigger": "Project"
+    },
     "pasteConfirm_title": "Paste files",
     "pasteConfirm_message": "Are you sure you want to paste '{{name}}' into the selected folder ({{target}})?",
     "pasteConfirm_paste": "Paste",

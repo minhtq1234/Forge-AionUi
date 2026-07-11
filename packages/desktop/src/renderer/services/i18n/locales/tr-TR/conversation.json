@@ -319,6 +319,9 @@
   },
   "workspace": {
     "title": "Proje",
+    "projectMenu": {
+      "trigger": "Proje"
+    },
     "pasteConfirm_title": "Dosyaları yapıştır",
     "pasteConfirm_message": "'{{name}}' dosyasını seçili klasöre ({{target}}) yapıştırmak istediğinizden emin misiniz?",
     "pasteConfirm_paste": "Yapıştır",

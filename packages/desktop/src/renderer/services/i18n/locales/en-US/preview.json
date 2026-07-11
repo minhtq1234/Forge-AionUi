@@ -76,11 +76,69 @@
       "installFailed": "Failed to install officecli automatically. Check backend logs and retry.",
       "portTimeout": "Preview service started but did not become ready in time. Retry.",
       "startFailed": "Failed to start the Office preview service.",
-      "outsideSandbox": "This file is outside the current project sandbox."
+      "outsideSandbox": "This file is outside the current project sandbox.",
+      "originalSafe": "The original workspace file was not changed."
     },
     "serverInstall": {
       "hint": "Forge is running on a server. Install the preview component on that server, then retry:",
       "icuNote": "If it still fails to start, install the ICU library on the server (Debian/Ubuntu: apt-get install -y libicu-dev)."
+    },
+    "externalEdit": {
+      "editInDefaultApp": "Edit in default app",
+      "editInDefaultAppTooltip": "Open this workspace file in its default application",
+      "refreshPreview": "Refresh preview",
+      "refreshPreviewTooltip": "Reload this Forge preview from the workspace file",
+      "revealInFolder": "Show in folder",
+      "revealInFolderTooltip": "Show this workspace file in its folder",
+      "status": {
+        "ready": "Ready to edit in your default app",
+        "opening": "Opening default app...",
+        "editingExternally": "Editing externally",
+        "refreshing": "Refreshing preview...",
+        "refreshed": "Preview refreshed",
+        "openFailed": "Could not open the default app",
+        "refreshFailed": "Preview could not refresh. The file may be newer than this view."
+      }
+    },
+    "editor": {
+      "editSelection": "Edit selection",
+      "formulaBar": "Formula bar",
+      "apply": "Apply",
+      "cancel": "Cancel",
+      "bold": "Bold",
+      "italic": "Italic",
+      "underline": "Underline",
+      "undo": "Undo",
+      "askForge": "Ask Forge",
+      "openDesktop": "Open in desktop app",
+      "openedDesktop": "Opened in desktop app",
+      "more": "More",
+      "reveal": "Reveal in folder",
+      "refresh": "Refresh preview",
+      "saving": "Saving",
+      "saved": "Saved to workspace",
+      "saveFailed": "Save failed",
+      "fileChanged": "File changed elsewhere",
+      "refreshing": "Refreshing preview",
+      "previewOutdated": "Preview may be outdated",
+      "unsupported": "This selection needs the desktop app",
+      "inspecting": "Preparing edit controls...",
+      "selectWordToEdit": "Select text in the document to edit it",
+      "selectExcelToEdit": "Select a cell to edit it",
+      "readyToEdit": "Ready to edit the selected content",
+      "conflictRecovery": "Your edit was not saved and is still here. The workspace file is safe.",
+      "saveFailureRecovery": "Your edit is still here and the workspace file was not changed.",
+      "copyDraft": "Copy draft",
+      "refreshLatest": "Refresh latest",
+      "requestPlaceholder": "Describe the change you want Forge to make.",
+      "askWordContext": "File: {{fileName}}\nParagraph: {{path}}\nSelected text: {{text}}\nRequest: {{placeholder}}",
+      "askExcelContext": "File: {{fileName}}\nRange: {{range}}\nCells:\n{{cells}}\nRequest: {{placeholder}}"
+    },
+    "viewer": {
+      "zoomOut": "Zoom out",
+      "zoomIn": "Zoom in",
+      "resetZoom": "Reset zoom",
+      "fitWidth": "Fit to width"
     }
   },
   "word": {

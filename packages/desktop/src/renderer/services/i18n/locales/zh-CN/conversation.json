@@ -336,6 +336,9 @@
   },
   "workspace": {
     "title": "项目",
+    "projectMenu": {
+      "trigger": "项目"
+    },
     "pasteConfirm_title": "粘贴文件",
     "pasteConfirm_message": "确定要将 '{{name}}' 粘贴到选中的文件夹 ({{target}}) 吗？",
     "pasteConfirm_paste": "粘贴",

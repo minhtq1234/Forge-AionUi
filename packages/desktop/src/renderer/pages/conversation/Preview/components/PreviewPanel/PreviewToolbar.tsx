@@ -23,7 +23,7 @@ const SHOW_SNAPSHOT_HISTORY = false;
  * PreviewToolbar 组件属性
  * PreviewToolbar component props
  */
-interface PreviewToolbarProps {
+type PreviewToolbarProps = {
   /**
    * 内容类型
    * Content type
@@ -149,7 +149,10 @@ interface PreviewToolbarProps {
    * Extra content rendered on the right section
    */
   rightExtra?: React.ReactNode;
-}
+
+  /** Office artifact toolbar that fully replaces the generic preview toolbar. */
+  officeToolbar?: React.ReactNode;
+};
 
 /**
  * 预览面板工具栏组件
@@ -181,6 +184,7 @@ const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
   onInspectModeToggle,
   leftExtra,
   rightExtra,
+  officeToolbar,
 }) => {
   const { t } = useTranslation();
   const isDiff = content_type === 'diff';
@@ -192,6 +196,8 @@ const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
     'flex items-center gap-2px px-8px py-3px rd-4px cursor-pointer transition-colors duration-150 text-12px font-medium text-t-secondary hover:text-t-primary hover:bg-bg-3';
   const toolbarBtnActive = '!text-white bg-brand hover:!text-white hover:bg-brand-hover';
   const toolbarIconSize = 12;
+
+  if (officeToolbar) return <>{officeToolbar}</>;
 
   return (
     <div className='flex items-center justify-between h-32px px-10px bg-bg-2 flex-shrink-0 border-b border-border-1 overflow-x-auto'>
@@ -253,7 +259,6 @@ const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
               )}
             </>
           )}
-
           {preferActionButtonsInFront && showOpenInSystemButton && (
             <div className={toolbarBtn} onClick={onOpenInSystem} title={t('preview.openInSystemApp')}>
               <svg

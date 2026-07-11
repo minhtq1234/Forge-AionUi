@@ -336,6 +336,9 @@
   },
   "workspace": {
     "title": "Проєкт",
+    "projectMenu": {
+      "trigger": "Проєкт"
+    },
     "pasteConfirm_title": "Вставка файлів",
     "pasteConfirm_message": "Ви впевнені, що хочете вставити «{{name}}» у вибрану папку ({{target}})?",
     "pasteConfirm_paste": "Вставити",

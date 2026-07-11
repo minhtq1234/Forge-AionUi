@@ -5,11 +5,15 @@
  */
 
 import { iconColors } from '@/renderer/styles/colors';
+import type { PreviewContentType } from '@/common/types/office/preview';
+import { Button, Tooltip } from '@arco-design/web-react';
 import { Close } from '@icon-park/react';
 import { IconShrink } from '@arco-design/web-react/icon';
+import classNames from 'classnames';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TabFadeState } from '../../hooks/useTabOverflow';
+import styles from './PreviewTabs.module.css';
 
 /**
  * Tab 信息
@@ -32,7 +36,23 @@ export interface PreviewTab {
    * Whether there are unsaved changes
    */
   isDirty?: boolean;
+
+  /** Preview content type used for the compact file badge. */
+  contentType?: PreviewContentType;
 }
+
+const CONTENT_TYPE_LABELS: Record<PreviewContentType, string> = {
+  markdown: 'MD',
+  diff: 'DIFF',
+  code: 'CODE',
+  html: 'HTML',
+  pdf: 'PDF',
+  ppt: 'PPTX',
+  word: 'DOCX',
+  excel: 'XLSX',
+  image: 'IMG',
+  url: 'URL',
+};
 
 /**
  * PreviewTabs 组件属性
@@ -111,41 +131,86 @@ const PreviewTabs: React.FC<PreviewTabsProps> = ({
   const { t } = useTranslation();
   const { left: showLeftFade, right: showRightFade } = tabFadeState;
 
+  const focusTab = (index: number) => {
+    const tabElements = tabsContainerRef.current?.querySelectorAll<HTMLElement>('[role="tab"]');
+    tabElements?.[index]?.focus();
+  };
+
+  const handleTabKeyDown = (event: React.KeyboardEvent, index: number, tabId: string) => {
+    let nextIndex: number | null = null;
+    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = tabs.length - 1;
+
+    if (nextIndex !== null) {
+      event.preventDefault();
+      focusTab(nextIndex);
+      return;
+    }
+
+    if (event.key === 'Enter' || event.key === ' ' || event.key === 'Space' || event.key === 'Spacebar') {
+      event.preventDefault();
+      onSwitchTab(tabId);
+    }
+  };
+
   return (
-    <div
-      className='relative flex-shrink-0 bg-bg-2'
-      style={{ minHeight: '36px', borderBottom: '1px solid var(--border-base)' }}
-    >
-      <div className='flex items-center h-36px w-full'>
+    <div className={styles.tabsRoot}>
+      <div className={styles.tabsRow}>
         {/* Tabs 滚动区域 / Tabs scroll area */}
-        <div ref={tabsContainerRef} className='flex items-center h-full flex-1 overflow-x-auto'>
+        <div ref={tabsContainerRef} role='tablist' className={styles.tabList}>
           {tabs.length > 0 ? (
-            tabs.map((tab) => (
-              <div
-                key={tab.id}
-                className={`flex items-center gap-6px px-10px h-full cursor-pointer transition-colors flex-shrink-0 ${tab.id === activeTabId ? 'bg-bg-1 text-t-primary' : 'text-t-secondary hover:bg-bg-3'}`}
-                onClick={() => onSwitchTab(tab.id)}
-                onContextMenu={(e) => onContextMenu(e, tab.id)}
-              >
-                <span className='text-12px whitespace-nowrap flex items-center gap-4px'>
-                  {tab.title}
-                  {/* 未保存指示器 / Unsaved indicator */}
-                  {tab.isDirty && (
-                    <span className='w-6px h-6px rd-full bg-primary' title={t('preview.unsavedChangesTitle')} />
-                  )}
-                </span>
-                <Close
-                  theme='outline'
-                  size='14'
-                  fill={iconColors.secondary}
-                  className='hover:fill-primary'
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCloseTab(tab.id);
-                  }}
-                />
-              </div>
-            ))
+            tabs.map((tab, index) => {
+              const isActive = tab.id === activeTabId;
+              return (
+                <div
+                  key={tab.id}
+                  className={styles.tabItem}
+                  data-active={isActive}
+                  onContextMenu={(e) => onContextMenu(e, tab.id)}
+                >
+                  <Button
+                    type='text'
+                    role='tab'
+                    aria-selected={isActive}
+                    tabIndex={isActive ? 0 : -1}
+                    className={styles.tabButton}
+                    onClick={() => onSwitchTab(tab.id)}
+                    onKeyDown={(event) => handleTabKeyDown(event, index, tab.id)}
+                  >
+                    <span className={styles.tabContent}>
+                      {tab.contentType && (
+                        <span data-testid='preview-tab-type' data-type={tab.contentType} className={styles.typeBadge}>
+                          {CONTENT_TYPE_LABELS[tab.contentType]}
+                        </span>
+                      )}
+                      <span className={styles.tabTitle}>{tab.title}</span>
+                      {tab.isDirty && (
+                        <span
+                          data-testid='preview-tab-dirty'
+                          className={styles.dirtyDot}
+                          title={t('preview.unsavedChangesTitle')}
+                        />
+                      )}
+                    </span>
+                  </Button>
+                  <Tooltip content={t('preview.closeTabTitle')}>
+                    <Button
+                      type='text'
+                      size='mini'
+                      aria-label={t('preview.closeTabTitle')}
+                      icon={<Close theme='outline' size='14' fill={iconColors.secondary} />}
+                      className={styles.closeButton}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onCloseTab(tab.id);
+                      }}
+                    />
+                  </Tooltip>
+                </div>
+              );
+            })
           ) : (
             <div className='text-12px text-t-tertiary px-10px'>{t('preview.noTabs')}</div>
           )}
@@ -153,37 +218,26 @@ const PreviewTabs: React.FC<PreviewTabsProps> = ({
 
         {/* 收起面板按钮 / Collapse panel button */}
         {onClosePanel && (
-          <div className='flex items-center h-full px-10px flex-shrink-0 rounded-tr-[16px]'>
-            <div
-              className='flex items-center justify-center w-20px h-20px rd-4px cursor-pointer hover:bg-bg-3 transition-colors'
-              onClick={onClosePanel}
-              title={t('preview.collapsePanel')}
-            >
-              <IconShrink style={{ fontSize: 14, color: iconColors.secondary }} />
-            </div>
+          <div className={styles.panelActions}>
+            <Tooltip content={t('preview.collapsePanel')}>
+              <Button
+                type='text'
+                size='mini'
+                aria-label={t('preview.collapsePanel')}
+                icon={<IconShrink style={{ fontSize: 14, color: iconColors.secondary }} />}
+                className={styles.panelButton}
+                onClick={onClosePanel}
+              />
+            </Tooltip>
           </div>
         )}
       </div>
 
       {/* 左侧渐变指示器 / Left gradient indicator */}
-      {showLeftFade && (
-        <div
-          className='pointer-events-none absolute left-0 top-0 bottom-0 w-32px rounded-tl-[16px]'
-          style={{
-            background: 'linear-gradient(90deg, var(--bg-2) 0%, transparent 100%)',
-          }}
-        />
-      )}
+      {showLeftFade && <div className={classNames(styles.fade, styles.fadeLeft)} />}
 
       {/* 右侧渐变指示器 / Right gradient indicator */}
-      {showRightFade && (
-        <div
-          className='pointer-events-none absolute right-0 top-0 bottom-0 w-32px rounded-tr-[16px]'
-          style={{
-            background: 'linear-gradient(270deg, var(--bg-2) 0%, transparent 100%)',
-          }}
-        />
-      )}
+      {showRightFade && <div className={classNames(styles.fade, styles.fadeRight)} />}
     </div>
   );
 };

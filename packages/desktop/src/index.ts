@@ -33,6 +33,8 @@ import './process/bridge/feedbackBridge';
 import { wasLaunchedAtLogin } from '@process/bridge/applicationBridge';
 import { onLanguageChanged } from './process/bridge/systemSettingsBridge';
 import { setInitialLanguage } from '@process/services/i18n';
+import { installOfficePreviewSession } from '@process/services/office-artifact/officePreviewSession';
+import { disposeOfficeArtifactService } from '@process/services/office-artifact';
 import { setupApplicationMenu } from './process/utils/appMenu';
 import { startWebHost } from '@aionui/web-host';
 import { initializeZoomFactor, setupZoomForWindow } from './process/utils/zoom';
@@ -783,6 +785,7 @@ const handleAppReady = async (): Promise<void> => {
   // any content is loaded, so they cover the very first renderer load.
   installWebContentsSecurity();
   installContentSecurityPolicy();
+  installOfficePreviewSession();
   mark('installSecurityGuards');
 
   if (!app.isPackaged) {
@@ -1176,6 +1179,7 @@ installQuitCleanup({
     disposeCronResumeListener?.();
     disposeCronResumeListener = null;
   },
+  disposeOfficeArtifacts: disposeOfficeArtifactService,
   // Stop aioncore subprocess — backend shutdown kills all agent children
   // transitively (no separate frontend workerTaskManager remains).
   stopBackend: () => backendManager.stop(),

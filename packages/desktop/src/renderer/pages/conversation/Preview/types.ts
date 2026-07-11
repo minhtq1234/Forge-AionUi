@@ -27,6 +27,17 @@ export type {
  */
 export type ViewMode = 'source' | 'preview';
 
+export type OfficeEditState =
+  | 'ready'
+  | 'opening'
+  | 'editingExternally'
+  | 'refreshing'
+  | 'refreshed'
+  | 'openFailed'
+  | 'refreshFailed';
+
+export type OfficePreviewRefreshState = 'refreshing' | 'refreshed' | 'refreshFailed';
+
 /**
  * 预览 Tab 信息
  * Preview tab information

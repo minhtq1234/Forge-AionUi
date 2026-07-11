@@ -336,6 +336,9 @@
   },
   "workspace": {
     "title": "專案",
+    "projectMenu": {
+      "trigger": "專案"
+    },
     "pasteConfirm_title": "貼上檔案",
     "pasteConfirm_message": "確定要將 '{{name}}' 貼上到選中的資料夾 ({{target}}) 嗎？",
     "pasteConfirm_paste": "貼上",

@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef } from 'react';
 
 const OFFICE_OPEN_DELAY_MS = 1000;
 const OFFICE_CONTENT_TYPES = new Set(['ppt', 'word', 'excel']);
+const FORGE_OFFICE_TRANSACTION_FILE = /^\..+\.forge-edit\.(?:docx|xlsx)$/i;
 
 const normalizeWatchPath = (value: string): string => {
   const normalized = value.replaceAll('\\', '/');
@@ -23,6 +24,11 @@ const normalizeWatchPath = (value: string): string => {
   if (normalized.startsWith('/private/tmp/')) return normalized.slice('/private'.length);
 
   return normalized;
+};
+
+const isForgeOfficeTransactionFile = (filePath: string): boolean => {
+  const fileName = normalizeWatchPath(filePath).split('/').pop() ?? '';
+  return FORGE_OFFICE_TRANSACTION_FILE.test(fileName);
 };
 
 /**
@@ -39,7 +45,11 @@ export const useAutoPreviewOfficeFiles = (
   const enabled = useAutoPreviewOfficeFilesEnabled();
   const { findPreviewTab, openPreview } = usePreviewContext();
   const knownOfficeFilesRef = useRef<Set<string>>(new Set());
+  const pendingAddedFilesRef = useRef<Map<string, string>>(new Map());
+  const baselineReadyRef = useRef(false);
   const openTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const previewActionsRef = useRef({ findPreviewTab, openPreview });
+  previewActionsRef.current = { findPreviewTab, openPreview };
   const workspace = conversation?.workspace?.trim() ? conversation.workspace : undefined;
   const normalizedWorkspace = workspace ? normalizeWatchPath(workspace) : undefined;
 
@@ -63,18 +73,26 @@ export const useAutoPreviewOfficeFiles = (
       const timer = setTimeout(() => {
         openTimersRef.current.delete(normalizedFilePath);
 
-        if (!findPreviewTab(contentType, '', { file_path, file_name })) {
-          openPreview('', contentType, { file_path, file_name, title: file_name, workspace, editable: false });
+        if (!previewActionsRef.current.findPreviewTab(contentType, '', { file_path, file_name })) {
+          previewActionsRef.current.openPreview('', contentType, {
+            file_path,
+            file_name,
+            title: file_name,
+            workspace,
+            editable: false,
+          });
         }
       }, OFFICE_OPEN_DELAY_MS);
 
       openTimersRef.current.set(normalizedFilePath, timer);
     },
-    [findPreviewTab, openPreview, workspace]
+    [workspace]
   );
 
   useEffect(() => {
     knownOfficeFilesRef.current = new Set();
+    pendingAddedFilesRef.current.clear();
+    baselineReadyRef.current = false;
     clearPendingOpenTimers();
 
     if (!enabled || !workspace) {
@@ -87,12 +105,20 @@ export const useAutoPreviewOfficeFiles = (
         await ipcBridge.workspaceOfficeWatch.start.invoke({ workspace });
         const currentFiles = await ipcBridge.fs.listWorkspaceFiles.invoke({ root: workspace });
         if (cancelled) return;
-        knownOfficeFilesRef.current = new Set(
+        const knownFiles = new Set(
           currentFiles
             .map((file) => file.fullPath)
             .map((file_path) => normalizeWatchPath(file_path))
             .filter((file_path) => OFFICE_CONTENT_TYPES.has(getFileTypeInfo(file_path).contentType))
         );
+        knownOfficeFilesRef.current = knownFiles;
+        baselineReadyRef.current = true;
+        for (const [normalizedFilePath, filePath] of pendingAddedFilesRef.current) {
+          if (knownFiles.has(normalizedFilePath)) continue;
+          knownFiles.add(normalizedFilePath);
+          openOfficePreview(filePath);
+        }
+        pendingAddedFilesRef.current.clear();
       } catch {
         // Ignore watcher/bootstrap failures; the hook should stay inert rather than noisy.
       }
@@ -106,6 +132,11 @@ export const useAutoPreviewOfficeFiles = (
         if (normalizedEventWorkspace !== normalizedWorkspace) return;
 
         const normalizedFilePath = normalizeWatchPath(event.file_path);
+        if (isForgeOfficeTransactionFile(normalizedFilePath)) return;
+        if (!baselineReadyRef.current) {
+          pendingAddedFilesRef.current.set(normalizedFilePath, event.file_path);
+          return;
+        }
         if (knownOfficeFilesRef.current.has(normalizedFilePath)) return;
 
         knownOfficeFilesRef.current.add(normalizedFilePath);
@@ -119,6 +150,8 @@ export const useAutoPreviewOfficeFiles = (
       cancelled = true;
       unsubscribeFileAdded();
       clearPendingOpenTimers();
+      pendingAddedFilesRef.current.clear();
+      baselineReadyRef.current = false;
       knownOfficeFilesRef.current.clear();
       void ipcBridge.workspaceOfficeWatch.stop.invoke({ workspace }).catch(() => {});
     };
