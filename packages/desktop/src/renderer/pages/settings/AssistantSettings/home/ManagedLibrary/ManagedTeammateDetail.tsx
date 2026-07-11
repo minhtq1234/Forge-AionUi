@@ -15,8 +15,6 @@ type ManagedTeammateDetailProps = {
   localeKey: string;
   isLoading: boolean;
   isAdopting: boolean;
-  isStartReady: boolean;
-  startRefreshFailed: boolean;
   error: ManagedReadError;
   mutationError: ManagedMutationError;
   lifecycleMutationError: ManagedLifecycleMutationError;
@@ -26,7 +24,6 @@ type ManagedTeammateDetailProps = {
   onBack: () => void;
   onRetry: () => void;
   onAdopt: () => void;
-  onRetryStartRefresh: () => void;
   onStartChat: () => void;
   onMarkNoticeSeen: (version: number) => Promise<void>;
   onAcknowledge: (version: number) => Promise<void>;
@@ -72,8 +69,6 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
   localeKey,
   isLoading,
   isAdopting,
-  isStartReady,
-  startRefreshFailed,
   error,
   mutationError,
   lifecycleMutationError,
@@ -83,7 +78,6 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
   onBack,
   onRetry,
   onAdopt,
-  onRetryStartRefresh,
   onStartChat,
   onMarkNoticeSeen,
   onAcknowledge,
@@ -91,6 +85,7 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
 }) => {
   const { t } = useTranslation();
   const backButtonRef = useRef<HTMLButtonElement | null>(null);
+  const startButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (isLoading || (!detail && !error)) return;
@@ -173,6 +168,7 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
         onAcknowledge={onAcknowledge}
         onRefresh={onRetry}
         onOpenReplacement={onOpenReplacement}
+        onReviewClosed={() => (startButtonRef.current ?? backButtonRef.current)?.focus()}
       />
 
       <div className={`${styles.detailLayout} mt-16px`}>
@@ -260,32 +256,20 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
           {mutationError === 'adoption' ? (
             <Alert className='mt-16px' type='error' content={t('settings.managedTeammates.adoptionError')} />
           ) : null}
-          {startRefreshFailed ? (
-            <Alert className='mt-16px' type='warning' content={t('settings.managedTeammates.refreshError')} />
-          ) : null}
-
           <div className={`${styles.actionRow} mt-18px`}>
             {!detail.adoption.active ? (
               <Button type='primary' long loading={isAdopting} disabled={isAdopting} onClick={onAdopt}>
                 {t('settings.managedTeammates.add')}
               </Button>
-            ) : isStartReady && canStartManagedAssistant(detail) ? (
+            ) : canStartManagedAssistant(detail) ? (
               <Button
+                ref={startButtonRef}
                 type='primary'
                 long
                 icon={<Play theme='outline' size={16} fill='currentColor' />}
                 onClick={onStartChat}
               >
                 {t('settings.managedTeammates.startWorking')}
-              </Button>
-            ) : startRefreshFailed ? (
-              <Button
-                type='primary'
-                long
-                icon={<Refresh theme='outline' size={16} fill='currentColor' />}
-                onClick={onRetryStartRefresh}
-              >
-                {t('common.retry')}
               </Button>
             ) : null}
           </div>

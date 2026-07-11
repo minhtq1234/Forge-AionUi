@@ -26,7 +26,6 @@ type MyAssistantsListProps = {
   onToggleEnabled: (assistant: AssistantListItem, checked: boolean) => void;
   onReorder: (activeId: string, overId: string) => void | Promise<void>;
   onStartChat: (assistant: AssistantListItem) => void;
-  isManagedStartReady: (id: string) => boolean;
   managedSummaries: ManagedAssistantSummary[];
   /** Switch to the Official tab (to duplicate an official assistant). */
   onGoOfficial: () => void;
@@ -43,7 +42,6 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
   onToggleEnabled,
   onReorder,
   onStartChat,
-  isManagedStartReady,
   managedSummaries,
   onGoOfficial,
 }) => {
@@ -200,7 +198,6 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
                 onToggleEnabled={onToggleEnabled}
                 onStartChat={onStartChat}
                 managedSummary={managedSummaryById.get(assistant.id)}
-                managedStartReady={isManagedStartReady(assistant.id) && managedSummaryById.has(assistant.id)}
               />
             ))}
           </div>

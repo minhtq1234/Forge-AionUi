@@ -231,11 +231,31 @@ const ManagedLifecycleHarness: React.FC = () => {
       <span data-testid='ack-required'>{String(library.selectedDetail.update.acknowledgement_required)}</span>
       <span data-testid='lifecycle-error'>{library.lifecycleMutationError ?? 'none'}</span>
       <span data-testid='state-changed'>{String(library.lifecycleStateChanged)}</span>
-      <button type='button' onClick={() => void library.markNoticeSeen(3)}>
+      <span data-testid='notice-mutation-pending'>{String(library.isMarkingNoticeSeen)}</span>
+      <span data-testid='ack-mutation-pending'>{String(library.isAcknowledging)}</span>
+      <button type='button' disabled={library.isMarkingNoticeSeen} onClick={() => void library.markNoticeSeen(3)}>
         Mark seen
       </button>
-      <button type='button' onClick={() => void library.acknowledge(2)}>
+      <button type='button' disabled={library.isAcknowledging} onClick={() => void library.acknowledge(2)}>
         Acknowledge
+      </button>
+      <button
+        type='button'
+        onClick={() => {
+          void library.markNoticeSeen(3);
+          void library.markNoticeSeen(3);
+        }}
+      >
+        Mark seen twice
+      </button>
+      <button
+        type='button'
+        onClick={() => {
+          void library.acknowledge(2);
+          void library.acknowledge(2);
+        }}
+      >
+        Acknowledge twice
       </button>
     </div>
   );
@@ -331,6 +351,10 @@ describe('ManagedLifecycleNotices', () => {
     renderNotices(detail, { onAcknowledge });
 
     expect(screen.getByText('High-impact v2 notes')).toBeInTheDocument();
+    expect(screen.getByText('Version 2')).toBeInTheDocument();
+    expect(screen.getByText(/Aug 30, 2026/)).toBeInTheDocument();
+    expect(screen.queryByText('Version 3')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Aug 31, 2026/)).not.toBeInTheDocument();
     expect(screen.getByText('Permissions')).toBeInTheDocument();
     expect(screen.getByText('Required capabilities')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Acknowledge change' }));
@@ -587,5 +611,39 @@ describe('managed lifecycle mutations', () => {
     });
     expect(screen.getByTestId('ack-required')).toHaveTextContent('false');
     expect(screen.getByTestId('notice-pending')).toHaveTextContent('true');
+    expect(screen.getByTestId('notice-mutation-pending')).toHaveTextContent('false');
+    expect(screen.getByTestId('ack-mutation-pending')).toHaveTextContent('false');
   });
+
+  it.each([
+    ['notice', 'Mark seen twice', 'notice-mutation-pending', 'Mark seen'],
+    ['acknowledgement', 'Acknowledge twice', 'ack-mutation-pending', 'Acknowledge'],
+  ] as const)(
+    'keeps the %s action pending until the newest same-kind mutation settles',
+    async (kind, triggerName, pendingTestId, actionName) => {
+      const firstRequest = deferred<ManagedAssistantDetail>();
+      const secondRequest = deferred<ManagedAssistantDetail>();
+      const mutation = kind === 'notice' ? bridgeMocks.markNoticeSeen : bridgeMocks.acknowledge;
+      mutation.mockReturnValueOnce(firstRequest.promise).mockReturnValueOnce(secondRequest.promise);
+      render(<ManagedLifecycleHarness />);
+
+      await userEvent.click(await screen.findByRole('button', { name: triggerName }));
+      expect(screen.getByTestId(pendingTestId)).toHaveTextContent('true');
+      expect(screen.getByRole('button', { name: actionName })).toBeDisabled();
+
+      firstRequest.resolve(createDetail());
+      await act(async () => {
+        await firstRequest.promise;
+      });
+      expect(screen.getByTestId(pendingTestId)).toHaveTextContent('true');
+      expect(screen.getByRole('button', { name: actionName })).toBeDisabled();
+
+      secondRequest.resolve(createDetail());
+      await act(async () => {
+        await secondRequest.promise;
+      });
+      expect(screen.getByTestId(pendingTestId)).toHaveTextContent('false');
+      expect(screen.getByRole('button', { name: actionName })).toBeEnabled();
+    }
+  );
 });

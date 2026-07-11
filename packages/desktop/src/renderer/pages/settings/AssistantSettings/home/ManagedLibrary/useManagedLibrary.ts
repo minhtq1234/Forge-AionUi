@@ -20,7 +20,6 @@ type UseManagedLibraryParams = {
 
 type AdoptionResult = {
   detail: ManagedAssistantDetail;
-  readyToStart: boolean;
 };
 
 type ManagedViewContext = {
@@ -54,10 +53,9 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
   const [mutationError, setMutationError] = useState<ManagedMutationError>(null);
   const [lifecycleMutationError, setLifecycleMutationError] = useState<ManagedLifecycleMutationError>(null);
   const [lifecycleStateChanged, setLifecycleStateChanged] = useState(false);
-  const [isStartReady, setIsStartReady] = useState(false);
-  const [startRefreshFailed, setStartRefreshFailed] = useState(false);
   const detailRequestSequence = useRef(0);
   const lifecycleMutationSequence = useRef(0);
+  const lifecyclePendingSequences = useRef({ notice: 0, acknowledgement: 0 });
   const viewContextRef = useRef<{ assistantId: string | null; generation: number }>({
     assistantId: null,
     generation: 0,
@@ -115,21 +113,15 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
     void loadList();
   }, [loadList]);
 
-  const verifyManagedProjection = useCallback(
+  const refreshManagedProjection = useCallback(
     async (context: ManagedViewContext): Promise<boolean> => {
       if (!isCurrentView(context)) return false;
 
       try {
         const result = await onAdoptionChanged(context.assistantId);
         if (!isCurrentView(context) || !result.authoritative) return false;
-        const ready = result.ok && result.assistants.some((assistant) => assistant.id === context.assistantId);
-        setIsStartReady(ready);
-        setStartRefreshFailed(!ready);
-        return ready;
+        return result.ok && result.assistants.some((assistant) => assistant.id === context.assistantId);
       } catch {
-        if (!isCurrentView(context)) return false;
-        setStartRefreshFailed(true);
-        setIsStartReady(false);
         return false;
       }
     },
@@ -152,16 +144,13 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
       setLifecycleMutationError(null);
       setLifecycleStateChanged(false);
       setSelectedDetail(null);
-      setIsStartReady(false);
-      setStartRefreshFailed(false);
 
       try {
         const detail = await ipcBridge.managedAssistants.get.invoke({ id, locale: localeKey });
         if (detailRequestSequence.current !== requestSequence || !isCurrentView(context)) return null;
         replaceDetail(detail);
         if (detail.adoption.active) {
-          await verifyManagedProjection(context);
-          if (!isCurrentView(context)) return null;
+          void refreshManagedProjection(context);
         }
         return detail;
       } catch (error) {
@@ -174,7 +163,7 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
         }
       }
     },
-    [beginView, isCurrentView, localeKey, replaceDetail, verifyManagedProjection]
+    [beginView, isCurrentView, localeKey, refreshManagedProjection, replaceDetail]
   );
 
   const clearDetail = useCallback(() => {
@@ -194,8 +183,6 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
     setIsResetting(false);
     setIsMarkingNoticeSeen(false);
     setIsAcknowledging(false);
-    setIsStartReady(false);
-    setStartRefreshFailed(false);
   }, []);
 
   const invalidateCurrentView = useCallback(() => {
@@ -217,8 +204,8 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
     const assistantId = viewContextRef.current.assistantId;
     if (!assistantId) return false;
     const context = captureView(assistantId);
-    return context ? verifyManagedProjection(context) : false;
-  }, [captureView, verifyManagedProjection]);
+    return context ? refreshManagedProjection(context) : false;
+  }, [captureView, refreshManagedProjection]);
 
   const adopt = useCallback(
     async (id: string): Promise<AdoptionResult | null> => {
@@ -226,15 +213,12 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
       if (!context) return null;
       setIsAdopting(true);
       setMutationError(null);
-      setStartRefreshFailed(false);
       try {
         const detail = await ipcBridge.managedAssistants.setAdoption.invoke({ id, locale: localeKey, active: true });
         if (!isCurrentView(context)) return null;
         replaceDetail(detail);
-        setIsStartReady(false);
-        const readyToStart = await verifyManagedProjection(context);
-        if (!isCurrentView(context)) return null;
-        return { detail, readyToStart };
+        void refreshManagedProjection(context);
+        return { detail };
       } catch {
         if (!isCurrentView(context)) return null;
         setMutationError('adoption');
@@ -243,7 +227,7 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
         if (isCurrentView(context)) setIsAdopting(false);
       }
     },
-    [captureView, isCurrentView, localeKey, replaceDetail, verifyManagedProjection]
+    [captureView, isCurrentView, localeKey, refreshManagedProjection, replaceDetail]
   );
 
   const updatePreferences = useCallback(
@@ -326,6 +310,7 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
       if (!context) return null;
       const mutationSequence = lifecycleMutationSequence.current + 1;
       lifecycleMutationSequence.current = mutationSequence;
+      lifecyclePendingSequences.current[kind] = mutationSequence;
       if (kind === 'notice') setIsMarkingNoticeSeen(true);
       else setIsAcknowledging(true);
       setLifecycleMutationError(null);
@@ -352,7 +337,7 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
         setLifecycleMutationError(kind);
         return null;
       } finally {
-        if (isCurrentView(context)) {
+        if (isCurrentView(context) && lifecyclePendingSequences.current[kind] === mutationSequence) {
           if (kind === 'notice') setIsMarkingNoticeSeen(false);
           else setIsAcknowledging(false);
         }
@@ -387,8 +372,6 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
     mutationError,
     lifecycleMutationError,
     lifecycleStateChanged,
-    isStartReady,
-    startRefreshFailed,
     loadList,
     loadDetail,
     clearDetail,

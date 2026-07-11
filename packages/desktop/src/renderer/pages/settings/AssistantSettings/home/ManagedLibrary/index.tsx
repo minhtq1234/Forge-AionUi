@@ -121,8 +121,6 @@ export const ManagedLibraryContent: React.FC<ManagedLibraryContentProps> = ({
           localeKey={localeKey}
           isLoading={library.isDetailLoading}
           isAdopting={library.isAdopting}
-          isStartReady={library.isStartReady}
-          startRefreshFailed={library.startRefreshFailed}
           error={library.detailError}
           mutationError={library.mutationError}
           lifecycleMutationError={library.lifecycleMutationError}
@@ -132,7 +130,6 @@ export const ManagedLibraryContent: React.FC<ManagedLibraryContentProps> = ({
           onBack={handleBack}
           onRetry={() => selectedId && void library.loadDetail(selectedId)}
           onAdopt={() => void handleAdopt()}
-          onRetryStartRefresh={() => void library.refreshAfterAdoption()}
           onStartChat={() => {
             if (library.selectedDetail) onStartChat(library.selectedDetail.assistant);
           }}

@@ -18,6 +18,7 @@ type ManagedUpdateNoticeProps = {
   onMarkNoticeSeen: (version: number) => Promise<void>;
   onAcknowledge: (version: number) => Promise<void>;
   onRefresh: () => void;
+  onReviewClosed?: () => void;
 };
 
 const CATEGORY_KEYS = {
@@ -40,6 +41,7 @@ const ManagedUpdateNotice: React.FC<ManagedUpdateNoticeProps> = ({
   onMarkNoticeSeen,
   onAcknowledge,
   onRefresh,
+  onReviewClosed,
 }) => {
   const { t } = useTranslation();
   const [reviewVisible, setReviewVisible] = useState(false);
@@ -50,7 +52,10 @@ const ManagedUpdateNotice: React.FC<ManagedUpdateNoticeProps> = ({
 
   const closeReview = () => {
     setReviewVisible(false);
-    window.setTimeout(() => reviewButtonRef.current?.focus(), 0);
+    window.setTimeout(() => {
+      if (reviewButtonRef.current) reviewButtonRef.current.focus();
+      else onReviewClosed?.();
+    }, 0);
   };
 
   const reviewCurrent = () => {
@@ -123,6 +128,15 @@ const ManagedUpdateNotice: React.FC<ManagedUpdateNoticeProps> = ({
               <p className='m-0 text-14px leading-22px text-t-secondary'>
                 {t('settings.managedTeammates.lifecycle.highImpactBody')}
               </p>
+              <div className='mt-8px text-12px text-t-tertiary'>
+                {t('settings.managedTeammates.version', { version: required.version })}
+              </div>
+              <div className='mt-4px text-12px text-t-tertiary'>
+                {t('settings.managedTeammates.lifecycle.publishedAt')}:{' '}
+                <time dateTime={new Date(required.published_at * 1000).toISOString()}>
+                  {formatManagedTimestamp(required.published_at, localeKey)}
+                </time>
+              </div>
               <p className={`${styles.adminText} m-0 mt-8px text-14px leading-22px text-t-primary`}>
                 {required.release_notes}
               </p>

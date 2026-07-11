@@ -16,6 +16,7 @@ export type ManagedLifecycleNoticesProps = {
   onAcknowledge: (version: number) => Promise<void>;
   onRefresh: () => void;
   onOpenReplacement: (id: string) => void;
+  onReviewClosed?: () => void;
 };
 
 const ManagedLifecycleNotices: React.FC<ManagedLifecycleNoticesProps> = ({
@@ -29,6 +30,7 @@ const ManagedLifecycleNotices: React.FC<ManagedLifecycleNoticesProps> = ({
   onAcknowledge,
   onRefresh,
   onOpenReplacement,
+  onReviewClosed,
 }) => {
   const retired = detail.governance.lifecycle === 'retired' || detail.start_state.blocker === 'retired';
   const plannedRetirement = retired && detail.start_state.can_start_new_work;
@@ -57,6 +59,7 @@ const ManagedLifecycleNotices: React.FC<ManagedLifecycleNoticesProps> = ({
         onMarkNoticeSeen={onMarkNoticeSeen}
         onAcknowledge={onAcknowledge}
         onRefresh={onRefresh}
+        onReviewClosed={onReviewClosed}
       />
     </div>
   );

@@ -1,5 +1,6 @@
 import type { Assistant, AssistantDetail } from '@/common/types/agent/assistantTypes';
 import type { ManagedAssistantDetail, ManagedAssistantSummary } from '@/common/types/agent/managedAssistantTypes';
+import { BackendHttpError } from '@/common/adapter/httpBridge';
 import { useAssistantList } from '@/renderer/hooks/assistant/useAssistantList';
 import type { AssistantListLoadResult } from '@/renderer/hooks/assistant/useAssistantList';
 import AssistantHomeTabs from '@/renderer/pages/settings/AssistantSettings/home/AssistantHomeTabs';
@@ -333,8 +334,6 @@ const ManagedDetailProjectionHarness: React.FC<{
       localeKey='en-US'
       isLoading={library.isDetailLoading}
       isAdopting={library.isAdopting}
-      isStartReady={library.isStartReady}
-      startRefreshFailed={library.startRefreshFailed}
       error={library.detailError}
       mutationError={library.mutationError}
       lifecycleMutationError={library.lifecycleMutationError}
@@ -344,7 +343,6 @@ const ManagedDetailProjectionHarness: React.FC<{
       onBack={() => undefined}
       onRetry={() => undefined}
       onAdopt={() => undefined}
-      onRetryStartRefresh={() => void library.refreshAfterAdoption()}
       onStartChat={() => undefined}
       onMarkNoticeSeen={async (version) => {
         await library.markNoticeSeen(version);
@@ -595,7 +593,7 @@ describe('ManagedLibrary', () => {
     expect(getManagedAssistant).toHaveBeenCalledTimes(2);
   });
 
-  it('awaits the generic assistant refresh before exposing Start working after adoption', async () => {
+  it('uses managed start state while the generic assistant refresh completes after adoption', async () => {
     const refreshRequest = deferred<AssistantListLoadResult>();
     const onAdoptionChanged = vi.fn(() => refreshRequest.promise);
 
@@ -605,7 +603,7 @@ describe('ManagedLibrary', () => {
 
     expect(setManagedAdoption).toHaveBeenCalledWith({ id: 'finance-close', locale: 'en-US', active: true });
     expect(onAdoptionChanged).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('button', { name: 'Start working' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start working' })).toBeEnabled();
 
     refreshRequest.resolve(loadSuccess(createAssistant()));
     expect(await screen.findByRole('button', { name: 'Start working' })).toBeInTheDocument();
@@ -623,17 +621,17 @@ describe('ManagedLibrary', () => {
     expect(onAdoptionChanged).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps an already-active detail retryable when its generic projection is absent', async () => {
+  it('keeps an already-active detail startable when its generic projection is absent', async () => {
     getManagedAssistant.mockResolvedValue(createDetail({ adoption: { active: true, adopted_at: 1_788_192_100 } }));
 
     renderLibrary({ initialDetailId: 'finance-close', onAdoptionChanged: vi.fn(async () => loadSuccess()) });
 
-    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Start working' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeEnabled();
+    expect(screen.queryByText(/My Teammates could not be refreshed/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add to My Teammates' })).not.toBeInTheDocument();
   });
 
-  it('retains successful adoption and retries only the generic refresh when refresh fails', async () => {
+  it('retains successful adoption without surfacing generic refresh failure as a lifecycle blocker', async () => {
     const onAdoptionChanged = vi
       .fn()
       .mockResolvedValueOnce(loadFailure())
@@ -643,16 +641,10 @@ describe('ManagedLibrary', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
     await userEvent.click(await screen.findByRole('button', { name: 'Add to My Teammates' }));
 
-    expect(
-      await screen.findByText(
-        'The Teammate was added, but My Teammates could not be refreshed. Try again before starting work.'
-      )
-    ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
-
     expect(await screen.findByRole('button', { name: 'Start working' })).toBeInTheDocument();
+    expect(screen.queryByText(/My Teammates could not be refreshed/)).not.toBeInTheDocument();
     expect(setManagedAdoption).toHaveBeenCalledTimes(1);
-    expect(onAdoptionChanged).toHaveBeenCalledTimes(2);
+    expect(onAdoptionChanged).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a ready active detail after a superseded successful projection and recovers after current failure', async () => {
@@ -712,8 +704,8 @@ describe('ManagedLibrary', () => {
 
     const failedResult = refreshProjection();
     expect(await failedResult).toBe(false);
-    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Start working' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
 
     const recoveredResult = refreshProjection();
     expect(await recoveredResult).toBe(true);
@@ -778,8 +770,8 @@ describe('ManagedLibrary', () => {
 
     const failedResult = refreshProjection();
     expect(await failedResult).toBe(false);
-    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Start working' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
 
     const recoveredResult = refreshProjection();
     expect(await recoveredResult).toBe(true);
@@ -801,8 +793,8 @@ describe('ManagedLibrary', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
     await userEvent.click(await screen.findByRole('button', { name: 'Add to My Teammates' }));
 
-    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Start working' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
     expect(listAssistants).toHaveBeenCalledTimes(2);
   });
 
@@ -819,8 +811,8 @@ describe('ManagedLibrary', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
     await userEvent.click(await screen.findByRole('button', { name: 'Add to My Teammates' }));
 
-    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Start working' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
     expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to load assistants:', expect.any(Error));
     consoleErrorSpy.mockRestore();
   });
@@ -1121,7 +1113,7 @@ describe('managed assistant entry points', () => {
     const staleAStart = within(screen.getByTestId('assistant-card-finance-close')).getByRole('button', {
       name: 'Start working',
     });
-    expect(staleAStart).toBeDisabled();
+    expect(staleAStart).toBeEnabled();
     expect(
       within(screen.getByTestId('assistant-card-contract-review')).getByRole('button', { name: 'Start working' })
     ).toBeEnabled();
@@ -1131,7 +1123,7 @@ describe('managed assistant entry points', () => {
       await staleARefresh.promise;
     });
     expect(screen.getAllByTestId('assistant-card-finance-close')).toHaveLength(1);
-    expect(staleAStart).toBeDisabled();
+    expect(staleAStart).toBeEnabled();
     consoleErrorSpy.mockRestore();
   });
 
@@ -1226,7 +1218,7 @@ describe('managed assistant entry points', () => {
     expect(screen.getAllByTestId('assistant-card-finance-close')).toHaveLength(1);
     expect(
       within(screen.getByTestId('assistant-card-finance-close')).getByRole('button', { name: 'Start working' })
-    ).toBeDisabled();
+    ).toBeEnabled();
 
     let otherIdResult: Promise<AssistantListLoadResult> | undefined;
     act(() => {
@@ -1239,7 +1231,7 @@ describe('managed assistant entry points', () => {
     expect(screen.getAllByTestId('assistant-card-finance-close')).toHaveLength(1);
     expect(
       within(screen.getByTestId('assistant-card-finance-close')).getByRole('button', { name: 'Start working' })
-    ).toBeDisabled();
+    ).toBeEnabled();
 
     let exactIdResult: Promise<AssistantListLoadResult> | undefined;
     act(() => {
@@ -1254,7 +1246,7 @@ describe('managed assistant entry points', () => {
     ).toBeEnabled();
   });
 
-  it('keeps a stale managed row visible but blocks Start until its exact generic projection refreshes', async () => {
+  it('keeps a stale managed row visible and authorizes Start from its managed summary', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const onStartChat = vi.fn();
     const assistant = createAssistant();
@@ -1272,14 +1264,14 @@ describe('managed assistant entry points', () => {
 
     await waitFor(() => expect(listAssistants).toHaveBeenCalledTimes(1));
     await userEvent.click(await screen.findByRole('button', { name: 'View details' }));
-    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeEnabled();
 
     await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
     const start = await screen.findByRole('button', { name: 'Start working' });
     expect(screen.getByTestId('assistant-card-finance-close')).toBeInTheDocument();
-    expect(start).toBeDisabled();
+    expect(start).toBeEnabled();
     await userEvent.click(start);
-    expect(onStartChat).not.toHaveBeenCalled();
+    expect(onStartChat).toHaveBeenCalledWith(assistant);
 
     await userEvent.click(screen.getByRole('button', { name: 'View details' }));
     expect(await screen.findByRole('button', { name: 'Start working' })).toBeInTheDocument();
@@ -1287,7 +1279,7 @@ describe('managed assistant entry points', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Start working' }));
-    expect(onStartChat).toHaveBeenCalledWith(assistant);
+    expect(onStartChat).toHaveBeenCalledTimes(2);
     consoleErrorSpy.mockRestore();
   });
 
@@ -1394,6 +1386,7 @@ describe('managed assistant entry points', () => {
             onDelete={vi.fn()}
             onToggleEnabled={vi.fn()}
             onStartChat={onStartChat}
+            managedSummary={createSummary({ assistant, adoption: { active: true } })}
           />
         </DndContext>
       </ConfigProvider>
@@ -1447,6 +1440,39 @@ describe('managed assistant entry points', () => {
 
     expect(markManagedNoticeSeen).toHaveBeenCalledWith({ id: 'finance-close', locale: 'en-US', version: 3 });
     await waitFor(() => expect(screen.queryByText('This Teammate was updated')).not.toBeInTheDocument());
+  });
+
+  it('returns focus to Start after Review removes its own trigger from the mutation response', async () => {
+    const routine = createDetail({
+      adoption: { active: true },
+      update: {
+        current_version: 3,
+        last_seen_version: 2,
+        notice_pending: true,
+        acknowledgement_required: false,
+        change_impact: 'routine',
+        changed_categories: ['content'],
+      },
+      start_state: { can_start_new_work: true },
+    });
+    getManagedAssistant.mockResolvedValue(routine);
+    markManagedNoticeSeen.mockResolvedValue({
+      ...routine,
+      update: { ...routine.update, notice_pending: false, last_seen_version: 3 },
+    });
+
+    renderLibrary();
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Review update' }));
+
+    expect(await screen.findByRole('dialog', { name: 'This Teammate was updated' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Review update' })).not.toBeInTheDocument());
+    const reviewDialog = screen.getByRole('dialog', { name: 'This Teammate was updated' });
+    const closeButton = within(reviewDialog).getByText('Close').closest('button');
+    if (!closeButton) throw new Error('Review close action missing');
+    await userEvent.click(closeButton);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start working' })).toHaveFocus());
   });
 
   it('blocks start until the exact required acknowledgement response allows it', async () => {
@@ -1561,6 +1587,144 @@ describe('managed assistant entry points', () => {
     expect(getManagedAssistant).toHaveBeenCalledTimes(detailCallsBeforeRender);
   });
 
+  it('patches My Teammates from a successful lifecycle response without stale notice state', async () => {
+    const managed = createAssistant();
+    const routineSummary = createSummary({
+      assistant: managed,
+      adoption: { active: true },
+      update: {
+        current_version: 3,
+        last_seen_version: 2,
+        notice_pending: true,
+        acknowledgement_required: false,
+        changed_categories: ['content'],
+      },
+      start_state: { can_start_new_work: true },
+    });
+    const routineDetail = createDetail({
+      governance: routineSummary.governance,
+      adoption: routineSummary.adoption,
+      update: routineSummary.update,
+      start_state: routineSummary.start_state,
+    });
+    listManagedAssistants.mockResolvedValue([routineSummary]);
+    getManagedAssistant.mockResolvedValue(routineDetail);
+    markManagedNoticeSeen.mockResolvedValue({
+      ...routineDetail,
+      update: { ...routineDetail.update, notice_pending: false, last_seen_version: 3 },
+      start_state: {
+        can_start_new_work: false,
+        blocker: 'temporarily_unavailable',
+        unavailable_reason: 'agent',
+      },
+    });
+
+    render(
+      <ConfigProvider>
+        <AssistantHomeTabs
+          assistants={[managed]}
+          localeKey='en-US'
+          onOpenDetail={vi.fn()}
+          onOpenManagedDetail={vi.fn()}
+          onOpenSettings={vi.fn()}
+          onDuplicate={vi.fn()}
+          onDelete={vi.fn()}
+          onCreate={vi.fn()}
+          onToggleEnabled={vi.fn()}
+          onReorder={vi.fn()}
+          onStartChat={vi.fn()}
+          onAdoptionChanged={vi.fn(async () => loadSuccess(managed))}
+        />
+      </ConfigProvider>
+    );
+
+    expect(await screen.findByText('Updated by VNG')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'VNG Library' }));
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
+
+    expect(await screen.findByText('Temporarily unavailable')).toBeInTheDocument();
+    expect(screen.queryByText('Updated by VNG')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start working' })).toBeDisabled();
+  });
+
+  it('replaces My Teammates summary from a 409 refetch without a stale blocker', async () => {
+    const managed = createAssistant();
+    const requiredSummary = createSummary({
+      assistant: managed,
+      adoption: { active: true },
+      update: {
+        current_version: 3,
+        notice_pending: false,
+        acknowledgement_required: true,
+        changed_categories: ['permission'],
+        required_acknowledgement: {
+          version: 2,
+          release_notes: 'Review v2.',
+          published_at: 1_788_105_600,
+          changed_categories: ['permission'],
+        },
+      },
+      start_state: { can_start_new_work: false, blocker: 'acknowledgement_required' },
+    });
+    const requiredDetail = createDetail({
+      governance: requiredSummary.governance,
+      adoption: requiredSummary.adoption,
+      update: requiredSummary.update,
+      start_state: requiredSummary.start_state,
+    });
+    const refreshedDetail = {
+      ...requiredDetail,
+      update: {
+        ...requiredDetail.update,
+        acknowledgement_required: false,
+        acknowledged_version: 2,
+        required_acknowledgement: undefined,
+      },
+      start_state: { can_start_new_work: true } as const,
+    };
+    listManagedAssistants.mockResolvedValue([requiredSummary]);
+    getManagedAssistant.mockResolvedValueOnce(requiredDetail).mockResolvedValueOnce(refreshedDetail);
+    acknowledgeManagedAssistant.mockRejectedValue(
+      new BackendHttpError({
+        method: 'POST',
+        path: '/api/managed-assistants/finance-close/acknowledge',
+        status: 409,
+        body: { code: 'MANAGED_ASSISTANT_ACK_VERSION_MISMATCH', error: 'private backend message' },
+      })
+    );
+
+    render(
+      <ConfigProvider>
+        <AssistantHomeTabs
+          assistants={[managed]}
+          localeKey='en-US'
+          onOpenDetail={vi.fn()}
+          onOpenManagedDetail={vi.fn()}
+          onOpenSettings={vi.fn()}
+          onDuplicate={vi.fn()}
+          onDelete={vi.fn()}
+          onCreate={vi.fn()}
+          onToggleEnabled={vi.fn()}
+          onReorder={vi.fn()}
+          onStartChat={vi.fn()}
+          onAdoptionChanged={vi.fn(async () => loadSuccess(managed))}
+        />
+      </ConfigProvider>
+    );
+
+    expect(await screen.findByText('Acknowledgement required')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'VNG Library' }));
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+    await userEvent.click(screen.getByRole('button', { name: 'Acknowledge change' }));
+    await waitFor(() => expect(screen.queryByText('Review an important change')).not.toBeInTheDocument());
+    await userEvent.click(screen.getByRole('tab', { name: 'My Teammates' }));
+
+    expect(screen.queryByText('Acknowledgement required')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start working' })).toBeEnabled();
+  });
+
   it('shows and enforces the managed lifecycle blocker in My Teammates', () => {
     const onStartChat = vi.fn();
     const assistant = createAssistant();
@@ -1594,7 +1758,6 @@ describe('managed assistant entry points', () => {
             onDelete={vi.fn()}
             onToggleEnabled={vi.fn()}
             onStartChat={onStartChat}
-            managedStartReady
             managedSummary={summary}
           />
         </DndContext>
