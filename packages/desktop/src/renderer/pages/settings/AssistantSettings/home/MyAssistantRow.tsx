@@ -5,13 +5,15 @@
  */
 
 import type { AssistantListItem } from '../types';
+import type { ManagedAssistantSummary } from '@/common/types/agent/managedAssistantTypes';
+import { canStartManagedAssistant, getManagedLifecycleState } from '@/renderer/components/ManagedTeammates';
 import AssistantAvatar from '../AssistantAvatar';
 import RuntimeBadge from './RuntimeBadge';
 import { resolveAssistantDisplayName } from '@/renderer/utils/model/assistantDisplay';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Button, Dropdown, Menu, Switch, Tooltip } from '@arco-design/web-react';
-import { Attention, Drag, MoreOne, Play, Right, Shield } from '@icon-park/react';
+import { Button, Dropdown, Menu, Switch, Tag, Tooltip } from '@arco-design/web-react';
+import { Attention, Drag, MoreOne, Play, Right, Shield, UpdateRotation } from '@icon-park/react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import styles from './ManagedLibrary/ManagedLibrary.module.css';
@@ -26,6 +28,7 @@ type MyAssistantRowProps = {
   onToggleEnabled: (assistant: AssistantListItem, checked: boolean) => void;
   onStartChat: (assistant: AssistantListItem) => void;
   managedStartReady?: boolean;
+  managedSummary?: ManagedAssistantSummary;
 };
 
 const ManagedAssistantRow: React.FC<MyAssistantRowProps> = ({
@@ -34,8 +37,23 @@ const ManagedAssistantRow: React.FC<MyAssistantRowProps> = ({
   onOpenManagedDetail,
   onStartChat,
   managedStartReady = true,
+  managedSummary,
 }) => {
   const { t } = useTranslation();
+  const lifecycleState = managedSummary ? getManagedLifecycleState(managedSummary) : 'available';
+  const lifecycleLabel =
+    lifecycleState === 'routine_update'
+      ? t('settings.managedTeammates.lifecycle.updatedBadge')
+      : lifecycleState === 'acknowledgement_required'
+        ? t('settings.managedTeammates.lifecycle.acknowledgementRequired')
+        : lifecycleState === 'planned_retirement'
+          ? t('settings.managedTeammates.lifecycle.retiringTitle')
+          : lifecycleState === 'retired'
+            ? t('settings.managedTeammates.lifecycle.retiredTitle')
+            : lifecycleState === 'temporarily_unavailable'
+              ? t('settings.managedTeammates.lifecycle.temporarilyUnavailableTitle')
+              : null;
+  const canStart = managedStartReady && (!managedSummary || canStartManagedAssistant(managedSummary));
   return (
     <div
       data-testid={`assistant-card-${assistant.id}`}
@@ -54,6 +72,15 @@ const ManagedAssistantRow: React.FC<MyAssistantRowProps> = ({
             <Shield theme='outline' size={14} fill='currentColor' />
             {t('settings.managedTeammates.sourceManaged')}
           </div>
+          {lifecycleLabel ? (
+            <Tag
+              bordered={false}
+              icon={<UpdateRotation theme='outline' size={13} fill='currentColor' />}
+              className='!mt-6px !max-w-full !whitespace-normal !bg-fill-2 !text-t-secondary'
+            >
+              {lifecycleLabel}
+            </Tag>
+          ) : null}
         </div>
       </div>
       <div className='flex min-w-0 flex-wrap items-center justify-end gap-8px'>
@@ -70,7 +97,7 @@ const ManagedAssistantRow: React.FC<MyAssistantRowProps> = ({
             size='small'
             icon={<Play theme='outline' size={14} fill='currentColor' />}
             onClick={() => onStartChat(assistant)}
-            disabled={!managedStartReady}
+            disabled={!canStart}
           >
             {t('settings.managedTeammates.startWorking')}
           </Button>

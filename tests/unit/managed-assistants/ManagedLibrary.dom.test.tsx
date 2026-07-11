@@ -19,6 +19,8 @@ const getManagedAssistant = vi.fn();
 const setManagedAdoption = vi.fn();
 const updateManagedPreferences = vi.fn();
 const resetManagedPreferences = vi.fn();
+const acknowledgeManagedAssistant = vi.fn();
+const markManagedNoticeSeen = vi.fn();
 const listAssistants = vi.fn();
 
 let translationOverrides: Record<string, string> = {};
@@ -44,6 +46,8 @@ vi.mock('@/common', () => ({
       setAdoption: { invoke: (...args: unknown[]) => setManagedAdoption(...args) },
       updatePreferences: { invoke: (...args: unknown[]) => updateManagedPreferences(...args) },
       resetPreferences: { invoke: (...args: unknown[]) => resetManagedPreferences(...args) },
+      acknowledge: { invoke: (...args: unknown[]) => acknowledgeManagedAssistant(...args) },
+      markNoticeSeen: { invoke: (...args: unknown[]) => markManagedNoticeSeen(...args) },
     },
   },
 }));
@@ -105,6 +109,34 @@ vi.mock('react-i18next', () => ({
         'settings.managedTeammates.unauthorizedBody': 'Sign in with an authorized VNG account and try again.',
         'settings.managedTeammates.loadingLibrary': 'Loading VNG Library',
         'settings.managedTeammates.loadingDetails': 'Loading Teammate details',
+        'settings.managedTeammates.lifecycle.updatedBadge': 'Updated by VNG',
+        'settings.managedTeammates.lifecycle.routineTitle': 'This Teammate was updated',
+        'settings.managedTeammates.lifecycle.releaseNotes': 'What changed',
+        'settings.managedTeammates.lifecycle.publishedAt': 'Published',
+        'settings.managedTeammates.lifecycle.reviewUpdate': 'Review update',
+        'settings.managedTeammates.lifecycle.dismissUpdate': 'Dismiss',
+        'settings.managedTeammates.lifecycle.noticeError': 'The update could not be dismissed. Try again.',
+        'settings.managedTeammates.lifecycle.stateChanged': 'The Teammate changed while you were reviewing it.',
+        'settings.managedTeammates.lifecycle.acknowledgementRequired': 'Acknowledgement required',
+        'settings.managedTeammates.lifecycle.highImpactTitle': 'Review an important change',
+        'settings.managedTeammates.lifecycle.highImpactBody': 'Review and acknowledge before starting.',
+        'settings.managedTeammates.lifecycle.acknowledge': 'Acknowledge change',
+        'settings.managedTeammates.lifecycle.acknowledgementError': 'The change could not be acknowledged. Try again.',
+        'settings.managedTeammates.lifecycle.categories.content': 'Instructions and content',
+        'settings.managedTeammates.lifecycle.categories.permission': 'Permissions',
+        'settings.managedTeammates.lifecycle.retiringTitle': 'Planned retirement',
+        'settings.managedTeammates.lifecycle.retiredTitle': 'This Teammate is retired',
+        'settings.managedTeammates.lifecycle.retirementReason': 'Reason',
+        'settings.managedTeammates.lifecycle.retirementCutoff': 'Cutoff',
+        'settings.managedTeammates.lifecycle.retiredImmediate': 'New work is no longer available.',
+        'settings.managedTeammates.lifecycle.viewReplacement': 'View replacement',
+        'settings.managedTeammates.lifecycle.personalSetupRetained':
+          'Your personal setup is retained according to company policy.',
+        'settings.managedTeammates.lifecycle.temporarilyUnavailableTitle': 'Temporarily unavailable',
+        'settings.managedTeammates.lifecycle.temporarilyUnavailableBody': 'Cannot start new work right now.',
+        'settings.managedTeammates.lifecycle.unavailableReasons.agent': 'Its runtime is unavailable.',
+        'settings.managedTeammates.lifecycle.checkAgain': 'Check again',
+        'common.close': 'Close',
         'common.retry': 'Retry',
       };
       if (key === 'settings.managedTeammates.version') return `Version ${options?.version ?? ''}`;
@@ -204,7 +236,7 @@ const createSummary = (overrides: Partial<ManagedAssistantSummary> = {}): Manage
     acknowledgement_required: false,
     changed_categories: [],
   },
-  start_state: { can_start_new_work: false },
+  start_state: { can_start_new_work: true },
   ...overrides,
 });
 
@@ -305,11 +337,22 @@ const ManagedDetailProjectionHarness: React.FC<{
       startRefreshFailed={library.startRefreshFailed}
       error={library.detailError}
       mutationError={library.mutationError}
+      lifecycleMutationError={library.lifecycleMutationError}
+      lifecycleStateChanged={library.lifecycleStateChanged}
+      isMarkingNoticeSeen={library.isMarkingNoticeSeen}
+      isAcknowledging={library.isAcknowledging}
       onBack={() => undefined}
       onRetry={() => undefined}
       onAdopt={() => undefined}
       onRetryStartRefresh={() => void library.refreshAfterAdoption()}
       onStartChat={() => undefined}
+      onMarkNoticeSeen={async (version) => {
+        await library.markNoticeSeen(version);
+      }}
+      onAcknowledge={async (version) => {
+        await library.acknowledge(version);
+      }}
+      onOpenReplacement={() => undefined}
     />
   );
 };
@@ -374,6 +417,8 @@ describe('ManagedLibrary', () => {
     setManagedAdoption.mockResolvedValue(createDetail({ adoption: { active: true, adopted_at: 1_788_192_100 } }));
     updateManagedPreferences.mockResolvedValue(createDetail());
     resetManagedPreferences.mockResolvedValue(createDetail());
+    acknowledgeManagedAssistant.mockResolvedValue(createDetail());
+    markManagedNoticeSeen.mockResolvedValue(createDetail());
     listAssistants.mockResolvedValue([]);
   });
 
@@ -1365,5 +1410,199 @@ describe('managed assistant entry points', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Start working' }));
     expect(onStartChat).toHaveBeenCalledWith(assistant);
+  });
+
+  it('keeps routine updates startable and hides the notice only from the mutation response', async () => {
+    const onStartChat = vi.fn();
+    listManagedAssistants.mockResolvedValue([createSummary()]);
+    const routine = createDetail({
+      adoption: { active: true },
+      update: {
+        current_version: 3,
+        last_seen_version: 2,
+        notice_pending: true,
+        acknowledgement_required: false,
+        change_impact: 'routine',
+        changed_categories: ['content'],
+      },
+      governance: {
+        ...createDetail().governance,
+        published_version: 3,
+        release_notes: 'A clearer close checklist.',
+      },
+      start_state: { can_start_new_work: true },
+    });
+    getManagedAssistant.mockResolvedValue(routine);
+    markManagedNoticeSeen.mockResolvedValue({
+      ...routine,
+      update: { ...routine.update, notice_pending: false, last_seen_version: 3 },
+    });
+
+    renderLibrary({ onStartChat });
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+
+    expect(await screen.findByText('This Teammate was updated')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start working' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+
+    expect(markManagedNoticeSeen).toHaveBeenCalledWith({ id: 'finance-close', locale: 'en-US', version: 3 });
+    await waitFor(() => expect(screen.queryByText('This Teammate was updated')).not.toBeInTheDocument());
+  });
+
+  it('blocks start until the exact required acknowledgement response allows it', async () => {
+    listManagedAssistants.mockResolvedValue([createSummary()]);
+    const required = createDetail({
+      adoption: { active: true },
+      update: {
+        current_version: 3,
+        notice_pending: true,
+        acknowledgement_required: true,
+        change_impact: 'routine',
+        changed_categories: ['content'],
+        required_acknowledgement: {
+          version: 2,
+          release_notes: 'Permissions changed in v2.',
+          published_at: 1_788_105_600,
+          changed_categories: ['permission'],
+        },
+      },
+      start_state: { can_start_new_work: false, blocker: 'acknowledgement_required' },
+    });
+    getManagedAssistant.mockResolvedValue(required);
+    acknowledgeManagedAssistant.mockResolvedValue({
+      ...required,
+      update: {
+        ...required.update,
+        acknowledged_version: 2,
+        acknowledgement_required: false,
+        required_acknowledgement: undefined,
+      },
+      start_state: { can_start_new_work: true },
+    });
+
+    renderLibrary();
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+
+    expect(await screen.findByText('Review an important change')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start working' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Acknowledge change' }));
+
+    expect(acknowledgeManagedAssistant).toHaveBeenCalledWith({ id: 'finance-close', locale: 'en-US', version: 2 });
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeEnabled();
+  });
+
+  it('opens a backend-projected replacement in the dedicated VNG Library detail', async () => {
+    listManagedAssistants.mockResolvedValue([createSummary()]);
+    const retired = createDetail({
+      adoption: { active: true },
+      governance: {
+        ...createDetail().governance,
+        lifecycle: 'retired',
+        retirement_reason: 'Use the new close process.',
+        replacement_assistant_id: 'finance-close-v2',
+      },
+      start_state: { can_start_new_work: false, blocker: 'retired' },
+    });
+    getManagedAssistant.mockImplementation(({ id }: { id: string }) =>
+      Promise.resolve(
+        id === 'finance-close-v2' ? createDetailFor('finance-close-v2', 'Finance Close Coordinator V2') : retired
+      )
+    );
+
+    renderLibrary();
+    await userEvent.click(await screen.findByRole('button', { name: /Finance Close Coordinator/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'View replacement' }));
+
+    expect(getManagedAssistant).toHaveBeenLastCalledWith({ id: 'finance-close-v2', locale: 'en-US' });
+    expect(await screen.findByRole('heading', { name: 'Finance Close Coordinator V2' })).toBeInTheDocument();
+  });
+
+  it('uses one managed summary source for My Teammates lifecycle state without a row detail fetch', async () => {
+    const managed = createAssistant();
+    const listCallsBeforeRender = listManagedAssistants.mock.calls.length;
+    const detailCallsBeforeRender = getManagedAssistant.mock.calls.length;
+    listManagedAssistants.mockResolvedValue([
+      createSummary({
+        assistant: managed,
+        adoption: { active: true },
+        update: {
+          current_version: 3,
+          last_seen_version: 2,
+          notice_pending: true,
+          acknowledgement_required: false,
+          change_impact: 'routine',
+          changed_categories: ['content'],
+        },
+        start_state: { can_start_new_work: true },
+      }),
+    ]);
+
+    render(
+      <ConfigProvider>
+        <AssistantHomeTabs
+          assistants={[managed]}
+          localeKey='en-US'
+          onOpenDetail={vi.fn()}
+          onOpenManagedDetail={vi.fn()}
+          onOpenSettings={vi.fn()}
+          onDuplicate={vi.fn()}
+          onDelete={vi.fn()}
+          onCreate={vi.fn()}
+          onToggleEnabled={vi.fn()}
+          onReorder={vi.fn()}
+          onStartChat={vi.fn()}
+          onAdoptionChanged={vi.fn(async () => loadSuccess(managed))}
+        />
+      </ConfigProvider>
+    );
+
+    expect(await screen.findByText('Updated by VNG')).toBeInTheDocument();
+    expect(listManagedAssistants).toHaveBeenCalledTimes(listCallsBeforeRender + 1);
+    expect(getManagedAssistant).toHaveBeenCalledTimes(detailCallsBeforeRender);
+  });
+
+  it('shows and enforces the managed lifecycle blocker in My Teammates', () => {
+    const onStartChat = vi.fn();
+    const assistant = createAssistant();
+    const summary = createSummary({
+      assistant,
+      adoption: { active: true },
+      update: {
+        current_version: 3,
+        notice_pending: false,
+        acknowledgement_required: true,
+        changed_categories: [],
+        required_acknowledgement: {
+          version: 2,
+          release_notes: 'Review v2.',
+          published_at: 1_788_105_600,
+          changed_categories: ['permission'],
+        },
+      },
+      start_state: { can_start_new_work: false, blocker: 'acknowledgement_required' },
+    });
+
+    render(
+      <ConfigProvider>
+        <DndContext>
+          <MyAssistantRow
+            assistant={assistant}
+            localeKey='en-US'
+            draggable={false}
+            onOpenDetail={vi.fn()}
+            onOpenManagedDetail={vi.fn()}
+            onDelete={vi.fn()}
+            onToggleEnabled={vi.fn()}
+            onStartChat={onStartChat}
+            managedStartReady
+            managedSummary={summary}
+          />
+        </DndContext>
+      </ConfigProvider>
+    );
+
+    expect(screen.getByText('Acknowledgement required')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start working' })).toBeDisabled();
+    expect(onStartChat).not.toHaveBeenCalled();
   });
 });

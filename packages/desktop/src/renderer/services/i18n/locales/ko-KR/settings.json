@@ -72,7 +72,49 @@
     "refreshError": "Teammate가 추가되었지만 내 Teammates를 새로 고칠 수 없습니다. 업무를 시작하기 전에 다시 시도하세요.",
     "unauthorizedTitle": "VNG 라이브러리에 접근할 수 없습니다",
     "unauthorizedBody": "승인된 VNG 계정으로 로그인한 후 다시 시도하세요.",
-    "managedActionBlocked": "VNG 관리형 Teammates는 VNG 라이브러리에서만 볼 수 있습니다."
+    "managedActionBlocked": "VNG 관리형 Teammates는 VNG 라이브러리에서만 볼 수 있습니다.",
+    "lifecycle": {
+      "updatedBadge": "VNG에서 업데이트함",
+      "routineTitle": "이 팀원이 업데이트되었습니다",
+      "releaseNotes": "변경 내용",
+      "publishedAt": "게시 시간",
+      "reviewUpdate": "업데이트 검토",
+      "dismissUpdate": "닫기",
+      "noticeError": "업데이트를 닫을 수 없습니다. 다시 시도하세요.",
+      "stateChanged": "검토하는 동안 팀원이 변경되었습니다. 최신 세부 정보를 확인하세요.",
+      "acknowledgementRequired": "확인 필요",
+      "highImpactTitle": "중요 변경 검토",
+      "highImpactBody": "새 작업을 시작하기 전에 변경 사항을 검토하고 확인하세요.",
+      "acknowledge": "변경 확인",
+      "acknowledgementError": "변경 사항을 확인할 수 없습니다. 다시 시도하세요.",
+      "categories": {
+        "agent": "런타임",
+        "permission": "권한",
+        "requiredSkills": "필수 기능",
+        "mcps": "연결된 도구",
+        "dataAccess": "데이터 액세스",
+        "personalizationPolicy": "개인 설정 정책",
+        "content": "지침 및 콘텐츠"
+      },
+      "retiringTitle": "사용 종료 예정",
+      "retiredTitle": "이 팀원은 사용 종료되었습니다",
+      "retirementReason": "사유",
+      "retirementCutoff": "종료 시간",
+      "retiredImmediate": "새 작업을 시작할 수 없습니다.",
+      "replacement": "대체 팀원",
+      "viewReplacement": "대체 팀원 보기",
+      "personalSetupRetained": "개인 설정은 회사 정책에 따라 유지됩니다.",
+      "temporarilyUnavailableTitle": "일시적으로 사용할 수 없음",
+      "temporarilyUnavailableBody": "현재 새 작업을 시작할 수 없습니다.",
+      "unavailableReasons": {
+        "agent": "런타임을 사용할 수 없습니다.",
+        "skill": "필수 기능을 사용할 수 없습니다.",
+        "model": "승인된 모델을 사용할 수 없습니다.",
+        "mcp": "필수 연결 도구를 사용할 수 없습니다."
+      },
+      "expectedRecovery": "예상 복구 시간",
+      "checkAgain": "다시 확인"
+    }
   },
   "title": "설정",
   "skillsHub": {

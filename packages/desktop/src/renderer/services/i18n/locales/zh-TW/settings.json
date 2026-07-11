@@ -72,7 +72,49 @@
     "refreshError": "Teammate 已加入，但無法重新整理「我的 Teammates」。請在開始工作前重試。",
     "unauthorizedTitle": "你沒有權限存取 VNG 資源庫",
     "unauthorizedBody": "請使用已獲授權的 VNG 帳號登入後重試。",
-    "managedActionBlocked": "VNG 管理的 Teammates 只能在 VNG 資源庫中檢視。"
+    "managedActionBlocked": "VNG 管理的 Teammates 只能在 VNG 資源庫中檢視。",
+    "lifecycle": {
+      "updatedBadge": "VNG 已更新",
+      "routineTitle": "此隊友已更新",
+      "releaseNotes": "更新內容",
+      "publishedAt": "發佈時間",
+      "reviewUpdate": "查看更新",
+      "dismissUpdate": "略過",
+      "noticeError": "無法略過此更新，請再試一次。",
+      "stateChanged": "你查看期間，此隊友已發生變更。請查看最新詳細資料。",
+      "acknowledgementRequired": "需要確認",
+      "highImpactTitle": "查看重要變更",
+      "highImpactBody": "開始新工作前，請查看並確認此變更。",
+      "acknowledge": "確認變更",
+      "acknowledgementError": "無法確認此變更，請再試一次。",
+      "categories": {
+        "agent": "執行環境",
+        "permission": "權限",
+        "requiredSkills": "必要能力",
+        "mcps": "連接的工具",
+        "dataAccess": "資料存取",
+        "personalizationPolicy": "個人設定政策",
+        "content": "指示與內容"
+      },
+      "retiringTitle": "計劃停用",
+      "retiredTitle": "此隊友已停用",
+      "retirementReason": "原因",
+      "retirementCutoff": "截止時間",
+      "retiredImmediate": "已無法開始新工作。",
+      "replacement": "替代隊友",
+      "viewReplacement": "查看替代隊友",
+      "personalSetupRetained": "你的個人設定將依公司政策保留。",
+      "temporarilyUnavailableTitle": "暫時無法使用",
+      "temporarilyUnavailableBody": "此隊友目前無法開始新工作。",
+      "unavailableReasons": {
+        "agent": "執行環境無法使用。",
+        "skill": "必要能力無法使用。",
+        "model": "已核准的模型無法使用。",
+        "mcp": "必要的連接工具無法使用。"
+      },
+      "expectedRecovery": "預計恢復時間",
+      "checkAgain": "重新檢查"
+    }
   },
   "title": "Settings",
   "skillsHub": {

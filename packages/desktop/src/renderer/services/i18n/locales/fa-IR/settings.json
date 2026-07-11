@@ -72,7 +72,49 @@
     "refreshError": "Teammate افزوده شد، اما Teammates من به‌روزرسانی نشد. پیش از شروع کار دوباره تلاش کنید.",
     "unauthorizedTitle": "به کتابخانه VNG دسترسی ندارید",
     "unauthorizedBody": "با یک حساب مجاز VNG وارد شوید و دوباره تلاش کنید.",
-    "managedActionBlocked": "Teammates مدیریت‌شده توسط VNG فقط در کتابخانه VNG قابل مشاهده‌اند."
+    "managedActionBlocked": "Teammates مدیریت‌شده توسط VNG فقط در کتابخانه VNG قابل مشاهده‌اند.",
+    "lifecycle": {
+      "updatedBadge": "به‌روزرسانی‌شده توسط VNG",
+      "routineTitle": "این هم‌تیمی به‌روزرسانی شد",
+      "releaseNotes": "چه چیزی تغییر کرده است",
+      "publishedAt": "زمان انتشار",
+      "reviewUpdate": "بررسی به‌روزرسانی",
+      "dismissUpdate": "بستن",
+      "noticeError": "به‌روزرسانی بسته نشد. دوباره تلاش کنید.",
+      "stateChanged": "هنگام بررسی شما، وضعیت این هم‌تیمی تغییر کرد. جدیدترین جزئیات را بررسی کنید.",
+      "acknowledgementRequired": "تأیید تغییر لازم است",
+      "highImpactTitle": "یک تغییر مهم را بررسی کنید",
+      "highImpactBody": "پیش از شروع کار جدید، این تغییر را بررسی و تأیید کنید.",
+      "acknowledge": "تأیید تغییر",
+      "acknowledgementError": "تغییر تأیید نشد. دوباره تلاش کنید.",
+      "categories": {
+        "agent": "محیط اجرا",
+        "permission": "مجوزها",
+        "requiredSkills": "قابلیت‌های ضروری",
+        "mcps": "ابزارهای متصل",
+        "dataAccess": "دسترسی به داده",
+        "personalizationPolicy": "سیاست تنظیمات شخصی",
+        "content": "دستورالعمل‌ها و محتوا"
+      },
+      "retiringTitle": "بازنشستگی برنامه‌ریزی‌شده",
+      "retiredTitle": "این هم‌تیمی بازنشسته شده است",
+      "retirementReason": "دلیل",
+      "retirementCutoff": "زمان پایان",
+      "retiredImmediate": "شروع کار جدید دیگر امکان‌پذیر نیست.",
+      "replacement": "جایگزین",
+      "viewReplacement": "مشاهده هم‌تیمی جایگزین",
+      "personalSetupRetained": "تنظیمات شخصی شما مطابق سیاست شرکت نگهداری می‌شود.",
+      "temporarilyUnavailableTitle": "موقتاً در دسترس نیست",
+      "temporarilyUnavailableBody": "این هم‌تیمی اکنون نمی‌تواند کار جدیدی را آغاز کند.",
+      "unavailableReasons": {
+        "agent": "محیط اجرای آن در دسترس نیست.",
+        "skill": "یک قابلیت ضروری در دسترس نیست.",
+        "model": "مدل تأییدشده در دسترس نیست.",
+        "mcp": "یک ابزار متصل ضروری در دسترس نیست."
+      },
+      "expectedRecovery": "زمان مورد انتظار بازیابی",
+      "checkAgain": "بررسی دوباره"
+    }
   },
   "title": "تنظیمات",
   "skillsHub": {

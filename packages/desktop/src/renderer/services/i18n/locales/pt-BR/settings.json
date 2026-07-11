@@ -72,7 +72,49 @@
     "refreshError": "O Teammate foi adicionado, mas não foi possível atualizar Meus Teammates. Tente novamente antes de começar a trabalhar.",
     "unauthorizedTitle": "Você não tem acesso à Biblioteca VNG",
     "unauthorizedBody": "Entre com uma conta VNG autorizada e tente novamente.",
-    "managedActionBlocked": "Teammates gerenciados pela VNG só podem ser vistos na Biblioteca VNG."
+    "managedActionBlocked": "Teammates gerenciados pela VNG só podem ser vistos na Biblioteca VNG.",
+    "lifecycle": {
+      "updatedBadge": "Atualizado pela VNG",
+      "routineTitle": "Este colega foi atualizado",
+      "releaseNotes": "What changed",
+      "publishedAt": "Published",
+      "reviewUpdate": "Revisar atualização",
+      "dismissUpdate": "Dispensar",
+      "noticeError": "The update could not be dismissed. Try again.",
+      "stateChanged": "This Teammate changed while you were reviewing it. Check the latest details.",
+      "acknowledgementRequired": "Confirmação necessária",
+      "highImpactTitle": "Revise uma mudança importante",
+      "highImpactBody": "Review and acknowledge this change before starting new work.",
+      "acknowledge": "Confirmar mudança",
+      "acknowledgementError": "The change could not be acknowledged. Try again.",
+      "categories": {
+        "agent": "Runtime",
+        "permission": "Permissions",
+        "requiredSkills": "Required capabilities",
+        "mcps": "Connected tools",
+        "dataAccess": "Data access",
+        "personalizationPolicy": "Personal setup policy",
+        "content": "Instructions and content"
+      },
+      "retiringTitle": "Desativação planejada",
+      "retiredTitle": "Este colega foi desativado",
+      "retirementReason": "Reason",
+      "retirementCutoff": "Cutoff",
+      "retiredImmediate": "New work is no longer available.",
+      "replacement": "Replacement",
+      "viewReplacement": "Ver substituto",
+      "personalSetupRetained": "Your personal setup is retained according to company policy.",
+      "temporarilyUnavailableTitle": "Temporariamente indisponível",
+      "temporarilyUnavailableBody": "This Teammate cannot start new work right now.",
+      "unavailableReasons": {
+        "agent": "Its runtime is unavailable.",
+        "skill": "A required capability is unavailable.",
+        "model": "Its approved model is unavailable.",
+        "mcp": "A required connected tool is unavailable."
+      },
+      "expectedRecovery": "Expected recovery",
+      "checkAgain": "Verificar novamente"
+    }
   },
   "title": "Configurações",
   "skillsHub": {

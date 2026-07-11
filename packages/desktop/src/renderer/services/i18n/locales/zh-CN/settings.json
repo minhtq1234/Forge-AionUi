@@ -72,7 +72,49 @@
     "refreshError": "Teammate 已添加，但无法刷新“我的 Teammates”。请在开始工作前重试。",
     "unauthorizedTitle": "你无权访问 VNG 资源库",
     "unauthorizedBody": "请使用获授权的 VNG 账号登录后重试。",
-    "managedActionBlocked": "VNG 管理的 Teammates 只能在 VNG 资源库中查看。"
+    "managedActionBlocked": "VNG 管理的 Teammates 只能在 VNG 资源库中查看。",
+    "lifecycle": {
+      "updatedBadge": "VNG 已更新",
+      "routineTitle": "此队友已更新",
+      "releaseNotes": "更新内容",
+      "publishedAt": "发布时间",
+      "reviewUpdate": "查看更新",
+      "dismissUpdate": "忽略",
+      "noticeError": "无法忽略此更新，请重试。",
+      "stateChanged": "你查看期间，此队友已发生变化。请查看最新详情。",
+      "acknowledgementRequired": "需要确认",
+      "highImpactTitle": "查看重要变更",
+      "highImpactBody": "开始新工作前，请查看并确认此变更。",
+      "acknowledge": "确认变更",
+      "acknowledgementError": "无法确认此变更，请重试。",
+      "categories": {
+        "agent": "运行环境",
+        "permission": "权限",
+        "requiredSkills": "必需能力",
+        "mcps": "连接的工具",
+        "dataAccess": "数据访问",
+        "personalizationPolicy": "个人设置策略",
+        "content": "指令和内容"
+      },
+      "retiringTitle": "计划停用",
+      "retiredTitle": "此队友已停用",
+      "retirementReason": "原因",
+      "retirementCutoff": "截止时间",
+      "retiredImmediate": "已无法开始新工作。",
+      "replacement": "替代队友",
+      "viewReplacement": "查看替代队友",
+      "personalSetupRetained": "你的个人设置将根据公司政策保留。",
+      "temporarilyUnavailableTitle": "暂时不可用",
+      "temporarilyUnavailableBody": "此队友目前无法开始新工作。",
+      "unavailableReasons": {
+        "agent": "运行环境不可用。",
+        "skill": "必需能力不可用。",
+        "model": "已批准的模型不可用。",
+        "mcp": "必需的连接工具不可用。"
+      },
+      "expectedRecovery": "预计恢复时间",
+      "checkAgain": "重新检查"
+    }
   },
   "title": "设置",
   "skillsHub": {

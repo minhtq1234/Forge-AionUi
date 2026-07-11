@@ -1,4 +1,6 @@
 import type { ManagedAssistantDetail, ManagedPersonalizationField } from '@/common/types/agent/managedAssistantTypes';
+import { ManagedLifecycleNotices, canStartManagedAssistant } from '@/renderer/components/ManagedTeammates';
+import type { ManagedLifecycleMutationError } from '@/renderer/components/ManagedTeammates';
 import { isEmoji, resolveAvatarImageSrc } from '../../assistantUtils';
 import { Alert, Avatar, Button, Result, Spin, Tag } from '@arco-design/web-react';
 import { Check, Left, Lock, Play, Refresh, Shield } from '@icon-park/react';
@@ -17,11 +19,18 @@ type ManagedTeammateDetailProps = {
   startRefreshFailed: boolean;
   error: ManagedReadError;
   mutationError: ManagedMutationError;
+  lifecycleMutationError: ManagedLifecycleMutationError;
+  lifecycleStateChanged: boolean;
+  isMarkingNoticeSeen: boolean;
+  isAcknowledging: boolean;
   onBack: () => void;
   onRetry: () => void;
   onAdopt: () => void;
   onRetryStartRefresh: () => void;
   onStartChat: () => void;
+  onMarkNoticeSeen: (version: number) => Promise<void>;
+  onAcknowledge: (version: number) => Promise<void>;
+  onOpenReplacement: (id: string) => void;
 };
 
 const localizedValue = (value: string, values: Record<string, string>, localeKey: string): string =>
@@ -67,11 +76,18 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
   startRefreshFailed,
   error,
   mutationError,
+  lifecycleMutationError,
+  lifecycleStateChanged,
+  isMarkingNoticeSeen,
+  isAcknowledging,
   onBack,
   onRetry,
   onAdopt,
   onRetryStartRefresh,
   onStartChat,
+  onMarkNoticeSeen,
+  onAcknowledge,
+  onOpenReplacement,
 }) => {
   const { t } = useTranslation();
   const backButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -146,7 +162,20 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
         {t('settings.managedTeammates.backToLibrary')}
       </Button>
 
-      <div className={styles.detailLayout}>
+      <ManagedLifecycleNotices
+        detail={detail}
+        localeKey={localeKey}
+        isMarkingNoticeSeen={isMarkingNoticeSeen}
+        isAcknowledging={isAcknowledging}
+        mutationError={lifecycleMutationError}
+        stateChanged={lifecycleStateChanged}
+        onMarkNoticeSeen={onMarkNoticeSeen}
+        onAcknowledge={onAcknowledge}
+        onRefresh={onRetry}
+        onOpenReplacement={onOpenReplacement}
+      />
+
+      <div className={`${styles.detailLayout} mt-16px`}>
         <div className={styles.identityHeader}>
           <div className='flex min-w-0 items-start gap-12px'>
             <Avatar shape='square' size={44} className='shrink-0 !bg-fill-2 !text-16px !font-600 !text-t-primary'>
@@ -240,7 +269,7 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
               <Button type='primary' long loading={isAdopting} disabled={isAdopting} onClick={onAdopt}>
                 {t('settings.managedTeammates.add')}
               </Button>
-            ) : isStartReady ? (
+            ) : isStartReady && canStartManagedAssistant(detail) ? (
               <Button
                 type='primary'
                 long

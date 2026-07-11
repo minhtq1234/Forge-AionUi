@@ -72,7 +72,49 @@
     "refreshError": "Teammate は追加されましたが、マイ Teammates を更新できませんでした。作業を開始する前に再試行してください。",
     "unauthorizedTitle": "VNG ライブラリへのアクセス権がありません",
     "unauthorizedBody": "承認済みの VNG アカウントでサインインして再試行してください。",
-    "managedActionBlocked": "VNG 管理の Teammates は VNG ライブラリでのみ表示できます。"
+    "managedActionBlocked": "VNG 管理の Teammates は VNG ライブラリでのみ表示できます。",
+    "lifecycle": {
+      "updatedBadge": "VNG により更新済み",
+      "routineTitle": "このチームメイトは更新されました",
+      "releaseNotes": "変更内容",
+      "publishedAt": "公開日時",
+      "reviewUpdate": "更新を確認",
+      "dismissUpdate": "閉じる",
+      "noticeError": "更新を閉じられませんでした。もう一度お試しください。",
+      "stateChanged": "確認中にチームメイトが変更されました。最新の詳細を確認してください。",
+      "acknowledgementRequired": "確認が必要",
+      "highImpactTitle": "重要な変更を確認",
+      "highImpactBody": "新しい作業を始める前に、変更を確認して承認してください。",
+      "acknowledge": "変更を承認",
+      "acknowledgementError": "変更を承認できませんでした。もう一度お試しください。",
+      "categories": {
+        "agent": "ランタイム",
+        "permission": "権限",
+        "requiredSkills": "必須機能",
+        "mcps": "接続ツール",
+        "dataAccess": "データアクセス",
+        "personalizationPolicy": "個人設定ポリシー",
+        "content": "指示とコンテンツ"
+      },
+      "retiringTitle": "廃止予定",
+      "retiredTitle": "このチームメイトは廃止されました",
+      "retirementReason": "理由",
+      "retirementCutoff": "終了日時",
+      "retiredImmediate": "新しい作業は開始できません。",
+      "replacement": "後継",
+      "viewReplacement": "後継を表示",
+      "personalSetupRetained": "個人設定は会社のポリシーに従って保持されます。",
+      "temporarilyUnavailableTitle": "一時的に利用できません",
+      "temporarilyUnavailableBody": "現在、新しい作業を開始できません。",
+      "unavailableReasons": {
+        "agent": "ランタイムを利用できません。",
+        "skill": "必須機能を利用できません。",
+        "model": "承認済みモデルを利用できません。",
+        "mcp": "必須の接続ツールを利用できません。"
+      },
+      "expectedRecovery": "復旧予定",
+      "checkAgain": "再確認"
+    }
   },
   "title": "Settings",
   "skillsHub": {

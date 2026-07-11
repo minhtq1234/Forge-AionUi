@@ -72,7 +72,49 @@
     "refreshError": "The Teammate was added, but My Teammates could not be refreshed. Try again before starting work.",
     "unauthorizedTitle": "You do not have access to VNG Library",
     "unauthorizedBody": "Sign in with an authorized VNG account and try again.",
-    "managedActionBlocked": "VNG-managed Teammates can only be viewed in VNG Library."
+    "managedActionBlocked": "VNG-managed Teammates can only be viewed in VNG Library.",
+    "lifecycle": {
+      "updatedBadge": "Updated by VNG",
+      "routineTitle": "This Teammate was updated",
+      "releaseNotes": "What changed",
+      "publishedAt": "Published",
+      "reviewUpdate": "Review update",
+      "dismissUpdate": "Dismiss",
+      "noticeError": "The update could not be dismissed. Try again.",
+      "stateChanged": "This Teammate changed while you were reviewing it. Check the latest details.",
+      "acknowledgementRequired": "Acknowledgement required",
+      "highImpactTitle": "Review an important change",
+      "highImpactBody": "Review and acknowledge this change before starting new work.",
+      "acknowledge": "Acknowledge change",
+      "acknowledgementError": "The change could not be acknowledged. Try again.",
+      "categories": {
+        "agent": "Runtime",
+        "permission": "Permissions",
+        "requiredSkills": "Required capabilities",
+        "mcps": "Connected tools",
+        "dataAccess": "Data access",
+        "personalizationPolicy": "Personal setup policy",
+        "content": "Instructions and content"
+      },
+      "retiringTitle": "Planned retirement",
+      "retiredTitle": "This Teammate is retired",
+      "retirementReason": "Reason",
+      "retirementCutoff": "Cutoff",
+      "retiredImmediate": "New work is no longer available.",
+      "replacement": "Replacement",
+      "viewReplacement": "View replacement",
+      "personalSetupRetained": "Your personal setup is retained according to company policy.",
+      "temporarilyUnavailableTitle": "Temporarily unavailable",
+      "temporarilyUnavailableBody": "This Teammate cannot start new work right now.",
+      "unavailableReasons": {
+        "agent": "Its runtime is unavailable.",
+        "skill": "A required capability is unavailable.",
+        "model": "Its approved model is unavailable.",
+        "mcp": "A required connected tool is unavailable."
+      },
+      "expectedRecovery": "Expected recovery",
+      "checkAgain": "Check again"
+    }
   },
   "title": "Settings",
   "skillsHub": {

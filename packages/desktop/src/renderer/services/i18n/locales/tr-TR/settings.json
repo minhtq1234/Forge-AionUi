@@ -72,7 +72,49 @@
     "refreshError": "Teammate eklendi ancak Teammates'im yenilenemedi. Çalışmaya başlamadan önce yeniden deneyin.",
     "unauthorizedTitle": "VNG Kitaplığına erişiminiz yok",
     "unauthorizedBody": "Yetkili bir VNG hesabıyla oturum açıp yeniden deneyin.",
-    "managedActionBlocked": "VNG tarafından yönetilen Teammates yalnızca VNG Kitaplığında görüntülenebilir."
+    "managedActionBlocked": "VNG tarafından yönetilen Teammates yalnızca VNG Kitaplığında görüntülenebilir.",
+    "lifecycle": {
+      "updatedBadge": "VNG tarafından güncellendi",
+      "routineTitle": "Bu ekip arkadaşı güncellendi",
+      "releaseNotes": "What changed",
+      "publishedAt": "Published",
+      "reviewUpdate": "Güncellemeyi incele",
+      "dismissUpdate": "Kapat",
+      "noticeError": "The update could not be dismissed. Try again.",
+      "stateChanged": "This Teammate changed while you were reviewing it. Check the latest details.",
+      "acknowledgementRequired": "Onay gerekli",
+      "highImpactTitle": "Önemli bir değişikliği inceleyin",
+      "highImpactBody": "Review and acknowledge this change before starting new work.",
+      "acknowledge": "Değişikliği onayla",
+      "acknowledgementError": "The change could not be acknowledged. Try again.",
+      "categories": {
+        "agent": "Runtime",
+        "permission": "Permissions",
+        "requiredSkills": "Required capabilities",
+        "mcps": "Connected tools",
+        "dataAccess": "Data access",
+        "personalizationPolicy": "Personal setup policy",
+        "content": "Instructions and content"
+      },
+      "retiringTitle": "Planlanan kullanımdan kaldırma",
+      "retiredTitle": "Bu ekip arkadaşı kullanımdan kaldırıldı",
+      "retirementReason": "Reason",
+      "retirementCutoff": "Cutoff",
+      "retiredImmediate": "New work is no longer available.",
+      "replacement": "Replacement",
+      "viewReplacement": "Yerine geçeni görüntüle",
+      "personalSetupRetained": "Your personal setup is retained according to company policy.",
+      "temporarilyUnavailableTitle": "Geçici olarak kullanılamıyor",
+      "temporarilyUnavailableBody": "This Teammate cannot start new work right now.",
+      "unavailableReasons": {
+        "agent": "Its runtime is unavailable.",
+        "skill": "A required capability is unavailable.",
+        "model": "Its approved model is unavailable.",
+        "mcp": "A required connected tool is unavailable."
+      },
+      "expectedRecovery": "Expected recovery",
+      "checkAgain": "Tekrar kontrol et"
+    }
   },
   "title": "Ayarlar",
   "skillsHub": {

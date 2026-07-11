@@ -72,7 +72,49 @@
     "refreshError": "Der Teammate wurde hinzugefügt, aber Meine Teammates konnten nicht aktualisiert werden. Versuche es vor Arbeitsbeginn erneut.",
     "unauthorizedTitle": "Du hast keinen Zugriff auf die VNG-Bibliothek",
     "unauthorizedBody": "Melde dich mit einem autorisierten VNG-Konto an und versuche es erneut.",
-    "managedActionBlocked": "Von VNG verwaltete Teammates können nur in der VNG-Bibliothek angezeigt werden."
+    "managedActionBlocked": "Von VNG verwaltete Teammates können nur in der VNG-Bibliothek angezeigt werden.",
+    "lifecycle": {
+      "updatedBadge": "Von VNG aktualisiert",
+      "routineTitle": "Dieser Teammate wurde aktualisiert",
+      "releaseNotes": "Was sich geändert hat",
+      "publishedAt": "Veröffentlicht",
+      "reviewUpdate": "Aktualisierung prüfen",
+      "dismissUpdate": "Ausblenden",
+      "noticeError": "Die Aktualisierung konnte nicht ausgeblendet werden. Versuche es erneut.",
+      "stateChanged": "Dieser Teammate wurde während deiner Prüfung geändert. Prüfe die neuesten Details.",
+      "acknowledgementRequired": "Bestätigung erforderlich",
+      "highImpactTitle": "Wichtige Änderung prüfen",
+      "highImpactBody": "Prüfe und bestätige diese Änderung, bevor du eine neue Arbeit beginnst.",
+      "acknowledge": "Änderung bestätigen",
+      "acknowledgementError": "Die Änderung konnte nicht bestätigt werden. Versuche es erneut.",
+      "categories": {
+        "agent": "Laufzeit",
+        "permission": "Berechtigungen",
+        "requiredSkills": "Erforderliche Fähigkeiten",
+        "mcps": "Verbundene Werkzeuge",
+        "dataAccess": "Datenzugriff",
+        "personalizationPolicy": "Richtlinie für persönliche Einstellungen",
+        "content": "Anweisungen und Inhalte"
+      },
+      "retiringTitle": "Geplante Außerbetriebnahme",
+      "retiredTitle": "Dieser Teammate wurde außer Betrieb genommen",
+      "retirementReason": "Grund",
+      "retirementCutoff": "Stichtag",
+      "retiredImmediate": "Neue Arbeiten sind nicht mehr verfügbar.",
+      "replacement": "Ersatz",
+      "viewReplacement": "Ersatz-Teammate anzeigen",
+      "personalSetupRetained": "Deine persönlichen Einstellungen werden gemäß der Unternehmensrichtlinie aufbewahrt.",
+      "temporarilyUnavailableTitle": "Vorübergehend nicht verfügbar",
+      "temporarilyUnavailableBody": "Dieser Teammate kann derzeit keine neue Arbeit beginnen.",
+      "unavailableReasons": {
+        "agent": "Die Laufzeit ist nicht verfügbar.",
+        "skill": "Eine erforderliche Fähigkeit ist nicht verfügbar.",
+        "model": "Das genehmigte Modell ist nicht verfügbar.",
+        "mcp": "Ein erforderliches verbundenes Werkzeug ist nicht verfügbar."
+      },
+      "expectedRecovery": "Voraussichtliche Wiederherstellung",
+      "checkAgain": "Erneut prüfen"
+    }
   },
   "title": "Einstellungen",
   "skillsHub": {

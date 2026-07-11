@@ -6,6 +6,7 @@
 
 import type { DragEndEvent } from '@dnd-kit/core';
 import type { AssistantListItem } from '../types';
+import type { ManagedAssistantSummary } from '@/common/types/agent/managedAssistantTypes';
 import { type AssistantEnabledFilter, filterByEnabled, groupMyAssistants } from '../assistantUtils';
 import MyAssistantRow from './MyAssistantRow';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
@@ -26,6 +27,7 @@ type MyAssistantsListProps = {
   onReorder: (activeId: string, overId: string) => void | Promise<void>;
   onStartChat: (assistant: AssistantListItem) => void;
   isManagedStartReady: (id: string) => boolean;
+  managedSummaries: ManagedAssistantSummary[];
   /** Switch to the Official tab (to duplicate an official assistant). */
   onGoOfficial: () => void;
 };
@@ -42,6 +44,7 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
   onReorder,
   onStartChat,
   isManagedStartReady,
+  managedSummaries,
   onGoOfficial,
 }) => {
   const { t } = useTranslation();
@@ -65,6 +68,10 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
     const filtered = filterByEnabled(assistants, filter);
     return groupMyAssistants(filtered);
   }, [assistants, filter]);
+  const managedSummaryById = useMemo(
+    () => new Map(managedSummaries.map((summary) => [summary.assistant.id, summary])),
+    [managedSummaries]
+  );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
@@ -192,7 +199,8 @@ const MyAssistantsList: React.FC<MyAssistantsListProps> = ({
                 onDelete={onDelete}
                 onToggleEnabled={onToggleEnabled}
                 onStartChat={onStartChat}
-                managedStartReady={isManagedStartReady(assistant.id)}
+                managedSummary={managedSummaryById.get(assistant.id)}
+                managedStartReady={isManagedStartReady(assistant.id) && managedSummaryById.has(assistant.id)}
               />
             ))}
           </div>

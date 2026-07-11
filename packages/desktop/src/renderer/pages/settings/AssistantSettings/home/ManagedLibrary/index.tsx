@@ -8,6 +8,7 @@ import ManagedPersonalSetup from './ManagedPersonalSetup';
 import ManagedTeammateDetail from './ManagedTeammateDetail';
 import ManagedTeammateList, { managedTeammateCardDomId } from './ManagedTeammateList';
 import useManagedLibrary, { hasRenderablePersonalSetup } from './useManagedLibrary';
+import type { ManagedLibraryController } from './useManagedLibrary';
 
 type ManagedLibraryView = 'catalog' | 'detail';
 
@@ -19,12 +20,16 @@ type ManagedLibraryProps = {
   onStartChat: (assistant: Pick<Assistant, 'id'>) => void;
 };
 
-const ManagedLibrary: React.FC<ManagedLibraryProps> = ({
+type ManagedLibraryContentProps = ManagedLibraryProps & {
+  library: ManagedLibraryController;
+};
+
+export const ManagedLibraryContent: React.FC<ManagedLibraryContentProps> = ({
   localeKey,
   initialDetailId,
   onInitialDetailConsumed,
-  onAdoptionChanged,
   onStartChat,
+  library,
 }) => {
   const { t, i18n } = useTranslation();
   const [message, messageContext] = Message.useMessage({ maxCount: 3 });
@@ -33,7 +38,6 @@ const ManagedLibrary: React.FC<ManagedLibraryProps> = ({
   const [setupDetail, setSetupDetail] = useState<ManagedAssistantDetail | null>(null);
   const originatingCardIdRef = useRef<string | null>(null);
   const restoreFocusIdRef = useRef<string | null>(null);
-  const library = useManagedLibrary({ localeKey, onAdoptionChanged });
 
   useEffect(() => {
     if (!initialDetailId) return;
@@ -121,6 +125,10 @@ const ManagedLibrary: React.FC<ManagedLibraryProps> = ({
           startRefreshFailed={library.startRefreshFailed}
           error={library.detailError}
           mutationError={library.mutationError}
+          lifecycleMutationError={library.lifecycleMutationError}
+          lifecycleStateChanged={library.lifecycleStateChanged}
+          isMarkingNoticeSeen={library.isMarkingNoticeSeen}
+          isAcknowledging={library.isAcknowledging}
           onBack={handleBack}
           onRetry={() => selectedId && void library.loadDetail(selectedId)}
           onAdopt={() => void handleAdopt()}
@@ -128,6 +136,13 @@ const ManagedLibrary: React.FC<ManagedLibraryProps> = ({
           onStartChat={() => {
             if (library.selectedDetail) onStartChat(library.selectedDetail.assistant);
           }}
+          onMarkNoticeSeen={async (version) => {
+            await library.markNoticeSeen(version);
+          }}
+          onAcknowledge={async (version) => {
+            await library.acknowledge(version);
+          }}
+          onOpenReplacement={handleSelect}
         />
       )}
 
@@ -145,6 +160,11 @@ const ManagedLibrary: React.FC<ManagedLibraryProps> = ({
       ) : null}
     </div>
   );
+};
+
+const ManagedLibrary: React.FC<ManagedLibraryProps> = (props) => {
+  const library = useManagedLibrary({ localeKey: props.localeKey, onAdoptionChanged: props.onAdoptionChanged });
+  return <ManagedLibraryContent {...props} library={library} />;
 };
 
 export default ManagedLibrary;

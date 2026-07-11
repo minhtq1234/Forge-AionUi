@@ -1,0 +1,38 @@
+.noticeStack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.notice :global(.arco-alert-content),
+.notice :global(.arco-alert-description),
+.noticeBody,
+.adminText {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.adminText {
+  white-space: pre-wrap;
+}
+
+.actions,
+.categories {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.modal :global(.arco-modal-content) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 390px) {
+  .actions > * {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+}

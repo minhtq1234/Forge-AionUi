@@ -6,7 +6,8 @@
 
 import type { AssistantHomeTab, AssistantListItem } from '../types';
 import type { AssistantListLoadResult } from '@/renderer/hooks/assistant/useAssistantList';
-import ManagedLibrary from './ManagedLibrary';
+import { ManagedLibraryContent } from './ManagedLibrary';
+import useManagedLibrary from './ManagedLibrary/useManagedLibrary';
 import MyAssistantsList from './MyAssistantsList';
 import OfficialAssistantsGrid from './OfficialAssistantsGrid';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
@@ -130,6 +131,10 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
     },
     [onAdoptionChanged]
   );
+  const managedLibrary = useManagedLibrary({
+    localeKey,
+    onAdoptionChanged: verifyManagedAssistantProjection,
+  });
 
   const selectTab = (next: AssistantHomeTab) => {
     setTab(next);
@@ -212,15 +217,17 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
               onReorder={onReorder}
               onStartChat={onStartChat}
               isManagedStartReady={(id) => verifiedManagedAssistantIds.has(id)}
+              managedSummaries={managedLibrary.summaries}
               onGoOfficial={() => selectTab('official')}
             />
           ) : tab === 'library' ? (
-            <ManagedLibrary
+            <ManagedLibraryContent
               localeKey={localeKey}
               initialDetailId={initialManagedDetailId}
               onInitialDetailConsumed={onManagedDetailConsumed}
               onAdoptionChanged={verifyManagedAssistantProjection}
               onStartChat={onStartChat}
+              library={managedLibrary}
             />
           ) : (
             <div className='min-w-0'>
