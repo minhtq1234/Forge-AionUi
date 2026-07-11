@@ -261,7 +261,7 @@ const ManagedTeammateDetail: React.FC<ManagedTeammateDetailProps> = ({
               <Button type='primary' long loading={isAdopting} disabled={isAdopting} onClick={onAdopt}>
                 {t('settings.managedTeammates.add')}
               </Button>
-            ) : canStartManagedAssistant(detail) ? (
+            ) : !isAdopting && canStartManagedAssistant(detail) ? (
               <Button
                 ref={startButtonRef}
                 type='primary'

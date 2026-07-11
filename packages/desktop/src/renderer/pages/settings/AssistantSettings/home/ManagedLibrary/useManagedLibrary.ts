@@ -27,6 +27,11 @@ type ManagedViewContext = {
   generation: number;
 };
 
+type ManagedSummaryOverlay = {
+  detail: ManagedAssistantDetail;
+  sequence: number;
+};
+
 const NON_RENDERABLE_PERSONALIZATION_FIELDS = new Set<ManagedPersonalizationField>(['optional_skills', 'model']);
 
 const toReadError = (error: unknown): Exclude<ManagedReadError, null> =>
@@ -37,6 +42,17 @@ export const getRenderablePersonalizationFields = (detail: ManagedAssistantDetai
 
 export const hasRenderablePersonalSetup = (detail: ManagedAssistantDetail): boolean =>
   getRenderablePersonalizationFields(detail).length > 0;
+
+const mergeDetailIntoSummary = (
+  summary: ManagedAssistantSummary,
+  detail: ManagedAssistantDetail
+): ManagedAssistantSummary => ({
+  ...summary,
+  governance: detail.governance,
+  adoption: detail.adoption,
+  update: detail.update,
+  start_state: detail.start_state,
+});
 
 const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryParams) => {
   const [summaries, setSummaries] = useState<ManagedAssistantSummary[]>([]);
@@ -56,6 +72,9 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
   const detailRequestSequence = useRef(0);
   const lifecycleMutationSequence = useRef(0);
   const lifecyclePendingSequences = useRef({ notice: 0, acknowledgement: 0 });
+  const listRequestSequence = useRef(0);
+  const summaryFreshnessSequence = useRef(0);
+  const summaryOverlays = useRef(new Map<string, ManagedSummaryOverlay>());
   const viewContextRef = useRef<{ assistantId: string | null; generation: number }>({
     assistantId: null,
     generation: 0,
@@ -80,31 +99,42 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
   );
 
   const loadList = useCallback(async () => {
+    const requestSequence = listRequestSequence.current + 1;
+    listRequestSequence.current = requestSequence;
+    const listFreshness = summaryFreshnessSequence.current + 1;
+    summaryFreshnessSequence.current = listFreshness;
     setIsListLoading(true);
     setListError(null);
     try {
-      setSummaries(await ipcBridge.managedAssistants.list.invoke());
+      const nextSummaries = await ipcBridge.managedAssistants.list.invoke();
+      if (listRequestSequence.current !== requestSequence) return;
+
+      for (const [assistantId, overlay] of summaryOverlays.current) {
+        if (overlay.sequence <= listFreshness) summaryOverlays.current.delete(assistantId);
+      }
+      setSummaries(
+        nextSummaries.map((summary) => {
+          const overlay = summaryOverlays.current.get(summary.assistant.id);
+          return overlay ? mergeDetailIntoSummary(summary, overlay.detail) : summary;
+        })
+      );
     } catch (error) {
+      if (listRequestSequence.current !== requestSequence) return;
       setSummaries([]);
       setListError(toReadError(error));
     } finally {
-      setIsListLoading(false);
+      if (listRequestSequence.current === requestSequence) setIsListLoading(false);
     }
   }, []);
 
   const replaceDetail = useCallback((detail: ManagedAssistantDetail) => {
+    const sequence = summaryFreshnessSequence.current + 1;
+    summaryFreshnessSequence.current = sequence;
+    summaryOverlays.current.set(detail.assistant.id, { detail, sequence });
     setSelectedDetail(detail);
     setSummaries((current) =>
       current.map((summary) =>
-        summary.assistant.id === detail.assistant.id
-          ? {
-              ...summary,
-              governance: detail.governance,
-              adoption: detail.adoption,
-              update: detail.update,
-              start_state: detail.start_state,
-            }
-          : summary
+        summary.assistant.id === detail.assistant.id ? mergeDetailIntoSummary(summary, detail) : summary
       )
     );
   }, []);
@@ -217,7 +247,8 @@ const useManagedLibrary = ({ localeKey, onAdoptionChanged }: UseManagedLibraryPa
         const detail = await ipcBridge.managedAssistants.setAdoption.invoke({ id, locale: localeKey, active: true });
         if (!isCurrentView(context)) return null;
         replaceDetail(detail);
-        void refreshManagedProjection(context);
+        await refreshManagedProjection(context);
+        if (!isCurrentView(context)) return null;
         return { detail };
       } catch {
         if (!isCurrentView(context)) return null;
