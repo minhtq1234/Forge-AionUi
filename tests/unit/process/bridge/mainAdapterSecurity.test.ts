@@ -151,4 +151,51 @@ describe('main adapter IPC security boundary', () => {
     await expect(getInvokeHandler()({ sender }, oversizedRequest)).rejects.toThrow(/payload exceeds/i);
     expect(mocks.bridgeEmitter.emit).not.toHaveBeenCalled();
   });
+
+  it('rejects unknown provider payload fields before dispatch', async () => {
+    const sender = createRegisteredSender();
+    const request = createRequest('subscribe-webui.start', { port: 25808, unexpected: true });
+
+    await expect(getInvokeHandler()({ sender }, request)).rejects.toThrow(/invalid operation payload/i);
+    expect(mocks.bridgeEmitter.emit).not.toHaveBeenCalled();
+  });
+
+  it('rejects a payload supplied to a void provider before dispatch', async () => {
+    const sender = createRegisteredSender();
+    const request = createRequest('subscribe-window-controls:close', { force: true });
+
+    await expect(getInvokeHandler()({ sender }, request)).rejects.toThrow(/invalid operation payload/i);
+    expect(mocks.bridgeEmitter.emit).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid nested provider data before dispatch', async () => {
+    const sender = createRegisteredSender();
+    const request = createRequest('subscribe-show-open', {
+      filters: [{ name: 'Docs', extensions: ['pdf'], unexpected: true }],
+    });
+
+    await expect(getInvokeHandler()({ sender }, request)).rejects.toThrow(/invalid operation payload/i);
+    expect(mocks.bridgeEmitter.emit).not.toHaveBeenCalled();
+  });
+
+  it('does not expose rejected payload values in the adapter error', async () => {
+    const sender = createRegisteredSender();
+    const secret = 'secret-adapter-value';
+    const request = createRequest('subscribe-notification.show', {
+      title: 'Notice',
+      body: 'Body',
+      token: secret,
+    });
+
+    let thrown: unknown;
+    try {
+      await getInvokeHandler()({ sender }, request);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(String(thrown)).toContain('invalid operation payload');
+    expect(String(thrown)).not.toContain(secret);
+    expect(mocks.bridgeEmitter.emit).not.toHaveBeenCalled();
+  });
 });
