@@ -8,7 +8,8 @@ import type { BrowserWindow, IpcMainInvokeEvent } from 'electron';
 import { ipcMain } from 'electron';
 
 import { bridge } from '@office-ai/platform';
-import { ADAPTER_BRIDGE_EVENT_KEY, isAllowedNativeBridgeRequestName } from './native/constants';
+import { ADAPTER_BRIDGE_EVENT_KEY, getNativeBridgeProviderKey } from './native/constants';
+import { parseNativeBridgePayload } from './native/payloadSchemas';
 import { registerWebSocketBroadcaster, getBridgeEmitter, setBridgeEmitter, broadcastToAll } from './registry';
 
 /**
@@ -68,15 +69,18 @@ function parseBridgeEventData(info: unknown): BridgeEventData {
   if (typeof parsed.data.id !== 'string' || parsed.data.id.length === 0 || parsed.data.id.length > 256) {
     throw new Error('[adapter] Native IPC request rejected: invalid envelope');
   }
-  if (!isAllowedNativeBridgeRequestName(parsed.name)) {
+  const providerKey = getNativeBridgeProviderKey(parsed.name);
+  if (!providerKey) {
     throw new Error('[adapter] Native IPC request rejected: operation is not allowed');
   }
+
+  const validatedPayload = parseNativeBridgePayload(providerKey, parsed.data.data);
 
   return {
     name: parsed.name,
     data: {
       id: parsed.data.id,
-      ...('data' in parsed.data ? { data: parsed.data.data } : {}),
+      ...(validatedPayload !== undefined ? { data: validatedPayload } : {}),
     },
   };
 }
