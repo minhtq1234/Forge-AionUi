@@ -118,6 +118,7 @@
       "saving": "Wird gespeichert",
       "saved": "Im Arbeitsbereich gespeichert",
       "saveFailed": "Speichern fehlgeschlagen",
+      "unsavedChanges": "Ungespeicherte Änderungen",
       "fileChanged": "Datei wurde an anderer Stelle geändert",
       "refreshing": "Vorschau wird aktualisiert",
       "previewOutdated": "Vorschau ist möglicherweise veraltet",

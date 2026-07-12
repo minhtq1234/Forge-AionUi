@@ -118,6 +118,7 @@
       "saving": "正在儲存",
       "saved": "已儲存到工作區",
       "saveFailed": "儲存失敗",
+      "unsavedChanges": "未儲存的修改",
       "fileChanged": "檔案已在其他位置變更",
       "refreshing": "正在重新整理預覽",
       "previewOutdated": "預覽可能不是最新版本",

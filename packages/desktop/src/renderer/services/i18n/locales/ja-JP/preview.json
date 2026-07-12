@@ -118,6 +118,7 @@
       "saving": "保存中",
       "saved": "ワークスペースに保存しました",
       "saveFailed": "保存に失敗しました",
+      "unsavedChanges": "未保存の変更",
       "fileChanged": "ファイルが外部で変更されました",
       "refreshing": "プレビューを更新中",
       "previewOutdated": "プレビューが最新でない可能性があります",

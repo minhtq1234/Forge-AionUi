@@ -118,6 +118,7 @@
       "saving": "Kaydediliyor",
       "saved": "Çalışma alanına kaydedildi",
       "saveFailed": "Kaydetme başarısız",
+      "unsavedChanges": "Kaydedilmemiş değişiklikler",
       "fileChanged": "Dosya başka bir yerde değiştirildi",
       "refreshing": "Önizleme yenileniyor",
       "previewOutdated": "Önizleme güncel olmayabilir",

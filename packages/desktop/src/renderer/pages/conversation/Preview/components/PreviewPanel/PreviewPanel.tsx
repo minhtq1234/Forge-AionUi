@@ -820,6 +820,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
             content_type={content_type}
             isMarkdown={isMarkdown}
             isHTML={isHTML}
+            isDirty={activeTab.isDirty}
+            onSave={() => void saveContent()}
             viewMode={viewMode}
             isSplitScreenEnabled={isSplitScreenEnabled}
             file_name={metadata?.file_name || activeTab.title}

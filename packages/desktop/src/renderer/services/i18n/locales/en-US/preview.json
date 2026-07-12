@@ -118,6 +118,7 @@
       "saving": "Saving",
       "saved": "Saved to workspace",
       "saveFailed": "Save failed",
+      "unsavedChanges": "Unsaved changes",
       "fileChanged": "File changed elsewhere",
       "refreshing": "Refreshing preview",
       "previewOutdated": "Preview may be outdated",

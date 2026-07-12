@@ -6,7 +6,7 @@
 
 import type { PreviewHistoryTarget } from '@/common/types/office/preview';
 import { iconColors } from '@/renderer/styles/colors';
-import { Dropdown } from '@arco-design/web-react';
+import { Button, Dropdown } from '@arco-design/web-react';
 import { Close } from '@icon-park/react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -35,6 +35,19 @@ type PreviewToolbarProps = {
    * Whether it's a Markdown file
    */
   isMarkdown: boolean;
+
+  /**
+   * 当前激活 tab 是否有未保存的修改，用于驱动 Save 控件的状态
+   * Whether the active tab has unsaved changes; drives the Save control's state
+   */
+  isDirty?: boolean;
+
+  /**
+   * 保存当前激活 tab 的内容（Save 控件的点击回调）；未提供时不展示 Save 控件
+   * Save the active tab's content (Save control's click handler); the Save
+   * control is hidden when this is not provided
+   */
+  onSave?: () => void;
 
   /**
    * 是否为 HTML 文件
@@ -160,6 +173,8 @@ const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
   content_type,
   isMarkdown,
   isHTML,
+  isDirty,
+  onSave,
   viewMode,
   isSplitScreenEnabled,
   file_name,
@@ -181,6 +196,8 @@ const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
 }) => {
   const { t } = useTranslation();
   const isDiff = content_type === 'diff';
+  const isCode = content_type === 'code';
+  const showSaveControl = Boolean(onSave) && (isMarkdown || isHTML || isCode);
   const preferActionButtonsInFront = Boolean(leftExtra);
   // showOpenInSystemButton === Boolean(metadata.file_path) upstream — i.e. "file is on disk".
   const showDownload = shouldShowDownload(content_type, showOpenInSystemButton);
@@ -197,6 +214,27 @@ const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
       <div className='flex items-center justify-between gap-8px w-full' style={{ minWidth: 'max-content' }}>
         {/* 左侧：Tabs（Markdown/HTML）+ 文件名 / Left: Tabs (Markdown/HTML) + Filename */}
         <div className='flex items-center h-full gap-8px'>
+          {showSaveControl && (
+            <div className='flex items-center gap-8px'>
+              <div className='flex items-center gap-6px'>
+                {isDirty ? (
+                  <>
+                    <span
+                      data-testid='preview-toolbar-dirty-dot'
+                      className='w-7px h-7px rd-full flex-shrink-0'
+                      style={{ background: 'var(--primary)' }}
+                    />
+                    <span className='text-12px text-t-secondary'>{t('preview.office.editor.unsavedChanges')}</span>
+                  </>
+                ) : (
+                  <span className='text-12px text-t-tertiary'>{t('preview.office.editor.saved')}</span>
+                )}
+              </div>
+              <Button type={isDirty ? 'primary' : 'secondary'} size='mini' disabled={!isDirty} onClick={onSave}>
+                {t('common.save')}
+              </Button>
+            </div>
+          )}
           {(isMarkdown || isHTML || isDiff) && (
             <>
               <div className='flex items-center h-full gap-0'>

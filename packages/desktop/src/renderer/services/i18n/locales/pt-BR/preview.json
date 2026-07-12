@@ -118,6 +118,7 @@
       "saving": "Salvando",
       "saved": "Salvo no espaço de trabalho",
       "saveFailed": "Falha ao salvar",
+      "unsavedChanges": "Alterações não salvas",
       "fileChanged": "O arquivo foi alterado em outro local",
       "refreshing": "Atualizando visualização",
       "previewOutdated": "A visualização pode estar desatualizada",
