@@ -17,8 +17,6 @@ type WorkspaceProjectFilesFlyoutProps = {
   expandedKeys: string[];
   onToggleFolder: (node: IDirOrFile) => void;
   onOpenFile: (node: IDirOrFile) => void;
-  /** Double-click intent: opens the file as a pinned (permanent) tab rather than the provisional preview tab. */
-  onOpenFilePinned?: (node: IDirOrFile) => void;
   onOpenContextMenu?: (node: IDirOrFile, x: number, y: number) => void;
   searchText?: string;
   onSearchTextChange?: (value: string) => void;
@@ -43,7 +41,6 @@ const WorkspaceProjectFilesFlyout: React.FC<WorkspaceProjectFilesFlyoutProps> = 
   expandedKeys,
   onToggleFolder,
   onOpenFile,
-  onOpenFilePinned,
   onOpenContextMenu,
   searchText: controlledSearchText,
   onSearchTextChange,
@@ -77,10 +74,6 @@ const WorkspaceProjectFilesFlyout: React.FC<WorkspaceProjectFilesFlyoutProps> = 
                 return;
               }
               onOpenFile(node);
-            }}
-            onDoubleClick={() => {
-              if (isFolder) return;
-              onOpenFilePinned?.(node);
             }}
             onContextMenu={(event) => {
               if (!onOpenContextMenu) return;

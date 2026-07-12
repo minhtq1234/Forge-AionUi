@@ -377,19 +377,10 @@ describe('ChatWorkspace preview selection', () => {
         hasKey: true,
       },
     });
-    expect(mocks.handlePreviewFile).toHaveBeenCalledWith(selectedFile);
-    expect(screen.queryByRole('menuitem', { name: /conversation.workspace.changes.filesTab/ })).not.toBeInTheDocument();
-  });
-
-  it('opens a double-clicked file as a pinned tab from the Project Files flyout', () => {
-    render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' />);
-
-    fireEvent.click(screen.getByRole('button', { name: /conversation.workspace.projectMenu.trigger/ }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /conversation.workspace.changes.filesTab/ }));
-    fireEvent.doubleClick(screen.getByRole('button', { name: selectedFile.name }));
-
-    expect(mocks.ensureNodeSelected).toHaveBeenCalledWith(selectedFile);
+    // Single-click opens a persistent (pinned) tab so opening several files
+    // accumulates several tabs, instead of replacing a single shared preview tab.
     expect(mocks.handlePreviewFile).toHaveBeenCalledWith(selectedFile, true);
+    expect(screen.queryByRole('menuitem', { name: /conversation.workspace.changes.filesTab/ })).not.toBeInTheDocument();
   });
 
   it('keeps existing file actions available from the Files flyout', () => {
