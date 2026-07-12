@@ -150,10 +150,6 @@
   margin-top: 8px;
 }
 
-.compactMenuItem {
-  display: none;
-}
-
 .recoveryBanner {
   display: flex;
   min-height: 44px;
@@ -182,20 +178,6 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 4px;
-}
-
-@container (max-width: 719px) {
-  .toolbar {
-    height: 48px;
-  }
-
-  .secondaryAction {
-    display: none;
-  }
-
-  .compactMenuItem {
-    display: flex;
-  }
 }
 
 @container (max-width: 519px) {
@@ -233,20 +215,6 @@
   .recoveryActions {
     width: 100%;
     justify-content: flex-end;
-  }
-}
-
-@media (max-width: 719px) {
-  .toolbar {
-    height: 48px;
-  }
-
-  .secondaryAction {
-    display: none;
-  }
-
-  .compactMenuItem {
-    display: flex;
   }
 }
 

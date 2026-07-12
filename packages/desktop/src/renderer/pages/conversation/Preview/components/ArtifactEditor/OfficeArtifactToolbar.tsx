@@ -7,7 +7,7 @@
 import type { OfficeArtifactEdit, OfficeArtifactInspection } from '@/common/types/office/artifactEditor';
 import { copyText } from '@/renderer/utils/ui/clipboard';
 import { Button, Dropdown, Menu, Tooltip, Typography } from '@arco-design/web-react';
-import { Attention, Download, EditTwo, FolderOpen, MoreOne, Refresh, Undo } from '@icon-park/react';
+import { Attention, Down, Download, EditTwo, FolderOpen, Refresh, Undo } from '@icon-park/react';
 import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { OfficeSelectionEditor } from './OfficeSelectionEditor';
@@ -65,7 +65,7 @@ export const OfficeArtifactToolbar: React.FC<OfficeArtifactToolbarProps> = ({
   const statusText = statusKey
     ? t(statusKey)
     : inspection === null
-      ? t('preview.office.editor.viewOnlyHint')
+      ? ''
       : unsupported
         ? t(
             documentKind === 'word'
@@ -88,26 +88,11 @@ export const OfficeArtifactToolbar: React.FC<OfficeArtifactToolbarProps> = ({
         ? styles.statusSuccess
         : styles.statusNeutral;
 
-  const moreMenu = (
+  const actionsMenu = (
     <Menu>
-      <Menu.Item
-        key='undo'
-        className={styles.compactMenuItem}
-        data-testid='office-toolbar-compact-undo'
-        disabled={undoDepth <= 0 || busy}
-        onClick={() => void undo()}
-      >
+      <Menu.Item key='undo' disabled={undoDepth <= 0 || busy} onClick={() => void undo()}>
         <Undo size={ICON_SIZE} />
         {t('preview.office.editor.undo')}
-      </Menu.Item>
-      <Menu.Item
-        key='open'
-        className={styles.compactMenuItem}
-        data-testid='office-toolbar-compact-open'
-        onClick={() => void openInDesktopApp()}
-      >
-        <EditTwo size={ICON_SIZE} />
-        {t('preview.office.editor.openDesktop')}
       </Menu.Item>
       <Menu.Item key='download' onClick={download}>
         <Download size={ICON_SIZE} />
@@ -150,49 +135,39 @@ export const OfficeArtifactToolbar: React.FC<OfficeArtifactToolbarProps> = ({
           />
         </div>
         <div className={styles.rightActions}>
-          <Tooltip content={t('preview.office.editor.undo')}>
-            <Button
-              type='text'
-              size='small'
-              aria-label={t('preview.office.editor.undo')}
-              icon={<Undo size={ICON_SIZE} />}
-              disabled={undoDepth <= 0 || busy}
-              className={`${styles.actionButton} ${styles.secondaryAction}`}
-              onClick={() => void undo()}
-            >
-              <span className={styles.actionLabel}>{t('preview.office.editor.undo')}</span>
-            </Button>
-          </Tooltip>
-          <Tooltip content={t('preview.office.editor.openDesktop')}>
-            <Button
-              type='primary'
-              size='small'
-              aria-label={t('preview.office.editor.openDesktop')}
-              icon={<EditTwo size={ICON_SIZE} />}
-              loading={status === 'openingDesktop'}
-              data-testid='office-toolbar-open-desktop'
-              className={`${styles.actionButton} ${styles.secondaryAction}`}
-              onClick={() => void openInDesktopApp()}
-            >
-              <span className={styles.actionLabel}>{t('preview.office.editor.openDesktop')}</span>
-            </Button>
-          </Tooltip>
-          <Dropdown
-            trigger='click'
-            position='br'
-            droplist={moreMenu}
-            getPopupContainer={() => toolbarRef.current ?? document.body}
-          >
-            <Tooltip content={t('preview.office.editor.more')}>
+          <Button.Group>
+            <Tooltip content={t('preview.office.editor.openDesktop')}>
               <Button
-                type='text'
+                type='secondary'
                 size='small'
-                aria-label={t('preview.office.editor.more')}
-                icon={<MoreOne size={ICON_SIZE} />}
-                className={styles.iconButton}
-              />
+                aria-label={t('preview.office.editor.openDesktop')}
+                icon={<EditTwo size={ICON_SIZE} />}
+                loading={status === 'openingDesktop'}
+                data-testid='office-toolbar-open-desktop'
+                className={styles.actionButton}
+                onClick={() => void openInDesktopApp()}
+              >
+                <span className={styles.actionLabel}>{t('preview.office.editor.openDesktop')}</span>
+              </Button>
             </Tooltip>
-          </Dropdown>
+            <Dropdown
+              trigger='click'
+              position='br'
+              droplist={actionsMenu}
+              getPopupContainer={() => toolbarRef.current ?? document.body}
+            >
+              <Tooltip content={t('preview.office.editor.more')}>
+                <Button
+                  type='secondary'
+                  size='small'
+                  aria-label={t('preview.office.editor.more')}
+                  icon={<Down size={ICON_SIZE} />}
+                  className={styles.iconButton}
+                  data-testid='office-toolbar-more'
+                />
+              </Tooltip>
+            </Dropdown>
+          </Button.Group>
         </div>
       </div>
       {recoveryText && (

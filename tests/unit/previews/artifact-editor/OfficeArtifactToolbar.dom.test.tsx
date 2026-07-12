@@ -1,8 +1,6 @@
 import type { OfficeArtifactInspection } from '@/common/types/office/artifactEditor';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 
@@ -36,7 +34,6 @@ const translations: Record<string, string> = {
   'preview.office.editor.saveFailed': 'Save failed',
   'preview.office.editor.fileChanged': 'File changed elsewhere',
   'preview.office.editor.inspecting': 'Preparing edit controls',
-  'preview.office.editor.viewOnlyHint': 'Preview only — open in the desktop app to edit',
   'preview.office.editor.selectWordToEdit': 'Select text in the document to edit it',
   'preview.office.editor.selectExcelToEdit': 'Select a cell to edit it',
   'preview.office.editor.readyToEdit': 'Ready to edit the selected content',
@@ -81,18 +78,6 @@ const createProps = (overrides: Partial<React.ComponentProps<typeof OfficeArtifa
   ...overrides,
 });
 
-const readAtRule = (css: string, header: string): string => {
-  const start = css.indexOf(header);
-  if (start < 0) return '';
-  let depth = 0;
-  for (let index = css.indexOf('{', start); index < css.length; index += 1) {
-    if (css[index] === '{') depth += 1;
-    if (css[index] === '}') depth -= 1;
-    if (depth === 0) return css.slice(start, index + 1);
-  }
-  return '';
-};
-
 describe('OfficeArtifactToolbar', () => {
   beforeEach(() => {
     mocks.copyText.mockReset();
@@ -104,29 +89,27 @@ describe('OfficeArtifactToolbar', () => {
   });
 
   it.each(['word', 'excel'] as const)(
-    'shows a view-only hint pointing at the desktop app before anything is selected in a %s file',
+    'renders no idle status strip or view-only hint before anything is selected in a %s file',
     (documentKind) => {
       render(<OfficeArtifactToolbar {...createProps({ documentKind, inspection: null, undoDepth: 0 })} />);
 
-      const hint = screen.getByText('Preview only — open in the desktop app to edit');
-      expect(hint).toBeVisible();
-      expect(hint.closest('[data-testid="office-toolbar-status-strip"]')).toHaveClass(styles.statusNeutral);
-      // The old "select text/a cell to edit it" idle prompt implied in-app editing
-      // is the primary path -- it must not be the default idle message anymore.
+      expect(screen.queryByText('Preview only — open in the desktop app to edit')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('office-toolbar-status-strip')).not.toBeInTheDocument();
       expect(screen.queryByText('Select text in the document to edit it')).not.toBeInTheDocument();
       expect(screen.queryByText('Select a cell to edit it')).not.toBeInTheDocument();
       expect(screen.getByTestId('office-toolbar-actions')).toContainElement(
-        screen.getByRole('button', { name: 'Open in desktop app' })
+        screen.getByTestId('office-toolbar-open-desktop')
       );
     }
   );
 
-  it('renders Open in desktop app as the prominent, primary toolbar action', () => {
+  it('renders Open in desktop app as a quiet, secondary split-button action', () => {
     render(<OfficeArtifactToolbar {...createProps({ inspection: null, undoDepth: 0 })} />);
 
     const openInDesktopButton = screen.getByTestId('office-toolbar-open-desktop');
     expect(openInDesktopButton).toHaveAccessibleName('Open in desktop app');
-    expect(openInDesktopButton).toHaveClass('arco-btn-primary');
+    expect(openInDesktopButton).not.toHaveClass('arco-btn-primary');
+    expect(openInDesktopButton).toHaveClass('arco-btn-secondary');
   });
 
   it('uses semantic status-strip treatments without mixing status into the action row', () => {
@@ -234,51 +217,43 @@ describe('OfficeArtifactToolbar', () => {
     expect(props.refresh).toHaveBeenCalledOnce();
   });
 
-  it('exposes secondary file actions from More', async () => {
+  it('opens the file in the desktop app from the split-button main action', async () => {
     const user = userEvent.setup();
     const props = createProps();
     render(<OfficeArtifactToolbar {...props} />);
 
-    await user.click(screen.getByRole('button', { name: 'More' }));
-    fireEvent.click(await screen.findByText('Refresh preview'));
-
-    expect(props.refresh).toHaveBeenCalledOnce();
-  });
-
-  it('keeps compact secondary actions available from More', async () => {
-    const user = userEvent.setup();
-    render(<OfficeArtifactToolbar {...createProps()} />);
-
-    await user.click(screen.getByRole('button', { name: 'More' }));
-
-    const compactUndo = screen.getByTestId('office-toolbar-compact-undo');
-    expect(compactUndo).toHaveClass(styles.compactMenuItem);
-    expect(screen.getByTestId('office-toolbar-compact-open')).toHaveClass(styles.compactMenuItem);
-    expect(compactUndo.closest('[data-testid="office-artifact-toolbar"]')).toBeInTheDocument();
-  });
-
-  it('undoes the last edit from the primary toolbar button and disables it once there is nothing to undo', async () => {
-    const user = userEvent.setup();
-    const props = createProps({ undoDepth: 1 });
-    const view = render(<OfficeArtifactToolbar {...props} />);
-
-    await user.click(screen.getByRole('button', { name: 'Undo' }));
-    expect(props.undo).toHaveBeenCalledOnce();
-
-    view.rerender(<OfficeArtifactToolbar {...props} undoDepth={0} />);
-    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
-  });
-
-  it('opens the file in the desktop app from the primary toolbar button', async () => {
-    const user = userEvent.setup();
-    const props = createProps();
-    render(<OfficeArtifactToolbar {...props} />);
-
-    await user.click(screen.getByRole('button', { name: 'Open in desktop app' }));
+    await user.click(screen.getByTestId('office-toolbar-open-desktop'));
     expect(props.openInDesktopApp).toHaveBeenCalledOnce();
   });
 
-  it('downloads and reveals the file from the More menu', async () => {
+  it('exposes Undo, Download, Reveal in folder, and Refresh from the split-button dropdown', async () => {
+    const user = userEvent.setup();
+    const props = createProps({ undoDepth: 1 });
+    render(<OfficeArtifactToolbar {...props} />);
+
+    await user.click(screen.getByRole('button', { name: 'More' }));
+
+    expect(await screen.findByRole('menuitem', { name: 'Undo' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Download' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Reveal in folder' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Refresh preview' })).toBeVisible();
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Undo' }));
+    expect(props.undo).toHaveBeenCalledOnce();
+  });
+
+  it('disables the dropdown Undo item once there is nothing to undo', async () => {
+    const user = userEvent.setup();
+    render(<OfficeArtifactToolbar {...createProps({ undoDepth: 0 })} />);
+
+    await user.click(screen.getByRole('button', { name: 'More' }));
+
+    const undoItem = await screen.findByRole('menuitem', { name: 'Undo' });
+    expect(undoItem).toHaveClass('arco-dropdown-menu-disabled');
+    expect(undoItem).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('downloads and reveals the file from the split-button dropdown', async () => {
     const user = userEvent.setup();
     const props = createProps();
     render(<OfficeArtifactToolbar {...props} />);
@@ -290,27 +265,16 @@ describe('OfficeArtifactToolbar', () => {
     await user.click(screen.getByRole('button', { name: 'More' }));
     fireEvent.click(await screen.findByText('Reveal in folder'));
     expect(props.revealInFolder).toHaveBeenCalledOnce();
+
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    fireEvent.click(await screen.findByText('Refresh preview'));
+    expect(props.refresh).toHaveBeenCalledOnce();
   });
 
-  it('restores compact menu items in container and viewport responsive fallbacks', () => {
-    const css = readFileSync(
-      path.join(
-        process.cwd(),
-        'packages/desktop/src/renderer/pages/conversation/Preview/components/ArtifactEditor/OfficeArtifactToolbar.module.css'
-      ),
-      'utf8'
-    );
+  it('shows a loading state on the split-button main action while opening the desktop app', () => {
+    render(<OfficeArtifactToolbar {...createProps({ status: 'openingDesktop' })} />);
 
-    const containerFallback = readAtRule(css, '@container (max-width: 719px)');
-    const viewportFallback = readAtRule(css, '@media (max-width: 719px)');
-    const narrowContainerFallback = readAtRule(css, '@container (max-width: 519px)');
-    const narrowViewportFallback = readAtRule(css, '@media (max-width: 519px)');
-    expect(containerFallback).toMatch(/\.compactMenuItem\s*\{\s*display:\s*flex;/);
-    expect(viewportFallback).toMatch(/\.compactMenuItem\s*\{\s*display:\s*flex;/);
-    expect(narrowContainerFallback).not.toContain('.status,');
-    expect(narrowContainerFallback).not.toContain('.errorStatus');
-    expect(narrowViewportFallback).not.toContain('.status,');
-    expect(narrowViewportFallback).not.toContain('.errorStatus');
+    expect(screen.getByTestId('office-toolbar-open-desktop')).toHaveClass('arco-btn-loading');
   });
 
   it('announces successful saves only when the status is saved', () => {
@@ -363,7 +327,7 @@ describe('OfficeArtifactToolbar', () => {
     expect(statusText.closest('[data-testid="office-toolbar-status-strip"]')).toHaveClass(styles.statusNeutral);
   });
 
-  it('renders no Ask Forge control, including in the More menu', async () => {
+  it('renders no Ask Forge control, including in the dropdown menu', async () => {
     const user = userEvent.setup();
     render(<OfficeArtifactToolbar {...createProps()} />);
 
