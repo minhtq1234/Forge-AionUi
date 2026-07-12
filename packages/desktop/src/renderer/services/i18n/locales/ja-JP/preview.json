@@ -122,7 +122,6 @@
       "fileChanged": "ファイルが外部で変更されました",
       "refreshing": "プレビューを更新中",
       "previewOutdated": "プレビューが最新でない可能性があります",
-      "unsupported": "この選択範囲にはデスクトップアプリが必要です",
       "inspecting": "編集コントロールを準備しています...",
       "selectWordToEdit": "ドキュメント内のテキストを選択して編集",
       "selectExcelToEdit": "セルを選択して編集",

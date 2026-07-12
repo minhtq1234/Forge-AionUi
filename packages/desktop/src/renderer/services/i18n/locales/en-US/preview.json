@@ -122,7 +122,6 @@
       "fileChanged": "File changed elsewhere",
       "refreshing": "Refreshing preview",
       "previewOutdated": "Preview may be outdated",
-      "unsupported": "This selection needs the desktop app",
       "inspecting": "Preparing edit controls...",
       "selectWordToEdit": "Select text in the document to edit it",
       "selectExcelToEdit": "Select a cell to edit it",

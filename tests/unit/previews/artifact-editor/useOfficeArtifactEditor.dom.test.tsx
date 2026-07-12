@@ -295,7 +295,7 @@ describe('useOfficeArtifactEditor', () => {
   });
 
   it.each(['UNSUPPORTED_CONTENT', 'AMBIGUOUS_TEXT'] as const)(
-    'reports %s mutation failures as unsupported editor state',
+    'returns to the idle ready state instead of a dead-end status after %s mutation failures',
     async (code) => {
       mocks.inspect.mockResolvedValue(firstInspection);
       mocks.apply.mockResolvedValue({ ok: false, code });
@@ -306,7 +306,8 @@ describe('useOfficeArtifactEditor', () => {
 
       await act(() => result.current.apply({ kind: 'replaceText', value: 'New text' }));
 
-      expect(result.current.status).toBe('unsupported');
+      expect(result.current.status).toBe('ready');
+      expect(result.current.inspection).toBeNull();
     }
   );
 
@@ -323,7 +324,7 @@ describe('useOfficeArtifactEditor', () => {
       await act(() => result.current.apply({ kind: 'replaceText', value: 'New text' }));
       const secondApplyResult = await act(() => result.current.apply({ kind: 'replaceText', value: 'Retry' }));
 
-      expect(result.current.status).toBe('unsupported');
+      expect(result.current.status).toBe('ready');
       expect(result.current.inspection).toBeNull();
       expect(secondApplyResult).toBe(false);
       expect(mocks.apply).toHaveBeenCalledOnce();

@@ -36,7 +36,6 @@ const translations: Record<string, string> = {
   'preview.office.editor.saved': 'Saved to workspace',
   'preview.office.editor.saveFailed': 'Save failed',
   'preview.office.editor.fileChanged': 'File changed elsewhere',
-  'preview.office.editor.unsupported': 'This selection needs the desktop app',
   'preview.office.editor.inspecting': 'Preparing edit controls',
   'preview.office.editor.selectWordToEdit': 'Select text in the document to edit it',
   'preview.office.editor.selectExcelToEdit': 'Select a cell to edit it',
@@ -130,9 +129,9 @@ describe('OfficeArtifactToolbar', () => {
     view.rerender(<OfficeArtifactToolbar {...props} status='saved' />);
     expect(screen.getByTestId('office-toolbar-status-strip')).toHaveClass(styles.statusSuccess);
 
-    view.rerender(<OfficeArtifactToolbar {...props} status='unsupported' />);
+    view.rerender(<OfficeArtifactToolbar {...props} status='saveFailed' />);
     expect(screen.getByTestId('office-toolbar-status-strip')).toHaveClass(styles.statusError);
-    expect(screen.getByText('This selection needs the desktop app')).toHaveAttribute('role', 'alert');
+    expect(screen.getByRole('alert')).toHaveTextContent('Your edit is still here');
   });
 
   it('keeps a successful ready status visible after selecting editable content', () => {
@@ -280,13 +279,6 @@ describe('OfficeArtifactToolbar', () => {
     expect(screen.getByText('Saved to workspace')).toHaveAttribute('aria-live', 'polite');
   });
 
-  it('announces the explicit unsupported state instead of a save failure', () => {
-    render(<OfficeArtifactToolbar {...createProps({ status: 'unsupported' })} />);
-
-    expect(screen.getByText('This selection needs the desktop app')).toHaveAttribute('role', 'alert');
-    expect(screen.queryByText('Save failed')).not.toBeInTheDocument();
-  });
-
   it('uses primary Apply buttons for Excel and Word editing', async () => {
     const user = userEvent.setup();
     render(<OfficeArtifactToolbar {...createProps()} />);
@@ -319,6 +311,11 @@ describe('OfficeArtifactToolbar', () => {
 
     expect(screen.queryByRole('textbox', { name: 'Formula bar' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ask Forge' })).toBeEnabled();
-    expect(screen.getByText('This selection needs the desktop app')).toHaveAttribute('role', 'alert');
+    // A multi-cell selection isn't directly editable, but this is a normal,
+    // working state -- not a dead end -- so it must not claim a failure or
+    // point the user at the desktop app.
+    const statusText = screen.getByText('Select a cell to edit it');
+    expect(statusText).not.toHaveAttribute('role', 'alert');
+    expect(statusText.closest('[data-testid="office-toolbar-status-strip"]')).toHaveClass(styles.statusNeutral);
   });
 });

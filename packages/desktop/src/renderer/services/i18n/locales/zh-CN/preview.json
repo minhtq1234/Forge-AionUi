@@ -122,7 +122,6 @@
       "fileChanged": "文件已在其他位置更改",
       "refreshing": "正在刷新预览",
       "previewOutdated": "预览可能已过时",
-      "unsupported": "此选择需要使用桌面应用",
       "inspecting": "正在准备编辑控件...",
       "selectWordToEdit": "选择文档中的文本即可编辑",
       "selectExcelToEdit": "选择单元格即可编辑",

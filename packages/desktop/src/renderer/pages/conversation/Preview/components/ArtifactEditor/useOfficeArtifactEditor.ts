@@ -24,7 +24,6 @@ export type OfficeArtifactEditorStatus =
   | 'saved'
   | 'saveFailed'
   | 'fileChanged'
-  | 'unsupported'
   | 'openingDesktop'
   | 'openedDesktop';
 
@@ -56,8 +55,11 @@ export type UseOfficeArtifactEditorResult = {
 };
 
 function failureStatus(code: OfficeArtifactErrorCode): OfficeArtifactEditorStatus {
-  if (code === 'UNSUPPORTED_CONTENT' || code === 'AMBIGUOUS_TEXT') return 'unsupported';
   return code === 'FILE_CHANGED' || code === 'STALE_SELECTION' ? 'fileChanged' : 'saveFailed';
+}
+
+function isUnsupportedSelectionCode(code: OfficeArtifactErrorCode): boolean {
+  return code === 'UNSUPPORTED_CONTENT' || code === 'AMBIGUOUS_TEXT';
 }
 
 function displayName(fileName: string | undefined, filePath: string): string {
@@ -118,8 +120,16 @@ export function useOfficeArtifactEditor(options: UseOfficeArtifactEditorOptions)
           if (sessionRequestRef.current !== sessionId || inspectRequestRef.current !== requestId) return;
           pendingSelectionRef.current = null;
           if (result.ok === false) {
-            selectionRef.current = null;
-            setStatus(failureStatus(result.code));
+            if (isUnsupportedSelectionCode(result.code)) {
+              // Not every selection is editable (e.g. a shape or text box). There is
+              // no failing edit to offer here, so drop back to the normal idle state
+              // instead of surfacing a dead-end status.
+              clearSelection();
+              setStatus('ready');
+            } else {
+              selectionRef.current = null;
+              setStatus(failureStatus(result.code));
+            }
             return;
           }
           versionRef.current = result.version;
@@ -232,10 +242,16 @@ export function useOfficeArtifactEditor(options: UseOfficeArtifactEditorOptions)
       if (result.ok === false) {
         if (result.code === 'FILE_CHANGED' || result.code === 'STALE_SELECTION') {
           conflictPendingRef.current = true;
-        } else if (result.code === 'UNSUPPORTED_CONTENT' || result.code === 'AMBIGUOUS_TEXT') {
+          setStatus(failureStatus(result.code));
+        } else if (isUnsupportedSelectionCode(result.code)) {
+          // Not every selection is editable (e.g. a shape or text box). There is
+          // no failing edit to offer here, so drop back to the normal idle state
+          // instead of surfacing a dead-end status.
           clearSelection();
+          setStatus('ready');
+        } else {
+          setStatus(failureStatus(result.code));
         }
-        setStatus(failureStatus(result.code));
         return false;
       }
 

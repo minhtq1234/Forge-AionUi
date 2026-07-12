@@ -37,7 +37,6 @@ const STATUS_KEYS: Partial<Record<OfficeArtifactEditorStatus, string>> = {
   saved: 'preview.office.editor.saved',
   saveFailed: 'preview.office.editor.saveFailed',
   fileChanged: 'preview.office.editor.fileChanged',
-  unsupported: 'preview.office.editor.unsupported',
   openedDesktop: 'preview.office.editor.openedDesktop',
 };
 
@@ -67,17 +66,12 @@ export const OfficeArtifactToolbar: React.FC<OfficeArtifactToolbarProps> = ({
   const statusKey = STATUS_KEYS[status];
   const statusText = statusKey
     ? t(statusKey)
-    : unsupported
-      ? t('preview.office.editor.unsupported')
-      : inspection
-        ? t('preview.office.editor.readyToEdit')
-        : t(
-            documentKind === 'word'
-              ? 'preview.office.editor.selectWordToEdit'
-              : 'preview.office.editor.selectExcelToEdit'
-          );
-  const statusIsError =
-    status === 'saveFailed' || status === 'fileChanged' || status === 'unsupported' || (unsupported && !statusKey);
+    : inspection && !unsupported
+      ? t('preview.office.editor.readyToEdit')
+      : t(
+          documentKind === 'word' ? 'preview.office.editor.selectWordToEdit' : 'preview.office.editor.selectExcelToEdit'
+        );
+  const statusIsError = status === 'saveFailed' || status === 'fileChanged';
   const recoveryText =
     status === 'fileChanged'
       ? t('preview.office.editor.conflictRecovery')
@@ -88,7 +82,7 @@ export const OfficeArtifactToolbar: React.FC<OfficeArtifactToolbarProps> = ({
     ? styles.statusError
     : status === 'saving' || status === 'inspecting'
       ? styles.statusProgress
-      : status === 'saved' || status === 'openedDesktop' || (status === 'ready' && inspection)
+      : status === 'saved' || status === 'openedDesktop' || (status === 'ready' && inspection && !unsupported)
         ? styles.statusSuccess
         : styles.statusNeutral;
 
