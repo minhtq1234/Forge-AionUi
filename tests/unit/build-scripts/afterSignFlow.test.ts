@@ -114,6 +114,28 @@ describe('macOS afterSign release flow', () => {
     expect(dependencies.logger.warn).toHaveBeenCalledWith(expect.stringContaining('not suitable for a stable release'));
   });
 
+  it('keeps failed non-stable ad-hoc signing warning-only without logging credentials', async () => {
+    const dependencies = createDependencies({
+      FORGE_RELEASE_CHANNEL: 'non-stable',
+      appleId: stableEnv.appleId,
+      appleIdPassword: stableEnv.appleIdPassword,
+      teamId: stableEnv.teamId,
+    });
+    dependencies.spawnSync = vi
+      .fn()
+      .mockReturnValueOnce({ status: 1, stdout: '', stderr: 'unsigned' })
+      .mockReturnValueOnce({ status: 1, stdout: '', stderr: 'codesign failed' });
+
+    await expect(runAfterSign(context, dependencies)).resolves.toBeUndefined();
+    expect(dependencies.logger.warn).toHaveBeenCalledWith(expect.stringContaining('ad-hoc signing failed'));
+    const loggedValues = [
+      ...vi.mocked(dependencies.logger.log).mock.calls,
+      ...vi.mocked(dependencies.logger.warn).mock.calls,
+    ].flat();
+    expect(loggedValues.join('\n')).not.toContain(stableEnv.appleIdPassword);
+    expect(dependencies.notarize).not.toHaveBeenCalled();
+  });
+
   it('keeps non-stable notarization failure warning-only', async () => {
     const dependencies = createDependencies({
       FORGE_RELEASE_CHANNEL: 'non-stable',

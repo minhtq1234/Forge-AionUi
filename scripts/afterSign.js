@@ -99,7 +99,12 @@ async function runAfterSign(context, dependencies = {}) {
       });
     }
     logger.warn(`Non-stable macOS build is unsigned; applying an ad-hoc signature to ${appName}.`);
-    runCommand(spawn, 'codesign', ['--force', '--deep', '--sign', '-', appPath]);
+    try {
+      runCommand(spawn, 'codesign', ['--force', '--deep', '--sign', '-', appPath]);
+    } catch {
+      logger.warn('Non-stable macOS build ad-hoc signing failed; continuing with a non-release artifact.');
+      return;
+    }
     logger.warn('Ad-hoc-signed artifact is not suitable for a stable release.');
     return;
   }
