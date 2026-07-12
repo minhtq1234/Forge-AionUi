@@ -245,6 +245,41 @@ describe('OfficeArtifactToolbar', () => {
     expect(compactUndo.closest('[data-testid="office-artifact-toolbar"]')).toBeInTheDocument();
   });
 
+  it('undoes the last edit from the primary toolbar button and disables it once there is nothing to undo', async () => {
+    const user = userEvent.setup();
+    const props = createProps({ undoDepth: 1 });
+    const view = render(<OfficeArtifactToolbar {...props} />);
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(props.undo).toHaveBeenCalledOnce();
+
+    view.rerender(<OfficeArtifactToolbar {...props} undoDepth={0} />);
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  });
+
+  it('opens the file in the desktop app from the primary toolbar button', async () => {
+    const user = userEvent.setup();
+    const props = createProps();
+    render(<OfficeArtifactToolbar {...props} />);
+
+    await user.click(screen.getByRole('button', { name: 'Open in desktop app' }));
+    expect(props.openInDesktopApp).toHaveBeenCalledOnce();
+  });
+
+  it('downloads and reveals the file from the More menu', async () => {
+    const user = userEvent.setup();
+    const props = createProps();
+    render(<OfficeArtifactToolbar {...props} />);
+
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    fireEvent.click(await screen.findByText('Download'));
+    expect(props.download).toHaveBeenCalledOnce();
+
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    fireEvent.click(await screen.findByText('Reveal in folder'));
+    expect(props.revealInFolder).toHaveBeenCalledOnce();
+  });
+
   it('restores compact menu items in container and viewport responsive fallbacks', () => {
     const css = readFileSync(
       path.join(
