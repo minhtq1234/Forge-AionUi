@@ -99,6 +99,21 @@
   flex: 0 0 auto;
 }
 
+.actionsMenu {
+  min-width: 188px;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.menuItem :global(.i-icon) {
+  flex: 0 0 auto;
+  font-size: 0;
+}
+
 .cellLabel,
 .rangeLabel {
   flex: 0 1 auto;

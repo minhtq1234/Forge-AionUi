@@ -89,20 +89,20 @@ export const OfficeArtifactToolbar: React.FC<OfficeArtifactToolbarProps> = ({
         : styles.statusNeutral;
 
   const actionsMenu = (
-    <Menu>
-      <Menu.Item key='undo' disabled={undoDepth <= 0 || busy} onClick={() => void undo()}>
+    <Menu className={styles.actionsMenu}>
+      <Menu.Item className={styles.menuItem} key='undo' disabled={undoDepth <= 0 || busy} onClick={() => void undo()}>
         <Undo size={ICON_SIZE} />
         {t('preview.office.editor.undo')}
       </Menu.Item>
-      <Menu.Item key='download' onClick={download}>
+      <Menu.Item className={styles.menuItem} key='download' onClick={download}>
         <Download size={ICON_SIZE} />
         {t('common.download')}
       </Menu.Item>
-      <Menu.Item key='reveal' onClick={revealInFolder}>
+      <Menu.Item className={styles.menuItem} key='reveal' onClick={revealInFolder}>
         <FolderOpen size={ICON_SIZE} />
         {t('preview.office.editor.reveal')}
       </Menu.Item>
-      <Menu.Item key='refresh' onClick={refresh}>
+      <Menu.Item className={styles.menuItem} key='refresh' onClick={refresh}>
         <Refresh size={ICON_SIZE} />
         {t('preview.office.editor.refresh')}
       </Menu.Item>
@@ -154,7 +154,7 @@ export const OfficeArtifactToolbar: React.FC<OfficeArtifactToolbarProps> = ({
               trigger='click'
               position='br'
               droplist={actionsMenu}
-              getPopupContainer={() => toolbarRef.current ?? document.body}
+              getPopupContainer={() => document.body}
             >
               <Tooltip content={t('preview.office.editor.more')}>
                 <Button
