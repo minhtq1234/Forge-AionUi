@@ -17,6 +17,8 @@ export type GuidInputResult = {
   setFiles: React.Dispatch<React.SetStateAction<string[]>>;
   dir: string;
   setDir: React.Dispatch<React.SetStateAction<string>>;
+  projectId: string | undefined;
+  setProjectId: React.Dispatch<React.SetStateAction<string | undefined>>;
   isInputFocused: boolean;
   loading: boolean;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
@@ -31,7 +33,7 @@ export type GuidInputResult = {
 };
 
 type UseGuidInputOptions = {
-  locationState: { workspace?: string } | null;
+  locationState: { workspace?: string; projectId?: string } | null;
 };
 
 /**
@@ -41,6 +43,7 @@ export const useGuidInput = ({ locationState }: UseGuidInputOptions): GuidInputR
   const [input, setInput] = useState('');
   const [files, setFiles] = useState<string[]>([]);
   const [dir, setDir] = useState<string>('');
+  const [projectId, setProjectId] = useState<string | undefined>();
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -48,6 +51,9 @@ export const useGuidInput = ({ locationState }: UseGuidInputOptions): GuidInputR
   useEffect(() => {
     if (locationState?.workspace) {
       setDir(locationState.workspace);
+    }
+    if (locationState?.projectId) {
+      setProjectId(locationState.projectId);
     }
   }, [locationState]);
 
@@ -115,6 +121,8 @@ export const useGuidInput = ({ locationState }: UseGuidInputOptions): GuidInputR
     setFiles,
     dir,
     setDir,
+    projectId,
+    setProjectId,
     isInputFocused,
     loading,
     setLoading,

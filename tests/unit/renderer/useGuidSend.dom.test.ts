@@ -50,6 +50,8 @@ const createDeps = (): GuidSendDeps => ({
   setFiles: vi.fn(),
   dir: '',
   setDir: vi.fn(),
+  projectId: undefined,
+  setProjectId: vi.fn(),
   setLoading: vi.fn(),
   loading: false,
   selectedAssistantId: 'assistant-1',
@@ -85,7 +87,7 @@ describe('useGuidSend', () => {
 
   it('passes selected mode into assistant conversation overrides when creating a preset ACP conversation', async () => {
     const deps = createDeps();
-    (deps as any).selectedThoughtLevelValue = 'high';
+    deps.selectedThoughtLevelValue = 'high';
 
     const { result } = renderHook(() => useGuidSend(deps));
 
@@ -262,6 +264,43 @@ describe('useGuidSend', () => {
 
     const payload = createConversationInvokeMock.mock.calls[0][0];
     expect(payload.extra.selected_session_mcp_servers).toEqual([expect.objectContaining({ id: 'builtin-memory' })]);
+  });
+
+  it('passes Project id and workspace into ACP conversation creation', async () => {
+    const deps = createDeps();
+    deps.projectId = 'project-1';
+    deps.dir = '/Users/me/Finance Close';
+
+    const { result } = renderHook(() => useGuidSend(deps));
+
+    await act(async () => {
+      await result.current.handleSend();
+    });
+
+    const payload = createConversationInvokeMock.mock.calls[0][0];
+    expect(payload.extra.project_id).toBe('project-1');
+    expect(payload.extra.workspace).toBe('/Users/me/Finance Close');
+    expect(payload.extra.custom_workspace).toBe(true);
+  });
+
+  it('passes Project id and workspace into Aion CLI conversation creation', async () => {
+    const deps = createDeps();
+    deps.selectedAssistantId = 'bare:aionrs';
+    deps.selectedAssistantBackend = 'aionrs';
+    deps.current_model = { provider_id: 'openai', model: 'gpt-5', use_model: 'gpt-5' } as never;
+    deps.projectId = 'project-1';
+    deps.dir = '/Users/me/Finance Close';
+
+    const { result } = renderHook(() => useGuidSend(deps));
+
+    await act(async () => {
+      await result.current.handleSend();
+    });
+
+    const payload = createConversationInvokeMock.mock.calls[0][0];
+    expect(payload.extra.project_id).toBe('project-1');
+    expect(payload.extra.workspace).toBe('/Users/me/Finance Close');
+    expect(payload.extra.custom_workspace).toBe(true);
   });
 
   it('does not create a conversation without assistant identity', async () => {

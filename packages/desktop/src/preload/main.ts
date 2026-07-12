@@ -10,7 +10,7 @@
 // Electron's sandbox-mode preload doesn't try to resolve it from node_modules.
 import '@sentry/electron/preload';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
-import { ADAPTER_BRIDGE_EVENT_KEY } from '../common/adapter/constant';
+import { ADAPTER_BRIDGE_EVENT_KEY } from '../common/adapter/native/constants';
 
 /**
  * @description 注入到renderer进程中, 用于与main进程通信

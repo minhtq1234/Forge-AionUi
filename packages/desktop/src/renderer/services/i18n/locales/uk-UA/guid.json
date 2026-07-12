@@ -1,9 +1,16 @@
 {
+  "toolbar": {
+    "label": "Дії на головній",
+    "history": "Історія",
+    "saved": "Збережене",
+    "community": "Спільнота"
+  },
   "promptExamplesHint": "Спробуйте ці інструкції",
   "defaultPrompts": {
     "capabilities": "Що ти можеш зробити для мене?",
     "skills": "Які в тебе є навички?",
-    "tools": "Які в тебе є інструменти?"
+    "tools": "Які в тебе є інструменти?",
+    "reviewFolder": "Review the files in a folder"
   },
   "selectAssistantHint": "Виберіть асистента, щоб розпочати завдання",
   "workspace": {
@@ -13,5 +20,11 @@
     "specifyWorkspace": "Вибрати папку проєкту",
     "searchPlaceholder": "Пошук проєктів…",
     "noProject": "Без проєкту"
+  },
+  "defaultProjectPrompts": {
+    "reviewFiles": "Review the files in this project",
+    "summarizeFolder": "Summarize what this project contains",
+    "createPlan": "Create a plan for this project",
+    "findNextSteps": "Find the next useful steps for this project"
   }
 }

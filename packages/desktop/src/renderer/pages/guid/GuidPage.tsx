@@ -20,12 +20,12 @@ import GuidActionRow from './components/GuidActionRow';
 import GuidInputCard from './components/GuidInputCard';
 import GuidModelSelector from './components/GuidModelSelector';
 import QuickActionButtons from './components/QuickActionButtons';
-import FeedbackReportModal from '@/renderer/components/settings/SettingsModal/contents/FeedbackReportModal';
 import { useGuidAssistantSelection } from './hooks/useGuidAssistantSelection';
 import { useGuidInput } from './hooks/useGuidInput';
 import { useGuidModelSelection } from './hooks/useGuidModelSelection';
 import { useGuidSend } from './hooks/useGuidSend';
 import { useTypewriterPlaceholder } from './hooks/useTypewriterPlaceholder';
+import { getWorkspaceBasename, readProjects } from '@/renderer/pages/conversation/projects/projectStorage';
 import { ensureBackendMcpCatalog } from '@/renderer/hooks/mcp/catalog';
 import { resolveGuidAssistantDefaults } from './utils/assistantDefaults';
 import SpeechInputButton from '@/renderer/components/chat/SpeechInputButton';
@@ -33,6 +33,7 @@ import { useOpenFileSelector } from '@/renderer/hooks/file/useOpenFileSelector';
 import { appendSpeechTranscript } from '@/renderer/hooks/system/useSpeechInput';
 import { useLiveTranscriptInsertion } from '@/renderer/hooks/system/useLiveTranscriptInsertion';
 import { Button, ConfigProvider } from '@arco-design/web-react';
+import { FolderOpen, Layers, Lightning, Paperclip, Star } from '@icon-park/react';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -47,7 +48,6 @@ const GuidPage: React.FC = () => {
   const { activeBorderColor, inactiveBorderColor, activeShadow } = useInputFocusRing();
 
   const localeKey = resolveLocaleKey(i18n.language);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // Open external link
   const openLink = useCallback(async (url: string) => {
@@ -133,7 +133,7 @@ const GuidPage: React.FC = () => {
   });
 
   const guidInput = useGuidInput({
-    locationState: location.state as { workspace?: string } | null,
+    locationState: location.state as { workspace?: string; projectId?: string } | null,
   });
   const appendSelectedFiles = useCallback(
     (files: string[]) => {
@@ -243,6 +243,8 @@ const GuidPage: React.FC = () => {
     setFiles: guidInput.setFiles,
     dir: guidInput.dir,
     setDir: guidInput.setDir,
+    projectId: guidInput.projectId,
+    setProjectId: guidInput.setProjectId,
     setLoading: guidInput.setLoading,
     loading: guidInput.loading,
 
@@ -308,6 +310,24 @@ const GuidPage: React.FC = () => {
 
   // Typewriter placeholder
   const typewriterPlaceholder = useTypewriterPlaceholder(t('conversation.welcome.placeholder'));
+  const projectWelcomeName = useMemo(() => {
+    if (!guidInput.dir) {
+      return null;
+    }
+
+    if (guidInput.projectId) {
+      const project = readProjects().find((item) => item.id === guidInput.projectId);
+      if (project) {
+        return project.name;
+      }
+    }
+
+    return getWorkspaceBasename(guidInput.dir);
+  }, [guidInput.dir, guidInput.projectId]);
+  const welcomeTitle = projectWelcomeName
+    ? t('conversation.welcome.projectTitle', { name: projectWelcomeName })
+    : t('conversation.welcome.title');
+  const isProjectWelcome = Boolean(projectWelcomeName);
   const selectedAssistantRecord = useMemo(() => {
     if (!selectedAssistantId) return undefined;
     const selectedId = agentSelection.selectedAssistantId;
@@ -326,12 +346,22 @@ const GuidPage: React.FC = () => {
       selectedAssistantRecord?.prompts ||
       [];
 
-    if (resolvedPrompts.length > 0) {
-      return resolvedPrompts;
-    }
+    const fallbackPrompts = isProjectWelcome
+      ? [
+          t('guid.defaultProjectPrompts.reviewFiles'),
+          t('guid.defaultProjectPrompts.summarizeFolder'),
+          t('guid.defaultProjectPrompts.createPlan'),
+          t('guid.defaultProjectPrompts.findNextSteps'),
+        ]
+      : [
+          t('guid.defaultPrompts.capabilities'),
+          t('guid.defaultPrompts.skills'),
+          t('guid.defaultPrompts.tools'),
+          t('guid.defaultPrompts.reviewFolder'),
+        ];
 
-    return [t('guid.defaultPrompts.capabilities'), t('guid.defaultPrompts.skills'), t('guid.defaultPrompts.tools')];
-  }, [localeKey, selectedAssistantDetail, selectedAssistantRecord, selectedAssistantId, t]);
+    return Array.from(new Set([...resolvedPrompts, ...fallbackPrompts])).slice(0, 4);
+  }, [isProjectWelcome, localeKey, selectedAssistantDetail, selectedAssistantRecord, selectedAssistantId, t]);
 
   // Sync disabledBuiltinSkills + enabledSkills from assistant detail defaults.
   useEffect(() => {
@@ -624,8 +654,16 @@ const GuidPage: React.FC = () => {
     <ConfigProvider getPopupContainer={() => guidContainerRef.current || document.body}>
       <div ref={guidContainerRef} className={styles.guidContainer}>
         <div className={styles.guidLayout}>
+          {isProjectWelcome ? (
+            <div className={styles.projectPill}>
+              <Layers theme='outline' size='16' strokeWidth={3} aria-hidden='true' />
+              <span>{t('conversation.welcome.projectPill', { name: projectWelcomeName })}</span>
+            </div>
+          ) : null}
+
           <div className={styles.heroHeader}>
-            <p className='text-2xl font-semibold mb-0 text-0 text-center'>{t('conversation.welcome.title')}</p>
+            <p className='text-2xl font-semibold mb-0 text-0 text-center'>{welcomeTitle}</p>
+            {isProjectWelcome ? <p className={styles.projectPath}>{guidInput.dir}</p> : null}
           </div>
 
           <AssistantSelectionArea
@@ -659,36 +697,35 @@ const GuidPage: React.FC = () => {
           />
 
           {selectedAssistantPrompts.length > 0 ? (
-            <div className='mt-18px w-full animate-fade-in'>
+            <section className='mt-18px w-full animate-fade-in' aria-label={t('guid.promptExamplesHint')}>
               <div className={`${styles.assistantPromptHint} mb-10px text-left`}>
                 {t('guid.promptExamplesHint', { defaultValue: 'Try these example prompts:' })}
               </div>
-              <div className='flex flex-col gap-9px'>
+              <div className='grid grid-cols-2 gap-9px'>
                 {selectedAssistantPrompts.map((prompt, index) => (
                   <Button
                     key={`${index}-${prompt}`}
                     type='text'
-                    className='!h-auto !w-full !rounded-10px !border !border-border-2 !bg-bg-base !px-10px !py-10px !text-left !text-12.5px !text-t-secondary !whitespace-normal !break-words transition-colors hover:!border-aou-6 hover:!text-t-primary'
+                    className='!h-auto !min-h-56px !w-full !rounded-8px !border !border-border-2 !bg-bg-base !px-12px !py-10px !text-left !text-12.5px !text-t-secondary !whitespace-normal !break-words transition-colors hover:!border-aou-6 hover:!text-t-primary'
                     onClick={() => {
                       guidInput.setInput(prompt);
                       guidInput.handleTextareaFocus();
                     }}
                   >
-                    {prompt}
+                    <span className='flex items-center gap-9px'>
+                      <span className='flex size-28px shrink-0 items-center justify-center rounded-6px bg-fill-2 text-t-secondary'>
+                        {[<Lightning />, <Star />, <Paperclip />, <FolderOpen />][index]}
+                      </span>
+                      <span>{prompt}</span>
+                    </span>
                   </Button>
                 ))}
               </div>
-            </div>
+            </section>
           ) : null}
         </div>
 
-        <QuickActionButtons
-          onOpenLink={openLink}
-          onOpenBugReport={() => setShowFeedbackModal(true)}
-          inactiveBorderColor={inactiveBorderColor}
-          activeShadow={activeShadow}
-        />
-        <FeedbackReportModal visible={showFeedbackModal} onCancel={() => setShowFeedbackModal(false)} />
+        <QuickActionButtons onOpenLink={openLink} />
       </div>
     </ConfigProvider>
   );

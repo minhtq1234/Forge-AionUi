@@ -232,6 +232,7 @@ export type TChatConversation =
       IChatConversation<
         'acp',
         {
+          project_id?: string;
           workspace?: string;
           backend: string;
           cli_path?: string;
@@ -288,6 +289,7 @@ export type TChatConversation =
       IChatConversation<
         'codex',
         {
+          project_id?: string;
           workspace?: string;
           cli_path?: string;
           custom_workspace?: boolean;
@@ -320,6 +322,7 @@ export type TChatConversation =
       IChatConversation<
         'openclaw-gateway',
         {
+          project_id?: string;
           workspace?: string;
           backend?: string;
           agent_name?: string;
@@ -375,6 +378,7 @@ export type TChatConversation =
       IChatConversation<
         'gemini',
         {
+          project_id?: string;
           workspace?: string;
           custom_workspace?: boolean;
           agent_name?: string;
@@ -396,6 +400,7 @@ export type TChatConversation =
       IChatConversation<
         'nanobot',
         {
+          project_id?: string;
           workspace?: string;
           custom_workspace?: boolean;
           /** Skills snapshot for this conversation — authoritative list, written
@@ -421,6 +426,7 @@ export type TChatConversation =
       IChatConversation<
         'remote',
         {
+          project_id?: string;
           workspace?: string;
           custom_workspace?: boolean;
           /** Remote agent config ID (FK to remote_agents table) */
@@ -449,6 +455,7 @@ export type TChatConversation =
   | IChatConversation<
       'aionrs',
       {
+        project_id?: string;
         workspace: string;
         custom_workspace?: boolean;
         proxy?: string;

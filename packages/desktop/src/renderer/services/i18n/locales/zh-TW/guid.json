@@ -1,9 +1,16 @@
 {
+  "toolbar": {
+    "label": "首頁操作",
+    "history": "歷史",
+    "saved": "已儲存",
+    "community": "社群"
+  },
   "promptExamplesHint": "試試這些指令",
   "defaultPrompts": {
     "capabilities": "你能為我做哪些事情？",
     "skills": "你有哪些技能？",
-    "tools": "你有哪些工具？"
+    "tools": "你有哪些工具？",
+    "reviewFolder": "Review the files in a folder"
   },
   "selectAssistantHint": "選擇一位助手開始任務",
   "workspace": {
@@ -13,5 +20,11 @@
     "specifyWorkspace": "選擇專案資料夾",
     "searchPlaceholder": "搜尋專案…",
     "noProject": "不使用專案"
+  },
+  "defaultProjectPrompts": {
+    "reviewFiles": "Review the files in this project",
+    "summarizeFolder": "Summarize what this project contains",
+    "createPlan": "Create a plan for this project",
+    "findNextSteps": "Find the next useful steps for this project"
   }
 }
