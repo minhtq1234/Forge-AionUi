@@ -75,7 +75,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
     closePreview,
     updateContent,
     saveContent,
-    addToSendBox,
     addDomSnippet,
   } = usePreviewContext();
 
@@ -159,9 +158,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
     conversationId,
     workspace: activeTab?.metadata?.workspace ?? '',
     filePath: activeTab?.metadata?.file_path ?? '',
-    fileName: activeTab?.metadata?.file_name ?? activeTab?.title,
     externalRevision: `${activeTab?.officePreviewRevision ?? 0}:${manualOfficeRefreshRevision}`,
-    addToSendBox,
     onArtifactMutated: handleOfficeArtifactMutated,
   });
 
@@ -809,7 +806,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
                   undoDepth={officeEditor.undoDepth}
                   apply={officeEditor.apply}
                   undo={officeEditor.undo}
-                  askForge={officeEditor.askForge}
                   openInDesktopApp={officeEditor.openInDesktopApp}
                   download={handleDownload}
                   revealInFolder={handleRevealOfficeInFolder}

@@ -14,8 +14,6 @@ import type {
 } from '@/common/types/office/artifactEditor';
 import type { WebviewHostScriptRequest } from '@/renderer/components/media/WebviewHost';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { buildOfficeAssistantContext } from './assistantContext';
 
 export type OfficeArtifactEditorStatus =
   | 'ready'
@@ -34,9 +32,7 @@ export type UseOfficeArtifactEditorOptions = {
   conversationId: string;
   workspace: string;
   filePath: string;
-  fileName?: string;
   externalRevision?: number | string;
-  addToSendBox: (text: string) => void;
   onArtifactMutated: () => void;
 };
 
@@ -49,7 +45,6 @@ export type UseOfficeArtifactEditorResult = {
   handleSelectionChange: (selection: OfficeArtifactSelection) => void;
   apply: (edit: OfficeArtifactEdit) => Promise<boolean>;
   undo: () => Promise<boolean>;
-  askForge: () => void;
   openInDesktopApp: () => Promise<boolean>;
   moveSelection: (direction: OfficeSelectionDirection) => void;
 };
@@ -62,15 +57,9 @@ function isUnsupportedSelectionCode(code: OfficeArtifactErrorCode): boolean {
   return code === 'UNSUPPORTED_CONTENT' || code === 'AMBIGUOUS_TEXT';
 }
 
-function displayName(fileName: string | undefined, filePath: string): string {
-  const normalized = filePath.replaceAll('\\', '/');
-  return fileName || normalized.slice(normalized.lastIndexOf('/') + 1);
-}
-
 /** Coordinate versioned Office inspection, mutation, undo, and composer context. */
 export function useOfficeArtifactEditor(options: UseOfficeArtifactEditorOptions): UseOfficeArtifactEditorResult {
-  const { enabled = true, conversationId, workspace, filePath, fileName, externalRevision } = options;
-  const { t } = useTranslation();
+  const { enabled = true, conversationId, workspace, filePath, externalRevision } = options;
   const [version, setVersion] = useState<string | null>(null);
   const [undoDepth, setUndoDepth] = useState(0);
   const [inspection, setInspection] = useState<OfficeArtifactInspection | null>(null);
@@ -90,9 +79,7 @@ export function useOfficeArtifactEditor(options: UseOfficeArtifactEditorOptions)
   const deferredStateReloadRef = useRef(false);
   const observedExternalRevisionRef = useRef(externalRevision);
   const currentExternalRevisionRef = useRef(externalRevision);
-  const addToSendBoxRef = useRef(options.addToSendBox);
   const onArtifactMutatedRef = useRef(options.onArtifactMutated);
-  addToSendBoxRef.current = options.addToSendBox;
   onArtifactMutatedRef.current = options.onArtifactMutated;
   currentExternalRevisionRef.current = externalRevision;
 
@@ -330,13 +317,6 @@ export function useOfficeArtifactEditor(options: UseOfficeArtifactEditorOptions)
     }
   }, [applyMutationResult, conversationId, filePath, finishMutation, undoDepth, workspace]);
 
-  const askForge = useCallback((): void => {
-    const currentInspection = inspectionRef.current;
-    if (!currentInspection) return;
-    const translate = (key: string, values?: Record<string, string>): string => t(key, values);
-    addToSendBoxRef.current(buildOfficeAssistantContext(translate, displayName(fileName, filePath), currentInspection));
-  }, [fileName, filePath, t]);
-
   const openInDesktopApp = useCallback(async (): Promise<boolean> => {
     const sessionId = sessionRequestRef.current;
     setStatus('openingDesktop');
@@ -368,7 +348,6 @@ export function useOfficeArtifactEditor(options: UseOfficeArtifactEditorOptions)
     handleSelectionChange,
     apply,
     undo,
-    askForge,
     openInDesktopApp,
     moveSelection,
   };

@@ -26,7 +26,6 @@ const mocks = vi.hoisted(() => ({
   handleSelectionChange: vi.fn(),
   applyEdit: vi.fn(),
   undoEdit: vi.fn(),
-  askForge: vi.fn(),
   openInDesktopApp: vi.fn(),
   moveSelection: vi.fn(),
 }));
@@ -98,7 +97,6 @@ vi.mock('@/renderer/pages/conversation/Preview/components/ArtifactEditor', () =>
       handleSelectionChange: mocks.handleSelectionChange,
       apply: mocks.applyEdit,
       undo: mocks.undoEdit,
-      askForge: mocks.askForge,
       openInDesktopApp: mocks.openInDesktopApp,
       moveSelection: mocks.moveSelection,
     };
@@ -195,8 +193,6 @@ describe('PreviewPanel Office artifact integration', () => {
       conversationId: 'conversation-1',
       workspace: '/workspace',
       filePath: '/workspace/report.word',
-      fileName: 'report.word',
-      addToSendBox: mocks.previewContext.current.addToSendBox,
     });
     expect(mocks.wordViewerProps.current).toMatchObject({
       conversationId: 'conversation-1',
@@ -229,7 +225,6 @@ describe('PreviewPanel Office artifact integration', () => {
 
     expect(toolbarProps).toMatchObject({
       openInDesktopApp: mocks.openInDesktopApp,
-      askForge: mocks.askForge,
       apply: mocks.applyEdit,
       undo: mocks.undoEdit,
       moveSelection: mocks.moveSelection,

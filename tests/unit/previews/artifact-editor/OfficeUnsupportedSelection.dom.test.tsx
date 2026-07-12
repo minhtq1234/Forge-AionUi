@@ -49,7 +49,6 @@ const translations: Record<string, string> = {
   'preview.office.editor.italic': 'Italic',
   'preview.office.editor.underline': 'Underline',
   'preview.office.editor.undo': 'Undo',
-  'preview.office.editor.askForge': 'Ask Forge',
   'preview.office.editor.openDesktop': 'Open in desktop app',
   'preview.office.editor.openedDesktop': 'Opened in desktop app',
   'preview.office.editor.more': 'More',
@@ -116,9 +115,7 @@ const createOptions = () => ({
   conversationId: 'conversation-1',
   workspace: '/workspace',
   filePath: '/workspace/report.docx',
-  fileName: 'report.docx',
   externalRevision: 0,
-  addToSendBox: vi.fn<(text: string) => void>(),
   onArtifactMutated: vi.fn<() => void>(),
 });
 
@@ -129,7 +126,6 @@ const renderToolbar = (props: Pick<React.ComponentProps<typeof OfficeArtifactToo
       undoDepth={0}
       apply={vi.fn()}
       undo={vi.fn()}
-      askForge={vi.fn()}
       openInDesktopApp={vi.fn()}
       download={vi.fn()}
       revealInFolder={vi.fn()}

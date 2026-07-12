@@ -87,7 +87,6 @@ vi.mock('@/renderer/pages/conversation/Preview/components/ArtifactEditor', () =>
     handleSelectionChange: vi.fn(),
     apply: vi.fn(),
     undo: vi.fn(),
-    askForge: vi.fn(),
     openInDesktopApp: vi.fn(),
     moveSelection: vi.fn(),
   }),

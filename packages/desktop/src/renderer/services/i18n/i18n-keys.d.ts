@@ -1159,7 +1159,6 @@ export type I18nKey =
   | 'preview.noTabs'
   | 'preview.office.editor.apply'
   | 'preview.office.editor.askExcelContext'
-  | 'preview.office.editor.askForge'
   | 'preview.office.editor.askWordContext'
   | 'preview.office.editor.bold'
   | 'preview.office.editor.cancel'

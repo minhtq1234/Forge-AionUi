@@ -26,7 +26,6 @@ const translations: Record<string, string> = {
   'preview.office.editor.italic': 'Italic',
   'preview.office.editor.underline': 'Underline',
   'preview.office.editor.undo': 'Undo',
-  'preview.office.editor.askForge': 'Ask Forge',
   'preview.office.editor.openDesktop': 'Open in desktop app',
   'preview.office.editor.openedDesktop': 'Opened in desktop app',
   'preview.office.editor.more': 'More',
@@ -73,7 +72,6 @@ const createProps = (overrides: Partial<React.ComponentProps<typeof OfficeArtifa
   undoDepth: 1,
   apply: vi.fn(),
   undo: vi.fn(),
-  askForge: vi.fn(),
   openInDesktopApp: vi.fn(),
   download: vi.fn(),
   revealInFolder: vi.fn(),
@@ -297,7 +295,7 @@ describe('OfficeArtifactToolbar', () => {
     ).toBe(true);
   });
 
-  it('disables destructive editing for a multi-cell selection while keeping Ask Forge available', () => {
+  it('disables destructive editing for a multi-cell selection without a dead-end status', () => {
     const inspection: OfficeArtifactInspection = {
       kind: 'excel',
       range: 'Forecast!B4:C4',
@@ -310,12 +308,23 @@ describe('OfficeArtifactToolbar', () => {
     render(<OfficeArtifactToolbar {...createProps({ inspection })} />);
 
     expect(screen.queryByRole('textbox', { name: 'Formula bar' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Ask Forge' })).toBeEnabled();
     // A multi-cell selection isn't directly editable, but this is a normal,
     // working state -- not a dead end -- so it must not claim a failure or
     // point the user at the desktop app.
     const statusText = screen.getByText('Select a cell to edit it');
     expect(statusText).not.toHaveAttribute('role', 'alert');
     expect(statusText.closest('[data-testid="office-toolbar-status-strip"]')).toHaveClass(styles.statusNeutral);
+  });
+
+  it('renders no Ask Forge control, including in the More menu', async () => {
+    const user = userEvent.setup();
+    render(<OfficeArtifactToolbar {...createProps()} />);
+
+    expect(screen.queryByText('Ask Forge')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Ask Forge' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'More' }));
+
+    expect(screen.queryByText('Ask Forge')).not.toBeInTheDocument();
   });
 });

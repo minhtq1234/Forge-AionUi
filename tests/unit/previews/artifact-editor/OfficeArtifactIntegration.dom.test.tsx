@@ -18,7 +18,6 @@ const renderToolbar = () => {
       undoDepth={0}
       apply={vi.fn()}
       undo={vi.fn()}
-      askForge={vi.fn()}
       openInDesktopApp={openInDesktopApp}
       download={vi.fn()}
       revealInFolder={vi.fn()}
