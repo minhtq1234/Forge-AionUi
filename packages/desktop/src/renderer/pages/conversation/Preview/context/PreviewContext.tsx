@@ -121,18 +121,55 @@ const LEGACY_PREVIEW_STATE_KEY = 'aionui_preview_state';
 const MAX_PERSISTED_TAB_CONTENT_LENGTH = 80_000;
 const PERSISTABLE_CONTENT_TYPES = new Set<PreviewContentType>(['markdown', 'html', 'code', 'diff']);
 
-const sanitizeTabsForPersistence = (input: PreviewTab[]): PreviewTab[] => {
+// 依赖磁盘文件路径渲染的类型：持久化为「引用」而非内容本身（不写入 content），
+// 重新打开时由已有的 viewer 通过 metadata.file_path 重新读取。
+// 纯 base64 图片（没有 file_path）无法低成本恢复，因此不在此列 —— image 需额外校验 file_path。
+// Content types that render purely from a disk file path: persisted as a
+// lightweight "reference" (no content written), reloaded from
+// metadata.file_path by the existing viewers on restore. A pure base64 image
+// with no file_path can't be cheaply restored, so `image` still requires a
+// resolvable file_path to qualify (checked via hasFilePath/hasResolvableFilePath below).
+const FILE_BACKED_CONTENT_TYPES = new Set<PreviewContentType>(['word', 'excel', 'ppt', 'pdf', 'image']);
+
+// 结构校验：file_path 字段是否为字符串（允许空字符串，供 loadPersistedState 做语义校验）
+// Shape check: file_path is a string (empty string allowed; semantic validity is checked by loadPersistedState)
+const hasFilePath = (tab: Pick<PreviewTab, 'metadata'>): boolean => typeof tab.metadata?.file_path === 'string';
+
+// 语义校验：file_path 是否为可用于恢复的非空路径
+// Semantic check: file_path is a non-empty, resolvable path
+const hasResolvableFilePath = (tab: Pick<PreviewTab, 'metadata'>): boolean => Boolean(tab.metadata?.file_path);
+
+export const sanitizeTabsForPersistence = (input: PreviewTab[]): PreviewTab[] => {
   return input
-    .filter((tab) => PERSISTABLE_CONTENT_TYPES.has(tab.content_type))
-    .filter((tab) => tab.content.length <= MAX_PERSISTED_TAB_CONTENT_LENGTH)
-    .map((tab) => ({
-      ...tab,
-      isDirty: false,
-      originalContent: tab.content,
-    }));
+    .filter((tab) => {
+      if (PERSISTABLE_CONTENT_TYPES.has(tab.content_type)) {
+        return tab.content.length <= MAX_PERSISTED_TAB_CONTENT_LENGTH;
+      }
+      if (FILE_BACKED_CONTENT_TYPES.has(tab.content_type)) {
+        return hasResolvableFilePath(tab);
+      }
+      return false;
+    })
+    .map((tab) => {
+      if (FILE_BACKED_CONTENT_TYPES.has(tab.content_type)) {
+        // 引用型 tab：不落盘内容，重新加载时通过 file_path 从磁盘恢复
+        // Reference-only tab: don't persist content; reloaded from file_path on restore
+        return {
+          ...tab,
+          content: '',
+          originalContent: '',
+          isDirty: false,
+        };
+      }
+      return {
+        ...tab,
+        isDirty: false,
+        originalContent: tab.content,
+      };
+    });
 };
 
-const parsePersistedTabs = (value: unknown): PreviewTab[] => {
+export const parsePersistedTabs = (value: unknown): PreviewTab[] => {
   if (!Array.isArray(value)) return [];
 
   return value
@@ -146,13 +183,30 @@ const parsePersistedTabs = (value: unknown): PreviewTab[] => {
         typeof candidate.content_type === 'string'
       );
     })
-    .filter((tab) => PERSISTABLE_CONTENT_TYPES.has(tab.content_type))
-    .filter((tab) => tab.content.length <= MAX_PERSISTED_TAB_CONTENT_LENGTH)
-    .map((tab) => ({
-      ...tab,
-      originalContent: typeof tab.originalContent === 'string' ? tab.originalContent : tab.content,
-      isDirty: false,
-    }));
+    .filter((tab) => {
+      if (PERSISTABLE_CONTENT_TYPES.has(tab.content_type)) {
+        return tab.content.length <= MAX_PERSISTED_TAB_CONTENT_LENGTH;
+      }
+      if (FILE_BACKED_CONTENT_TYPES.has(tab.content_type)) {
+        return hasFilePath(tab);
+      }
+      return false;
+    })
+    .map((tab) => {
+      if (FILE_BACKED_CONTENT_TYPES.has(tab.content_type)) {
+        return {
+          ...tab,
+          content: '',
+          originalContent: '',
+          isDirty: false,
+        };
+      }
+      return {
+        ...tab,
+        originalContent: typeof tab.originalContent === 'string' ? tab.originalContent : tab.content,
+        isDirty: false,
+      };
+    });
 };
 
 // 从 localStorage 恢复状态 / Restore state from localStorage
@@ -171,6 +225,21 @@ const loadPersistedState = (): { isOpen: boolean; tabs: PreviewTab[]; activeTabI
         tabs = parsePersistedTabs(parsed.tabs);
         activeTabId = typeof parsed.activeTabId === 'string' ? parsed.activeTabId : activeTabId;
       }
+    }
+
+    // 恢复时若引用型 tab 的 file_path 不可解析（如损坏的存储数据），丢弃并记录一次告警
+    // On restore, drop file-backed reference tabs whose file_path is unresolvable
+    // (e.g. corrupted storage data) and log a single warning with the dropped count.
+    // 磁盘 IO 在此不做校验 —— 缺失的实际文件由对应 viewer 挂载时处理
+    // No disk IO here — an actually-missing file on disk is handled by the viewer on mount.
+    const unresolvedFileBackedCount = tabs.filter(
+      (tab) => FILE_BACKED_CONTENT_TYPES.has(tab.content_type) && !hasResolvableFilePath(tab)
+    ).length;
+    if (unresolvedFileBackedCount > 0) {
+      tabs = tabs.filter((tab) => !(FILE_BACKED_CONTENT_TYPES.has(tab.content_type) && !hasResolvableFilePath(tab)));
+      console.warn(
+        `[PreviewContext] Dropped ${unresolvedFileBackedCount} file-backed tab(s) with an unresolvable file_path on restore.`
+      );
     }
 
     if (activeTabId && !tabs.some((tab) => tab.id === activeTabId)) {
