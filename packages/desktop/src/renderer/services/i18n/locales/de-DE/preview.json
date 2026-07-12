@@ -108,6 +108,7 @@
       "refreshing": "Vorschau wird aktualisiert",
       "previewOutdated": "Vorschau ist möglicherweise veraltet",
       "inspecting": "Bearbeitungswerkzeuge werden vorbereitet...",
+      "viewOnlyHint": "Nur eine Vorschau — zum Bearbeiten in der Desktop-App öffnen",
       "selectWordToEdit": "Text im Dokument zum Bearbeiten auswählen",
       "selectExcelToEdit": "Zelle zum Bearbeiten auswählen",
       "readyToEdit": "Der ausgewählte Inhalt kann bearbeitet werden",

@@ -108,6 +108,7 @@
       "refreshing": "Refreshing preview",
       "previewOutdated": "Preview may be outdated",
       "inspecting": "Preparing edit controls...",
+      "viewOnlyHint": "Preview only — open in the desktop app to edit",
       "selectWordToEdit": "Select text in the document to edit it",
       "selectExcelToEdit": "Select a cell to edit it",
       "readyToEdit": "Ready to edit the selected content",

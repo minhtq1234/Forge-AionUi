@@ -108,6 +108,7 @@
       "refreshing": "正在重新整理預覽",
       "previewOutdated": "預覽可能不是最新版本",
       "inspecting": "正在準備編輯控制項...",
+      "viewOnlyHint": "僅供預覽——如需編輯，請在桌面應用程式中開啟",
       "selectWordToEdit": "選取文件中的文字即可編輯",
       "selectExcelToEdit": "選取儲存格即可編輯",
       "readyToEdit": "已準備好編輯所選內容",

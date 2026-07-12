@@ -1188,6 +1188,7 @@ export type I18nKey =
   | 'preview.office.editor.underline'
   | 'preview.office.editor.undo'
   | 'preview.office.editor.unsavedChanges'
+  | 'preview.office.editor.viewOnlyHint'
   | 'preview.office.errors.installFailed'
   | 'preview.office.errors.officecliNotFound'
   | 'preview.office.errors.originalSafe'

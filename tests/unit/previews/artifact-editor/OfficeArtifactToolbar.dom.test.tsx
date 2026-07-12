@@ -36,6 +36,7 @@ const translations: Record<string, string> = {
   'preview.office.editor.saveFailed': 'Save failed',
   'preview.office.editor.fileChanged': 'File changed elsewhere',
   'preview.office.editor.inspecting': 'Preparing edit controls',
+  'preview.office.editor.viewOnlyHint': 'Preview only — open in the desktop app to edit',
   'preview.office.editor.selectWordToEdit': 'Select text in the document to edit it',
   'preview.office.editor.selectExcelToEdit': 'Select a cell to edit it',
   'preview.office.editor.readyToEdit': 'Ready to edit the selected content',
@@ -102,19 +103,30 @@ describe('OfficeArtifactToolbar', () => {
     document.body.replaceChildren();
   });
 
-  it.each([
-    ['word', 'Select text in the document to edit it'],
-    ['excel', 'Select a cell to edit it'],
-  ] as const)('explains how to start editing a %s file', (documentKind, instruction) => {
-    render(<OfficeArtifactToolbar {...createProps({ documentKind, inspection: null, undoDepth: 0 })} />);
+  it.each(['word', 'excel'] as const)(
+    'shows a view-only hint pointing at the desktop app before anything is selected in a %s file',
+    (documentKind) => {
+      render(<OfficeArtifactToolbar {...createProps({ documentKind, inspection: null, undoDepth: 0 })} />);
 
-    expect(screen.getByText(instruction)).toBeVisible();
-    expect(screen.getByText(instruction).closest('[data-testid="office-toolbar-status-strip"]')).toHaveClass(
-      styles.statusNeutral
-    );
-    expect(screen.getByTestId('office-toolbar-actions')).toContainElement(
-      screen.getByRole('button', { name: 'Open in desktop app' })
-    );
+      const hint = screen.getByText('Preview only — open in the desktop app to edit');
+      expect(hint).toBeVisible();
+      expect(hint.closest('[data-testid="office-toolbar-status-strip"]')).toHaveClass(styles.statusNeutral);
+      // The old "select text/a cell to edit it" idle prompt implied in-app editing
+      // is the primary path -- it must not be the default idle message anymore.
+      expect(screen.queryByText('Select text in the document to edit it')).not.toBeInTheDocument();
+      expect(screen.queryByText('Select a cell to edit it')).not.toBeInTheDocument();
+      expect(screen.getByTestId('office-toolbar-actions')).toContainElement(
+        screen.getByRole('button', { name: 'Open in desktop app' })
+      );
+    }
+  );
+
+  it('renders Open in desktop app as the prominent, primary toolbar action', () => {
+    render(<OfficeArtifactToolbar {...createProps({ inspection: null, undoDepth: 0 })} />);
+
+    const openInDesktopButton = screen.getByTestId('office-toolbar-open-desktop');
+    expect(openInDesktopButton).toHaveAccessibleName('Open in desktop app');
+    expect(openInDesktopButton).toHaveClass('arco-btn-primary');
   });
 
   it('uses semantic status-strip treatments without mixing status into the action row', () => {

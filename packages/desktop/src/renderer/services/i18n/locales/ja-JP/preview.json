@@ -108,6 +108,7 @@
       "refreshing": "プレビューを更新中",
       "previewOutdated": "プレビューが最新でない可能性があります",
       "inspecting": "編集コントロールを準備しています...",
+      "viewOnlyHint": "プレビューのみです — 編集するにはデスクトップアプリで開いてください",
       "selectWordToEdit": "ドキュメント内のテキストを選択して編集",
       "selectExcelToEdit": "セルを選択して編集",
       "readyToEdit": "選択した内容を編集できます",

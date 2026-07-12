@@ -108,6 +108,7 @@
       "refreshing": "Önizleme yenileniyor",
       "previewOutdated": "Önizleme güncel olmayabilir",
       "inspecting": "Düzenleme denetimleri hazırlanıyor...",
+      "viewOnlyHint": "Yalnızca önizleme — düzenlemek için masaüstü uygulamasında açın",
       "selectWordToEdit": "Düzenlemek için belgedeki metni seçin",
       "selectExcelToEdit": "Düzenlemek için bir hücre seçin",
       "readyToEdit": "Seçili içerik düzenlenmeye hazır",

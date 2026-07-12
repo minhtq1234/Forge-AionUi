@@ -108,6 +108,7 @@
       "refreshing": "미리보기 새로 고침 중",
       "previewOutdated": "미리보기가 최신 상태가 아닐 수 있습니다",
       "inspecting": "편집 도구 준비 중...",
+      "viewOnlyHint": "미리보기 전용입니다 — 편집하려면 데스크톱 앱에서 여세요",
       "selectWordToEdit": "문서에서 텍스트를 선택하여 편집",
       "selectExcelToEdit": "셀을 선택하여 편집",
       "readyToEdit": "선택한 내용을 편집할 준비가 되었습니다",

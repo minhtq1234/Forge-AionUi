@@ -108,6 +108,7 @@
       "refreshing": "Atualizando visualização",
       "previewOutdated": "A visualização pode estar desatualizada",
       "inspecting": "Preparando controles de edição...",
+      "viewOnlyHint": "Somente visualização — abra no aplicativo para desktop para editar",
       "selectWordToEdit": "Selecione um texto no documento para editá-lo",
       "selectExcelToEdit": "Selecione uma célula para editá-la",
       "readyToEdit": "O conteúdo selecionado está pronto para edição",

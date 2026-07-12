@@ -64,11 +64,15 @@ export const OfficeArtifactToolbar: React.FC<OfficeArtifactToolbarProps> = ({
   const statusKey = STATUS_KEYS[status];
   const statusText = statusKey
     ? t(statusKey)
-    : inspection && !unsupported
-      ? t('preview.office.editor.readyToEdit')
-      : t(
-          documentKind === 'word' ? 'preview.office.editor.selectWordToEdit' : 'preview.office.editor.selectExcelToEdit'
-        );
+    : inspection === null
+      ? t('preview.office.editor.viewOnlyHint')
+      : unsupported
+        ? t(
+            documentKind === 'word'
+              ? 'preview.office.editor.selectWordToEdit'
+              : 'preview.office.editor.selectExcelToEdit'
+          )
+        : t('preview.office.editor.readyToEdit');
   const statusIsError = status === 'saveFailed' || status === 'fileChanged';
   const recoveryText =
     status === 'fileChanged'
@@ -161,11 +165,12 @@ export const OfficeArtifactToolbar: React.FC<OfficeArtifactToolbarProps> = ({
           </Tooltip>
           <Tooltip content={t('preview.office.editor.openDesktop')}>
             <Button
-              type='secondary'
+              type='primary'
               size='small'
               aria-label={t('preview.office.editor.openDesktop')}
               icon={<EditTwo size={ICON_SIZE} />}
               loading={status === 'openingDesktop'}
+              data-testid='office-toolbar-open-desktop'
               className={`${styles.actionButton} ${styles.secondaryAction}`}
               onClick={() => void openInDesktopApp()}
             >
