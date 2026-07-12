@@ -662,5 +662,9 @@
         "unknown": "Die Kontextaktualisierung ist unerwartet fehlgeschlagen. Bitte erneut versuchen."
       }
     }
+  },
+  "artifact": {
+    "emptyTitle": "Kein Artefakt geöffnet",
+    "emptyHint": "Generierte Dateien und Dokumente werden hier geöffnet."
   }
 }

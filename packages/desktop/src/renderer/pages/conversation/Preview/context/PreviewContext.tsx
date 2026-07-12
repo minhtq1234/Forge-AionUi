@@ -7,6 +7,7 @@
 import { ipcBridge } from '@/common';
 import type { PreviewContentType } from '@/common/types/office/preview';
 import { emitter } from '@/renderer/utils/emitter';
+import { dispatchWorkspaceExpandEvent } from '@/renderer/utils/workspace/workspaceEvents';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { isOfficePreviewContentType, nextOfficePreviewRevision } from './officePreviewRevision';
 
@@ -367,6 +368,9 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setActiveTabId(nextActiveTabId);
       }
       setIsOpen(true);
+      // Opening a preview is an explicit "show me this" action: reveal the
+      // artifact pane even when it is collapsed by default or preference.
+      dispatchWorkspaceExpandEvent();
     },
     [extractFileName, findPreviewTabInList]
   );

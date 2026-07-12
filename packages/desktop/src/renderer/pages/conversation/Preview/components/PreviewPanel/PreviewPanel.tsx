@@ -10,6 +10,7 @@ import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { toLocalFileHref } from '@/renderer/components/Markdown/markdownUtils';
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import { OfficeArtifactToolbar, useOfficeArtifactEditor } from '../ArtifactEditor';
+import ArtifactEmptyState from '../ArtifactEmptyState';
 import { PreviewToolbarExtrasProvider, type PreviewToolbarExtras } from '../../context/PreviewToolbarExtrasContext';
 import { usePreviewContext } from '../../context/PreviewContext';
 import { getOfficePreviewRefreshToken } from '../../context/officePreviewRevision';
@@ -60,13 +61,18 @@ import './preview.css';
  */
 type PreviewPanelProps = {
   fullBleed?: boolean;
+  /**
+   * Collapse the surrounding artifact pane. When provided, the tab bar's
+   * "close panel" button collapses the pane (owned by ChatLayout) instead of
+   * merely clearing the preview state. Falls back to `closePreview` when absent.
+   */
+  onRequestCollapse?: () => void;
 };
 
-const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
+const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onRequestCollapse }) => {
   const { t } = useTranslation();
   const { id: conversationId = '' } = useParams<{ id: string }>();
   const {
-    isOpen,
     tabs,
     activeTabId,
     activeTab,
@@ -78,6 +84,12 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
     addToSendBox,
     addDomSnippet,
   } = usePreviewContext();
+
+  // The artifact pane is always mounted while expanded; ChatLayout owns its
+  // visibility via collapse state, so the pane no longer self-hides on the
+  // preview `isOpen` flag. When there is no active tab it renders the empty
+  // state below.
+  const handleClosePanel = onRequestCollapse ?? closePreview;
   const layout = useLayoutContext();
 
   // 视图状态 / View states
@@ -297,16 +309,26 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
     setContextMenu({ show: false, x: 0, y: 0, tabId: null });
   }, [tabs, closeTab]);
 
-  // 如果预览面板未打开，不渲染 / Don't render if preview panel is not open
-  if (!isOpen || !activeTab) return null;
+  // 将 tabs 转换为 PreviewTab 类型 / Convert tabs to PreviewTab type
+  const previewTabs: PreviewTab[] = tabs.map((tab) => ({
+    id: tab.id,
+    title: tab.title,
+    isDirty: tab.isDirty,
+    contentType: tab.content_type,
+  }));
 
-  const { content, content_type, metadata } = activeTab;
+  // Derived from the active tab. Null-safe so every hook below (notably the four
+  // useCallbacks) is constructed unconditionally even when there is no active
+  // tab — the empty-state early return lives AFTER the last hook to respect the
+  // Rules of Hooks. These fields are only ever read on the with-tab render path
+  // (guarded below) or inside interaction callbacks that never fire while empty.
+  const { content, content_type, metadata } = (activeTab ?? {}) as NonNullable<typeof activeTab>;
   const isMarkdown = content_type === 'markdown';
   const isHTML = content_type === 'html';
   const isOfficeDocument = content_type === 'word' || content_type === 'excel';
   const officeRefreshToken = getOfficePreviewRefreshToken(
     metadata?.file_path,
-    activeTab.officePreviewRevision,
+    activeTab?.officePreviewRevision,
     manualOfficeRefreshRevision
   );
   const isEditable = metadata?.editable !== false; // 默认可编辑 / Default editable
@@ -427,6 +449,60 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
     if (!metadata?.file_path) return;
     void ipcBridge.shell.showItemInFolder.invoke(metadata.file_path).catch(() => {});
   }, [metadata?.file_path]);
+
+  // 没有打开的 tab 时展示占位空状态，而不是按类型渲染内容
+  // Show a placeholder empty state instead of type-specific content when no tab is
+  // open. This early return lives AFTER every hook above so the hook order is
+  // identical between the empty and with-tab renders (Rules of Hooks).
+  if (!activeTab) {
+    return (
+      <PreviewToolbarExtrasProvider value={toolbarExtrasContextValue}>
+        <div
+          data-testid='preview-panel-surface'
+          className={classNames('h-full flex flex-col bg-1', !fullBleed && 'rounded-[16px]')}
+        >
+          {messageContextHolder}
+
+          {/* 确认对话框 / Confirmation modals */}
+          <PreviewConfirmModals
+            closeTabConfirm={closeTabConfirm}
+            onSaveAndCloseTab={handleSaveAndCloseTab}
+            onCloseWithoutSave={handleCloseWithoutSave}
+            onCancelCloseTab={handleCancelCloseTab}
+          />
+
+          {/* Tab 栏 / Tab bar */}
+          <PreviewTabs
+            tabs={previewTabs}
+            activeTabId={activeTabId}
+            tabFadeState={tabFadeState}
+            tabsContainerRef={tabsContainerRef}
+            onSwitchTab={switchTab}
+            onCloseTab={handleCloseTab}
+            onContextMenu={handleTabContextMenu}
+            onClosePanel={handleClosePanel}
+          />
+
+          {/* 空状态 / Empty state */}
+          <div className='flex-1 overflow-hidden'>
+            <ArtifactEmptyState />
+          </div>
+
+          {/* Tab 右键菜单 / Tab context menu */}
+          <PreviewContextMenu
+            contextMenu={contextMenu}
+            tabs={previewTabs}
+            currentTheme={currentTheme}
+            onClose={() => setContextMenu({ show: false, x: 0, y: 0, tabId: null })}
+            onCloseLeft={handleCloseLeft}
+            onCloseRight={handleCloseRight}
+            onCloseOthers={handleCloseOthers}
+            onCloseAll={handleCloseAll}
+          />
+        </div>
+      </PreviewToolbarExtrasProvider>
+    );
+  }
 
   // 渲染历史下拉菜单 / Render history dropdown
   const renderHistoryDropdown = () => {
@@ -704,14 +780,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
     return null;
   };
 
-  // 将 tabs 转换为 PreviewTab 类型 / Convert tabs to PreviewTab type
-  const previewTabs: PreviewTab[] = tabs.map((tab) => ({
-    id: tab.id,
-    title: tab.title,
-    isDirty: tab.isDirty,
-    contentType: tab.content_type,
-  }));
-
   return (
     <PreviewToolbarExtrasProvider value={toolbarExtrasContextValue}>
       <div
@@ -739,7 +807,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
           onSwitchTab={switchTab}
           onCloseTab={handleCloseTab}
           onContextMenu={handleTabContextMenu}
-          onClosePanel={closePreview}
+          onClosePanel={handleClosePanel}
         />
 
         {/* 工具栏（URL 类型不显示工具栏，因为不需要下载/编辑等功能）/ Toolbar (hidden for URL type as it doesn't need download/edit features) */}
@@ -764,7 +832,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
             renderHistoryDropdown={renderHistoryDropdown}
             onOpenInSystem={handleOpenInSystem}
             onDownload={handleDownload}
-            onClose={closePreview}
             inspectMode={inspectMode}
             onInspectModeToggle={() => setInspectMode(!inspectMode)}
             leftExtra={toolbarExtras?.left}

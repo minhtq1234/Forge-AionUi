@@ -45,7 +45,6 @@ const renderToolbar = () => {
       renderHistoryDropdown={() => null}
       onOpenInSystem={vi.fn()}
       onDownload={vi.fn()}
-      onClose={vi.fn()}
       officeToolbar={officeToolbar}
     />
   );

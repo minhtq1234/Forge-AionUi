@@ -10,17 +10,11 @@ import { useContainerWidth } from '@/renderer/pages/conversation/hooks/useContai
 import { useLayoutConstraints } from '@/renderer/pages/conversation/hooks/useLayoutConstraints';
 import { useTitleRename } from '@/renderer/pages/conversation/hooks/useTitleRename';
 import { useWorkspaceCollapse } from '@/renderer/pages/conversation/hooks/useWorkspaceCollapse';
-import { PreviewPanel, usePreviewContext } from '@/renderer/pages/conversation/Preview';
+import { PreviewPanel } from '@/renderer/pages/conversation/Preview';
 import { dispatchWorkspaceToggleEvent } from '@/renderer/utils/workspace/workspaceEvents';
 import classNames from 'classnames';
 import { isMacEnvironment, isWindowsEnvironment } from '@/renderer/pages/conversation/utils/detectPlatform';
-import {
-  DEFAULT_WORKSPACE_PANEL_PX,
-  MAX_WORKSPACE_PANEL_PX,
-  MIN_WORKSPACE_PANEL_PX,
-  WORKSPACE_HEADER_HEIGHT,
-  calcLayoutMetrics,
-} from '@/renderer/pages/conversation/utils/layoutCalc';
+import { calcLayoutMetrics } from '@/renderer/pages/conversation/utils/layoutCalc';
 import { Layout as ArcoLayout } from '@arco-design/web-react';
 import { ExpandLeft, ExpandRight } from '@icon-park/react';
 import React, { useEffect, useState } from 'react';
@@ -69,26 +63,25 @@ const ChatLayout: React.FC<{
     workspacePreferenceKey,
     workspacePresentation = 'panel',
   } = props;
-  const workspacePanelEnabled = workspaceEnabled && workspacePresentation === 'panel';
+  // `panel` (team) keeps its workspace file tree in the pane; `project-menu`
+  // (single chat) renders the always-open artifact preview instead.
+  const isWorkspacePanePresentation = workspacePresentation === 'panel';
   const layout = useLayoutContext();
   const isMacRuntime = isMacEnvironment();
   const isWindowsRuntime = isWindowsEnvironment();
   const isDesktop = !layout?.isMobile;
   const isMobile = Boolean(layout?.isMobile);
-  const isArtifactEditorPresentation = workspacePresentation === 'project-menu';
-  const isArtifactEditorSplit = isArtifactEditorPresentation && isDesktop;
 
-  // Preview panel state
-  const { isOpen: isPreviewOpen } = usePreviewContext();
-
-  // --- Hook A: workspace collapse ---
-  const { rightSiderCollapsed, setRightSiderCollapsed } = useWorkspaceCollapse({
-    workspaceEnabled: workspacePanelEnabled,
-    isMobile,
-    conversation_id,
-    preferenceKey: workspacePreferenceKey ?? conversation_id,
-    isTemporaryWorkspace,
-  });
+  // --- Hook A: artifact-pane collapse (formerly the right workspace sider) ---
+  const { rightSiderCollapsed: artifactCollapsed, setRightSiderCollapsed: setArtifactCollapsed } = useWorkspaceCollapse(
+    {
+      workspaceEnabled,
+      isMobile,
+      conversation_id,
+      preferenceKey: workspacePreferenceKey ?? conversation_id,
+      isTemporaryWorkspace,
+    }
+  );
 
   // --- Hook B: container width ---
   const { containerRef, containerWidth } = useContainerWidth();
@@ -106,67 +99,48 @@ const ChatLayout: React.FC<{
   // Compute display name with fallback chain
   const display_name = presetAssistant?.name || agent_name || capitalizedBackend;
 
-  const {
-    splitRatio: workspaceWidthPxPref,
-    setSplitRatio: setWorkspaceWidthPxPref,
-    createDragHandle: createWorkspaceDragHandle,
-  } = useResizableSplit({
-    unit: 'px',
-    defaultWidth: DEFAULT_WORKSPACE_PANEL_PX,
-    minWidth: MIN_WORKSPACE_PANEL_PX,
-    maxWidth: MAX_WORKSPACE_PANEL_PX,
-    storageKey: 'chat-workspace-width-px',
-  });
-
-  // Pre-hook metrics: compute dynamic min/max for the chat-preview split hook
+  // Pre-hook metrics: compute dynamic min/max for the chat<->artifact split hook
   const { dynamicChatMinRatio, dynamicChatMaxRatio } = calcLayoutMetrics({
     containerWidth,
-    workspaceWidthPx: workspaceWidthPxPref,
-    chatSplitRatio: 60, // placeholder; only dynamicChatMinRatio/dynamicChatMaxRatio are used here
-    workspaceEnabled: workspacePanelEnabled,
+    chatSplitRatio: 50, // placeholder; only dynamicChatMinRatio/dynamicChatMaxRatio are used here
+    workspaceEnabled,
     isDesktop,
-    isPreviewOpen,
-    rightSiderCollapsed,
-    isMobile,
+    artifactCollapsed,
   });
 
-  const {
-    splitRatio: chatSplitRatio,
-    setSplitRatio: setChatSplitRatio,
-    createDragHandle: createPreviewDragHandle,
-  } = useResizableSplit({
-    defaultWidth: isArtifactEditorPresentation ? 50 : 60,
+  // Single ratio split between chat and the always-open artifact pane.
+  const { splitRatio: chatSplitRatio, createDragHandle: createArtifactDragHandle } = useResizableSplit({
+    unit: 'ratio',
+    // Team keeps the workspace as a narrower sidebar (chat gets more room);
+    // single chat splits evenly with the artifact preview.
+    defaultWidth: isWorkspacePanePresentation ? 70 : 50,
     minWidth: dynamicChatMinRatio,
     maxWidth: dynamicChatMaxRatio,
-    storageKey: isArtifactEditorPresentation ? 'artifact-editor-chat-preview-split-ratio' : 'chat-preview-split-ratio',
+    storageKey: isWorkspacePanePresentation ? 'chat-workspace-split-ratio' : 'chat-artifact-split-ratio',
   });
 
-  // Full metrics with real chatSplitRatio
-  const { chatFlex, workspaceWidthPx, titleAreaMaxWidth, mobileWorkspaceHandleRight } = calcLayoutMetrics({
-    containerWidth,
-    workspaceWidthPx: workspaceWidthPxPref,
-    chatSplitRatio,
-    workspaceEnabled: workspacePanelEnabled,
-    isDesktop,
-    isPreviewOpen,
-    rightSiderCollapsed,
-    isMobile,
-  });
+  // Clamp only the RENDERED ratio into the container-driven bounds. The stored
+  // preference (`chatSplitRatio`) is left untouched so a transient narrow width
+  // never overwrites it — only explicit drag/reset mutate the stored value.
+  const effectiveChatSplitRatio = Math.max(dynamicChatMinRatio, Math.min(dynamicChatMaxRatio, chatSplitRatio));
+
+  // Full metrics with the effective (clamped) chatSplitRatio
+  const { artifactVisible, chatFlex, mobileWorkspaceWidthPx, titleAreaMaxWidth, mobileWorkspaceHandleRight } =
+    calcLayoutMetrics({
+      containerWidth,
+      chatSplitRatio: effectiveChatSplitRatio,
+      workspaceEnabled,
+      isDesktop,
+      artifactCollapsed,
+    });
 
   // --- Hook E: layout constraints ---
   useLayoutConstraints({
     containerWidth,
-    workspaceEnabled: workspacePanelEnabled,
+    workspaceEnabled,
     isDesktop,
-    isPreviewOpen,
-    rightSiderCollapsed,
-    setRightSiderCollapsed,
-    workspaceWidthPx: workspaceWidthPxPref,
-    setWorkspaceWidthPx: setWorkspaceWidthPxPref,
-    chatSplitRatio,
-    setChatSplitRatio,
-    dynamicChatMinRatio,
-    dynamicChatMaxRatio,
+    artifactCollapsed,
+    setArtifactCollapsed,
   });
 
   const [mobileActionsSlot, setMobileActionsSlot] = useState<HTMLElement | null>(null);
@@ -219,14 +193,14 @@ const ChatLayout: React.FC<{
       </FlexFullContainer>
       <div className='flex items-center gap-12px shrink-0'>
         {props.headerExtra}
-        {isWindowsRuntime && workspacePanelEnabled && (
+        {isWindowsRuntime && workspaceEnabled && (
           <button
             type='button'
             className='workspace-header__toggle'
             aria-label='Toggle workspace'
             onClick={() => dispatchWorkspaceToggleEvent()}
           >
-            {rightSiderCollapsed ? <ExpandRight size={16} /> : <ExpandLeft size={16} />}
+            {artifactCollapsed ? <ExpandRight size={16} /> : <ExpandLeft size={16} />}
           </button>
         )}
       </div>
@@ -253,122 +227,105 @@ const ChatLayout: React.FC<{
         {workspaceEnabled && workspacePresentation === 'project-menu' && (
           <div className='workspace-project-controller'>{props.sider}</div>
         )}
-        {/* Unified layout: single DOM structure prevents children unmount/remount on preview toggle */}
+        {/* Chat region — header + content. Never unmounts when the artifact pane toggles. */}
         <div
-          className='flex flex-col min-w-0'
+          data-testid='chat-layout-chat-pane'
+          className='flex flex-col relative min-w-0'
           style={{
-            flexGrow: 1,
-            flexShrink: 1,
-            flexBasis: 0,
+            flexGrow: artifactVisible ? 0 : 1,
+            flexShrink: artifactVisible ? 0 : 1,
+            flexBasis: artifactVisible ? `${chatFlex}%` : 0,
+          }}
+          onClick={() => {
+            if (window.innerWidth < 768 && !artifactCollapsed) setArtifactCollapsed(true);
           }}
         >
           <div className='shrink-0 !bg-1'>{headerBlock}</div>
-          <div className='flex flex-1 min-h-0 relative'>
-            {/* Chat area - always mounted, never unmounted on preview toggle */}
-            <div
-              data-testid='chat-layout-chat-pane'
-              className='flex flex-col relative'
-              style={{
-                flexGrow: isPreviewOpen && isDesktop ? 0 : 1,
-                flexShrink: 0,
-                flexBasis: isPreviewOpen && isDesktop ? `${chatFlex}%` : 0,
-                display: isPreviewOpen && isMobile ? 'none' : 'flex',
-                minWidth: '240px',
-              }}
-              onClick={() => {
-                if (window.innerWidth < 768 && !rightSiderCollapsed) setRightSiderCollapsed(true);
-              }}
-            >
-              <ArcoLayout.Content className='flex flex-col flex-1 bg-1 overflow-hidden'>
-                {props.children}
-              </ArcoLayout.Content>
-            </div>
-            {/* Preview panel - conditionally rendered */}
-            {isPreviewOpen && (
-              <div
-                data-testid='chat-layout-preview-pane'
-                className={classNames(
-                  'preview-panel flex flex-col relative overflow-visible',
-                  !isArtifactEditorSplit && 'rounded-[15px]',
-                  isDesktop && !isArtifactEditorSplit ? 'mb-[12px] mr-[12px] ml-[8px]' : isMobile && 'm-[8px]'
-                )}
-                style={{
-                  flexGrow: 1,
-                  flexShrink: 1,
-                  flexBasis: 0,
-                  border: isArtifactEditorSplit ? undefined : '1px solid var(--bg-3)',
-                  borderWidth: isArtifactEditorSplit ? 0 : undefined,
-                  minWidth: isDesktop ? '260px' : 0,
-                  maxWidth: isMobile ? 'calc(100% - 16px)' : undefined,
-                  width: isMobile ? 'calc(100% - 16px)' : undefined,
-                  boxSizing: 'border-box',
-                }}
-              >
-                {isDesktop &&
-                  createPreviewDragHandle({
-                    className: 'absolute top-0 bottom-0 z-30',
-                    style: { width: '20px', left: '-20px' },
-                    linePlacement: 'end',
-                    lineClassName: 'opacity-30 group-hover:opacity-100 group-active:opacity-100',
-                    lineStyle: { width: '2px' },
-                  })}
-                <div
-                  className={classNames('h-full w-full overflow-hidden', !isArtifactEditorSplit && 'rounded-[15px]')}
-                >
-                  <PreviewPanel fullBleed={isArtifactEditorSplit} />
-                </div>
-              </div>
-            )}
-          </div>
+          <ArcoLayout.Content className='flex flex-col flex-1 bg-1 overflow-hidden'>
+            {props.children}
+          </ArcoLayout.Content>
         </div>
-        {workspacePanelEnabled && !layout?.isMobile && (
+        {/*
+          Artifact pane — the single region right of chat. Its content and mount
+          behavior are presentation dependent:
+          - `panel` (team) keeps the workspace file tree behind the
+            WorkspacePanelHeader chrome, and — like the pre-refactor right sider —
+            stays mounted at 0 width while collapsed so its WORKSPACE_HAS_FILES
+            events keep firing and can auto-expand the pane.
+          - `project-menu` (single chat) mounts the always-open PreviewPanel as a
+            single-bar artifact surface whose tab-bar close button collapses the
+            pane. It is removed from the DOM while collapsed (its file events come
+            from the always-mounted project-menu controller above, not the pane).
+        */}
+        {isWorkspacePanePresentation && workspaceEnabled && !isMobile && (
           <div
-            className={classNames('!bg-1 relative chat-layout-right-sider layout-sider')}
+            data-testid='artifact-pane'
+            className='!bg-1 relative flex flex-col min-w-0 layout-sider'
             style={{
-              flexGrow: 0,
+              flexGrow: artifactCollapsed ? 0 : 1,
               flexShrink: 0,
-              flexBasis: rightSiderCollapsed ? '0px' : `${Math.round(workspaceWidthPx)}px`,
-              width: rightSiderCollapsed ? '0px' : `${Math.round(workspaceWidthPx)}px`,
-              minWidth: rightSiderCollapsed ? '0px' : `${MIN_WORKSPACE_PANEL_PX}px`,
+              flexBasis: artifactCollapsed ? '0px' : 0,
+              width: artifactCollapsed ? '0px' : undefined,
               overflow: 'hidden',
-              borderLeft: rightSiderCollapsed ? 'none' : '1px solid var(--bg-3)',
+              borderLeft: artifactCollapsed ? 'none' : '1px solid var(--bg-3)',
             }}
           >
-            {isDesktop &&
-              !rightSiderCollapsed &&
-              createWorkspaceDragHandle({ className: 'absolute left-0 top-0 bottom-0', style: {}, reverse: true })}
+            {!artifactCollapsed &&
+              createArtifactDragHandle({ className: 'absolute left-0 top-0 bottom-0 z-30', linePlacement: 'start' })}
             <WorkspacePanelHeader
               showToggle={!isMacRuntime && !isWindowsRuntime}
-              collapsed={rightSiderCollapsed}
+              collapsed={artifactCollapsed}
               onToggle={() => dispatchWorkspaceToggleEvent()}
-              togglePlacement={layout?.isMobile ? 'left' : 'right'}
+              togglePlacement='right'
               workspacePath={workspacePath}
               isTemporaryWorkspace={isTemporaryWorkspace}
             >
               {props.siderTitle}
             </WorkspacePanelHeader>
-            <ArcoLayout.Content style={{ height: `calc(100% - ${WORKSPACE_HEADER_HEIGHT}px)` }}>
-              {props.sider}
-            </ArcoLayout.Content>
+            <div className='flex-1 min-h-0 overflow-hidden'>{props.sider}</div>
+          </div>
+        )}
+        {!isWorkspacePanePresentation && artifactVisible && (
+          <div
+            data-testid='artifact-pane'
+            className='!bg-1 relative flex flex-col min-w-0 layout-sider'
+            style={{
+              flexGrow: 1,
+              flexShrink: 1,
+              flexBasis: 0,
+              overflow: 'hidden',
+              borderLeft: '1px solid var(--bg-3)',
+            }}
+          >
+            {createArtifactDragHandle({ className: 'absolute left-0 top-0 bottom-0 z-30', linePlacement: 'start' })}
+            <div className='flex-1 min-h-0 overflow-hidden'>
+              <PreviewPanel fullBleed onRequestCollapse={() => setArtifactCollapsed(true)} />
+            </div>
           </div>
         )}
 
-        {/* Mobile workspace overlay: backdrop + fixed panel + floating collapse handle */}
-        {workspacePanelEnabled && layout?.isMobile && (
+        {/* Mobile artifact overlay: backdrop + fixed drawer + floating collapse handle */}
+        {workspaceEnabled && layout?.isMobile && (
           <MobileWorkspaceOverlay
-            rightSiderCollapsed={rightSiderCollapsed}
-            setRightSiderCollapsed={setRightSiderCollapsed}
-            workspaceWidthPx={workspaceWidthPx}
+            rightSiderCollapsed={artifactCollapsed}
+            setRightSiderCollapsed={setArtifactCollapsed}
+            workspaceWidthPx={mobileWorkspaceWidthPx}
             mobileWorkspaceHandleRight={mobileWorkspaceHandleRight}
             siderTitle={props.siderTitle}
-            sider={props.sider}
+            sider={
+              isWorkspacePanePresentation ? (
+                props.sider
+              ) : (
+                <PreviewPanel fullBleed onRequestCollapse={() => setArtifactCollapsed(true)} />
+              )
+            }
             workspacePath={workspacePath}
             isTemporaryWorkspace={isTemporaryWorkspace}
           />
         )}
 
-        {/* Desktop expand button when workspace is collapsed */}
-        {!isMacRuntime && !isWindowsRuntime && workspacePanelEnabled && rightSiderCollapsed && !layout?.isMobile && (
+        {/* Desktop expand button when the artifact pane is collapsed */}
+        {!isMacRuntime && !isWindowsRuntime && workspaceEnabled && artifactCollapsed && !layout?.isMobile && (
           <DesktopWorkspaceToggle />
         )}
       </div>

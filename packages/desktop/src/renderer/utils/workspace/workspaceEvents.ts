@@ -1,6 +1,7 @@
 export const WORKSPACE_TOGGLE_EVENT = 'aionui-workspace-toggle';
 export const WORKSPACE_STATE_EVENT = 'aionui-workspace-state';
 export const WORKSPACE_HAS_FILES_EVENT = 'aionui-workspace-has-files';
+export const WORKSPACE_EXPAND_EVENT = 'aionui-workspace-expand';
 
 export interface WorkspaceStateDetail {
   collapsed: boolean;
@@ -29,6 +30,16 @@ export function dispatchWorkspaceToggleEvent() {
 export function dispatchWorkspaceStateEvent(collapsed: boolean) {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent<WorkspaceStateDetail>(WORKSPACE_STATE_EVENT, { detail: { collapsed } }));
+}
+
+/**
+ * Force-expand the artifact/workspace pane. Dispatched when the user performs an
+ * explicit "show me this" action (e.g. opening a preview) so the pane reveals
+ * even when collapsed by default or by a stored preference.
+ */
+export function dispatchWorkspaceExpandEvent() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(WORKSPACE_EXPAND_EVENT));
 }
 
 /**

@@ -667,5 +667,9 @@
         "unknown": "A atualização do contexto falhou inesperadamente. Tente novamente."
       }
     }
+  },
+  "artifact": {
+    "emptyTitle": "Nenhum artefato aberto",
+    "emptyHint": "Arquivos e documentos gerados abrem aqui."
   }
 }

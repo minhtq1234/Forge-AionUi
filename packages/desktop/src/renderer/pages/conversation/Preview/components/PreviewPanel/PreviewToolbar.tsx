@@ -121,12 +121,6 @@ type PreviewToolbarProps = {
   onDownload: () => void;
 
   /**
-   * 关闭预览面板
-   * Close preview panel
-   */
-  onClose: () => void;
-
-  /**
    * HTML 审核元素模式（仅HTML类型使用）
    * HTML inspect mode (only for HTML type)
    */
@@ -179,7 +173,6 @@ const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
   renderHistoryDropdown,
   onOpenInSystem,
   onDownload,
-  onClose,
   inspectMode,
   onInspectModeToggle,
   leftExtra,

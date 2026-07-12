@@ -663,5 +663,9 @@
         "unknown": "Bağlam güncellemesi beklenmedik şekilde başarısız oldu. Tekrar deneyin."
       }
     }
+  },
+  "artifact": {
+    "emptyTitle": "Açık artefakt yok",
+    "emptyHint": "Oluşturulan dosyalar ve belgeler burada açılır."
   }
 }

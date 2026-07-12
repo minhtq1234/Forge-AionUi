@@ -661,5 +661,9 @@
       }
     }
   },
-  "notFound": "Conversation not found or has been deleted"
+  "notFound": "Conversation not found or has been deleted",
+  "artifact": {
+    "emptyTitle": "No artifact open",
+    "emptyHint": "Generated files and documents open here."
+  }
 }
