@@ -6,7 +6,7 @@
 
 import type { OfficeArtifactEdit, OfficeArtifactInspection } from '@/common/types/office/artifactEditor';
 import { copyText } from '@/renderer/utils/ui/clipboard';
-import { Button, Dropdown, Menu, Tooltip, Typography } from '@arco-design/web-react';
+import { Button, Dropdown, Menu, Typography } from '@arco-design/web-react';
 import { Attention, Down, Download, EditTwo, FolderOpen, Refresh, Undo } from '@icon-park/react';
 import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -144,31 +144,27 @@ export const OfficeArtifactToolbar: React.FC<OfficeArtifactToolbarProps> = ({
         </div>
         <div className={styles.rightActions}>
           <Button.Group>
-            <Tooltip content={t('preview.office.editor.openDesktop')}>
+            <Button
+              type='secondary'
+              size='small'
+              aria-label={t('preview.office.editor.openDesktop')}
+              icon={<EditTwo size={ICON_SIZE} />}
+              loading={status === 'openingDesktop'}
+              data-testid='office-toolbar-open-desktop'
+              className={styles.actionButton}
+              onClick={() => void openInDesktopApp()}
+            >
+              <span className={styles.actionLabel}>{t('preview.office.editor.openDesktop')}</span>
+            </Button>
+            <Dropdown trigger='click' position='br' droplist={actionsMenu} getPopupContainer={() => document.body}>
               <Button
                 type='secondary'
                 size='small'
-                aria-label={t('preview.office.editor.openDesktop')}
-                icon={<EditTwo size={ICON_SIZE} />}
-                loading={status === 'openingDesktop'}
-                data-testid='office-toolbar-open-desktop'
-                className={styles.actionButton}
-                onClick={() => void openInDesktopApp()}
-              >
-                <span className={styles.actionLabel}>{t('preview.office.editor.openDesktop')}</span>
-              </Button>
-            </Tooltip>
-            <Dropdown trigger='click' position='br' droplist={actionsMenu} getPopupContainer={() => document.body}>
-              <Tooltip content={t('preview.office.editor.more')}>
-                <Button
-                  type='secondary'
-                  size='small'
-                  aria-label={t('preview.office.editor.more')}
-                  icon={<Down size={ICON_SIZE} />}
-                  className={styles.iconButton}
-                  data-testid='office-toolbar-more'
-                />
-              </Tooltip>
+                aria-label={t('preview.office.editor.more')}
+                icon={<Down size={ICON_SIZE} />}
+                className={styles.iconButton}
+                data-testid='office-toolbar-more'
+              />
             </Dropdown>
           </Button.Group>
         </div>
