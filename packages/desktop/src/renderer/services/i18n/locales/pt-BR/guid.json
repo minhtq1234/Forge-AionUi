@@ -1,9 +1,16 @@
 {
+  "toolbar": {
+    "label": "Ações da página inicial",
+    "history": "Histórico",
+    "saved": "Salvos",
+    "community": "Comunidade"
+  },
   "promptExamplesHint": "Experimente estas instruções",
   "defaultPrompts": {
     "capabilities": "O que você pode fazer por mim?",
     "skills": "Quais habilidades você tem?",
-    "tools": "Quais ferramentas você tem?"
+    "tools": "Quais ferramentas você tem?",
+    "reviewFolder": "Review the files in a folder"
   },
   "selectAssistantHint": "Selecione um assistente para iniciar uma tarefa",
   "workspace": {
@@ -13,5 +20,11 @@
     "specifyWorkspace": "Selecionar pasta do projeto",
     "searchPlaceholder": "Procurar projetos…",
     "noProject": "Nenhum Projeto"
+  },
+  "defaultProjectPrompts": {
+    "reviewFiles": "Review the files in this project",
+    "summarizeFolder": "Summarize what this project contains",
+    "createPlan": "Create a plan for this project",
+    "findNextSteps": "Find the next useful steps for this project"
   }
 }

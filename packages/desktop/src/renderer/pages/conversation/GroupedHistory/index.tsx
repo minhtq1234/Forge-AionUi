@@ -4,15 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { ipcBridge } from '@/common';
 import type { TChatConversation } from '@/common/config/storage';
 import AionModal from '@/renderer/components/base/AionModal';
 import DirectorySelectionModal from '@/renderer/components/settings/DirectorySelectionModal';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useCronJobsMap } from '@/renderer/pages/cron';
+import { ProjectCreateModal } from '@/renderer/pages/conversation/projects/ProjectCreateModal';
+import { buildProjectSidebarGroups } from '@/renderer/pages/conversation/projects/projectGrouping';
+import { createProject, updateProject } from '@/renderer/pages/conversation/projects/projectStorage';
+import { useProjects } from '@/renderer/pages/conversation/projects/useProjects';
+import { emitter } from '@/renderer/utils/emitter';
 import { DndContext, DragOverlay, closestCenter } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { Button, Dropdown, Empty, Input, Menu, Modal, Tooltip } from '@arco-design/web-react';
-import { Delete, FolderOpen, ListCheckbox, MoreOne, Plus, Right } from '@icon-park/react';
+import { Button, Dropdown, Empty, Input, Menu, Message, Modal, Tooltip } from '@arco-design/web-react';
+import { Delete, FolderOpen, MoreOne, Plus, Right } from '@icon-park/react';
 import classNames from 'classnames';
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -44,6 +50,9 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
   const { getJobStatus, markAsRead, setActiveConversation } = useCronJobsMap();
+  const { projects, refreshProjects } = useProjects();
+  const [projectCreateVisible, setProjectCreateVisible] = React.useState(false);
+  const [projectCreateInitialWorkspace, setProjectCreateInitialWorkspace] = React.useState<string | undefined>();
 
   const {
     conversations,
@@ -58,13 +67,28 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
   } = useConversations();
 
   const SectionLabel = useCallback(
-    ({ sectionKey, label, trailing }: { sectionKey: string; label: string; trailing?: React.ReactNode }) => {
+    ({
+      sectionKey,
+      label,
+      count,
+      trailing,
+    }: {
+      sectionKey: string;
+      label: string;
+      count?: number;
+      trailing?: React.ReactNode;
+    }) => {
       const isCollapsed = collapsedSections.has(sectionKey);
       return (
         <div
-          className='group/label sider-section-label flex items-center px-12px h-28px select-none sticky top-0 z-10 mt-8px cursor-pointer'
+          className='group/label sider-section-label flex items-center pl-4px pr-12px h-28px select-none sticky top-0 z-10 mt-8px cursor-pointer'
           onClick={() => toggleSection(sectionKey)}
         >
+          {count !== undefined ? (
+            <span className='mr-6px min-w-18px rounded-999px bg-fill-2 px-5px py-1px text-right text-11px tabular-nums leading-16px text-t-secondary'>
+              {count}
+            </span>
+          ) : null}
           <span className='text-14px text-t-secondary sider-section-title group-hover/label:text-t-primary transition-colors font-600 leading-none'>
             {label}
           </span>
@@ -162,44 +186,38 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     });
 
   const conversationSectionActions = !collapsed ? (
-    <span className='flex items-center gap-4px'>
-      {onNewChat && (
-        <Tooltip content={t('conversation.welcome.newConversation')} position='top'>
-          <Button
-            aria-label={t('conversation.welcome.newConversation')}
-            className='!w-22px !h-22px !p-0 !rounded-6px !text-t-secondary hover:!text-t-primary hover:!bg-fill-3'
-            size='mini'
-            type='text'
-            icon={<Plus theme='outline' size='14' fill='currentColor' className='block leading-none' />}
-            onClick={(event) => {
-              event.stopPropagation();
-              onNewChat();
-            }}
-          />
-        </Tooltip>
-      )}
-      {onBatchModeChange && (
-        <Tooltip
-          content={batchMode ? t('conversation.history.batchModeExit') : t('conversation.history.batchManage')}
-          position='top'
-        >
-          <Button
-            aria-label={batchMode ? t('conversation.history.batchModeExit') : t('conversation.history.batchManage')}
-            className={classNames(
-              '!w-22px !h-22px !p-0 !rounded-6px !text-t-secondary hover:!text-t-primary hover:!bg-fill-3',
-              batchMode && '!bg-[rgba(var(--primary-6),0.12)] !text-primary'
-            )}
-            size='mini'
-            type='text'
-            icon={<ListCheckbox theme='outline' size='14' className='block leading-none' />}
-            onClick={(event) => {
-              event.stopPropagation();
-              onBatchModeChange(!batchMode);
-            }}
-          />
-        </Tooltip>
-      )}
-    </span>
+    onNewChat ? (
+      <Tooltip content={t('conversation.welcome.newConversation')} position='top'>
+        <Button
+          aria-label={t('conversation.welcome.newConversation')}
+          className='sider-section-add-action !w-22px !h-22px !p-0 !rounded-6px !text-t-secondary hover:!text-t-primary hover:!bg-fill-3'
+          size='mini'
+          type='text'
+          icon={<Plus theme='outline' size='14' fill='currentColor' className='block leading-none' />}
+          onClick={(event) => {
+            event.stopPropagation();
+            onNewChat();
+          }}
+        />
+      </Tooltip>
+    ) : null
+  ) : null;
+
+  const projectSectionActions = !collapsed ? (
+    <Tooltip content={t('conversation.history.newProject')} position='top'>
+      <Button
+        aria-label={t('conversation.history.newProject')}
+        className='sider-section-add-action !w-22px !h-22px !p-0 !rounded-6px !text-t-secondary hover:!text-t-primary hover:!bg-fill-3'
+        size='mini'
+        type='text'
+        icon={<Plus theme='outline' size='14' fill='currentColor' className='block leading-none' />}
+        onClick={(event) => {
+          event.stopPropagation();
+          setProjectCreateInitialWorkspace(undefined);
+          setProjectCreateVisible(true);
+        }}
+      />
+    </Tooltip>
   ) : null;
 
   const getConversationRowProps = useCallback(
@@ -254,25 +272,100 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
   // Collect all sortable IDs for the pinned section
   const pinnedIds = useMemo(() => pinnedConversations.map((c) => c.id), [pinnedConversations]);
 
-  // Codex-style split: project folders (workspaces) on top, free conversations below.
-  // Projects section: collect all workspace groups across timeline sections, ordered by recency.
-  const projectGroups = useMemo(() => {
-    const seen = new Set<string>();
-    const groups: Array<{ workspace: string; displayName: string; conversations: TChatConversation[] }> = [];
-    for (const section of timelineSections) {
-      for (const item of section.items) {
-        if (item.type === 'workspace' && item.workspaceGroup && !seen.has(item.workspaceGroup.workspace)) {
-          seen.add(item.workspaceGroup.workspace);
-          groups.push({
-            workspace: item.workspaceGroup.workspace,
-            displayName: item.workspaceGroup.display_name,
-            conversations: item.workspaceGroup.conversations,
-          });
-        }
+  const projectGroups = useMemo(
+    () => buildProjectSidebarGroups(projects, timelineSections),
+    [projects, timelineSections]
+  );
+
+  const navigateToProjectChat = useCallback(
+    (workspace: string, projectId?: string) => {
+      void navigate('/guid', { state: { workspace, projectId } });
+    },
+    [navigate]
+  );
+
+  const handleRenameProject = useCallback(
+    (projectId: string, currentName: string) => {
+      let nextName = currentName;
+      Modal.confirm({
+        title: t('conversation.history.renameProject'),
+        content: (
+          <Input
+            autoFocus
+            defaultValue={currentName}
+            placeholder={t('conversation.history.projectNamePlaceholder')}
+            onChange={(value) => {
+              nextName = value;
+            }}
+          />
+        ),
+        okText: t('conversation.history.saveName'),
+        cancelText: t('conversation.history.cancelEdit'),
+        onOk: () => {
+          const trimmedName = nextName.trim();
+          if (!trimmedName) {
+            return;
+          }
+          updateProject({ id: projectId, name: trimmedName });
+          refreshProjects();
+        },
+        alignCenter: true,
+        getPopupContainer: () => document.body,
+      });
+    },
+    [refreshProjects, t]
+  );
+
+  const handleRelinkProject = useCallback(
+    async (projectId: string, workspace: string) => {
+      const result = await ipcBridge.dialog.showOpen.invoke({
+        defaultPath: workspace,
+        properties: ['openDirectory', 'createDirectory'],
+      });
+      const selectedFolder = result?.[0];
+      if (!selectedFolder) {
+        return;
       }
-    }
-    return groups;
-  }, [timelineSections]);
+      try {
+        updateProject({ id: projectId, workspace: selectedFolder });
+        refreshProjects();
+      } catch (error) {
+        console.error('Failed to relink project:', error);
+        Message.error(t('conversation.history.createProjectFailed'));
+      }
+    },
+    [refreshProjects, t]
+  );
+
+  const handleSaveWorkspaceAsProject = useCallback(
+    async (displayName: string, workspace: string, groupConversations: TChatConversation[]) => {
+      try {
+        const project = createProject({ name: displayName, workspace });
+        await Promise.all(
+          groupConversations.map((conversation) =>
+            ipcBridge.conversation.update.invoke({
+              id: conversation.id,
+              updates: {
+                extra: {
+                  ...conversation.extra,
+                  project_id: project.id,
+                  workspace,
+                  custom_workspace: true,
+                },
+              } as Partial<TChatConversation>,
+              merge_extra: false,
+            })
+          )
+        );
+        refreshProjects();
+        emitter.emit('chat.history.refresh');
+      } catch (error) {
+        console.error('Failed to save workspace as project:', error);
+        Message.error(t('conversation.history.createProjectFailed'));
+      }
+    },
+    [refreshProjects]
+  );
 
   // Conversations section: keep timeline grouping (today/yesterday/...) but only show non-workspace conversations.
   const conversationOnlySections = useMemo(
@@ -285,6 +378,9 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
         .filter((section) => section.items.length > 0),
     [timelineSections]
   );
+
+  const visibleProjectCount = projectGroups.length;
+  const visibleConversationCount = conversationOnlySections.reduce((count, section) => count + section.items.length, 0);
 
   const batchSelectionPanel =
     batchMode && !collapsed ? (
@@ -317,17 +413,6 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
         </div>
       </div>
     ) : null;
-
-  if (timelineSections.length === 0 && pinnedConversations.length === 0) {
-    return (
-      <>
-        {afterPinnedContent}
-        <div className='py-48px flex-center'>
-          <Empty description={t('conversation.history.noHistory')} />
-        </div>
-      </>
-    );
-  }
 
   return (
     <>
@@ -401,48 +486,20 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
           </div>
 
           <div className='flex gap-12px justify-end'>
-            <button
-              className='px-24px py-8px rounded-20px text-14px font-medium transition-all'
-              style={{
-                border: '1px solid var(--color-border-2)',
-                backgroundColor: 'var(--color-fill-2)',
-                color: 'var(--color-text-1)',
-              }}
-              onMouseEnter={(event) => {
-                event.currentTarget.style.backgroundColor = 'var(--color-fill-3)';
-              }}
-              onMouseLeave={(event) => {
-                event.currentTarget.style.backgroundColor = 'var(--color-fill-2)';
-              }}
-              onClick={closeExportModal}
-            >
+            <Button className='!px-24px !h-36px !rounded-20px' type='secondary' onClick={closeExportModal}>
               {t('common.cancel')}
-            </button>
-            <button
-              className='px-24px py-8px rounded-20px text-14px font-medium transition-all'
-              style={{
-                border: 'none',
-                backgroundColor: exportModalLoading ? 'var(--color-fill-3)' : 'var(--color-text-1)',
-                color: 'var(--color-bg-1)',
-                cursor: exportModalLoading ? 'not-allowed' : 'pointer',
-              }}
-              onMouseEnter={(event) => {
-                if (!exportModalLoading) {
-                  event.currentTarget.style.opacity = '0.85';
-                }
-              }}
-              onMouseLeave={(event) => {
-                if (!exportModalLoading) {
-                  event.currentTarget.style.opacity = '1';
-                }
-              }}
+            </Button>
+            <Button
+              className='!px-24px !h-36px !rounded-20px'
+              type='primary'
               onClick={() => {
                 void handleConfirmExport();
               }}
+              loading={exportModalLoading}
               disabled={exportModalLoading}
             >
               {exportModalLoading ? t('conversation.history.exporting') : t('common.confirm')}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
@@ -465,50 +522,23 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
         onCancel={handleRemoveProjectCancel}
         footer={
           <div className='flex justify-end gap-12px pt-16px'>
-            <button
-              type='button'
-              className='px-24px py-8px rounded-20px text-14px font-medium transition-all'
-              style={{
-                border: '1px solid var(--color-border-2)',
-                backgroundColor: 'var(--color-fill-2)',
-                color: 'var(--color-text-1)',
-                cursor: removeProjectLoading ? 'not-allowed' : 'pointer',
-                opacity: removeProjectLoading ? 0.55 : 1,
-              }}
-              onMouseEnter={(event) => {
-                if (!removeProjectLoading) event.currentTarget.style.backgroundColor = 'var(--color-fill-3)';
-              }}
-              onMouseLeave={(event) => {
-                if (!removeProjectLoading) event.currentTarget.style.backgroundColor = 'var(--color-fill-2)';
-              }}
+            <Button
+              className='!px-24px !h-36px !rounded-20px'
+              type='secondary'
               onClick={handleRemoveProjectCancel}
               disabled={removeProjectLoading}
             >
               {t('conversation.history.cancelDelete')}
-            </button>
-            <button
-              type='button'
-              className='px-24px py-8px rounded-20px text-14px font-medium transition-all'
-              style={{
-                border: '1px solid rgb(var(--danger-6))',
-                backgroundColor: 'transparent',
-                color: 'rgb(var(--danger-6))',
-                cursor: removeProjectLoading ? 'not-allowed' : 'pointer',
-                opacity: removeProjectLoading ? 0.55 : 1,
-              }}
-              onMouseEnter={(event) => {
-                if (!removeProjectLoading) {
-                  event.currentTarget.style.backgroundColor = 'rgba(var(--danger-6), 0.08)';
-                }
-              }}
-              onMouseLeave={(event) => {
-                if (!removeProjectLoading) event.currentTarget.style.backgroundColor = 'transparent';
-              }}
+            </Button>
+            <Button
+              className='!px-24px !h-36px !rounded-20px'
+              status='danger'
+              type='outline'
               onClick={() => void handleRemoveProjectConfirm()}
               disabled={removeProjectLoading}
             >
               {removeProjectLoading ? t('conversation.history.deleting') : t('conversation.history.confirmDelete')}
-            </button>
+            </Button>
           </div>
         }
       >
@@ -519,6 +549,17 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
           })}
         </div>
       </AionModal>
+
+      <ProjectCreateModal
+        visible={projectCreateVisible}
+        initialWorkspace={projectCreateInitialWorkspace}
+        onCancel={() => setProjectCreateVisible(false)}
+        onCreated={(project) => {
+          refreshProjects();
+          setProjectCreateVisible(false);
+          navigateToProjectChat(project.workspace, project.id);
+        }}
+      />
 
       <div>
         {/* L1: Pinned section */}
@@ -558,25 +599,58 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
         {afterPinnedContent}
 
         {/* L1: Projects section — workspace folders, peer to conversations */}
-        {projectGroups.length > 0 && (
+        {(projectGroups.length > 0 || !collapsed) && (
           <div className='min-w-0'>
-            {!collapsed && <SectionLabel sectionKey='projects' label={t('conversation.history.projectsSection')} />}
+            {!collapsed && (
+              <SectionLabel
+                sectionKey='projects'
+                label={t('conversation.history.projectsSection')}
+                count={visibleProjectCount}
+                trailing={projectSectionActions}
+              />
+            )}
             {!collapsedSections.has('projects') &&
               projectGroups.map((group) => {
                 const projectMenu = (
                   <Menu
                     onClickMenuItem={(key) => {
+                      if (key === 'new-chat') {
+                        navigateToProjectChat(group.workspace, group.project_id);
+                      }
+                      if (key === 'save-project') {
+                        void handleSaveWorkspaceAsProject(group.display_name, group.workspace, group.conversations);
+                      }
+                      if (key === 'rename' && group.project_id) {
+                        handleRenameProject(group.project_id, group.display_name);
+                      }
+                      if (key === 'reveal') {
+                        void ipcBridge.shell.showItemInFolder.invoke(group.workspace);
+                      }
+                      if (key === 'relink' && group.project_id) {
+                        void handleRelinkProject(group.project_id, group.workspace);
+                      }
                       if (key === 'remove') {
-                        handleRemoveProject(group.displayName, group.conversations);
+                        handleRemoveProject(group.display_name, group.conversations, group.project_id);
                       }
                     }}
                   >
-                    <Menu.Item key='remove' className='!text-[rgb(var(--danger-6))]'>
-                      <span className='flex items-center gap-8px'>
-                        <Delete theme='outline' size='14' />
-                        {t('conversation.history.removeProject')}
-                      </span>
-                    </Menu.Item>
+                    <Menu.Item key='new-chat'>{t('conversation.history.newConversationInProject')}</Menu.Item>
+                    {group.source === 'legacy-workspace' ? (
+                      <Menu.Item key='save-project'>{t('conversation.history.convertWorkspaceToProject')}</Menu.Item>
+                    ) : null}
+                    {group.source === 'project' ? (
+                      <>
+                        <Menu.Item key='rename'>{t('conversation.history.renameProject')}</Menu.Item>
+                        <Menu.Item key='reveal'>{t('conversation.history.revealProjectFolder')}</Menu.Item>
+                        <Menu.Item key='relink'>{t('conversation.history.relinkProjectFolder')}</Menu.Item>
+                        <Menu.Item key='remove' className='!text-danger-6'>
+                          <span className='flex items-center gap-8px'>
+                            <Delete theme='outline' size='14' />
+                            {t('conversation.history.removeProject')}
+                          </span>
+                        </Menu.Item>
+                      </>
+                    ) : null}
                   </Menu>
                 );
                 return (
@@ -589,34 +663,28 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
                       stickyTop={28}
                       header={
                         <span className='text-14px font-[500] truncate flex-1 text-t-primary min-w-0'>
-                          {group.displayName}
+                          {group.display_name}
                         </span>
                       }
                       trailing={
                         <span className='flex items-center gap-6px'>
                           <Tooltip content={t('conversation.history.newConversationInProject')} position='top'>
-                            <span
-                              role='button'
-                              tabIndex={0}
+                            <Button
                               aria-label={t('conversation.history.newConversationInProject')}
                               className={classNames(
-                                'flex-center cursor-pointer transition-colors text-t-secondary hover:text-t-primary size-20px rd-4px sider-action-btn',
+                                '!w-20px !h-20px !p-0 !rounded-4px !text-t-secondary hover:!text-t-primary hover:!bg-fill-3 sider-action-btn',
                                 isMobile ? 'flex' : 'hidden group-hover:flex'
                               )}
+                              size='mini'
+                              type='text'
+                              icon={
+                                <Plus theme='outline' size='14' fill='currentColor' className='block leading-none' />
+                              }
                               onClick={(e) => {
                                 e.stopPropagation();
-                                void navigate('/guid', { state: { workspace: group.workspace } });
+                                navigateToProjectChat(group.workspace, group.project_id);
                               }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  void navigate('/guid', { state: { workspace: group.workspace } });
-                                }
-                              }}
-                            >
-                              <Plus theme='outline' size='14' fill='currentColor' className='block leading-none' />
-                            </span>
+                            />
                           </Tooltip>
                           <Dropdown
                             droplist={projectMenu}
@@ -625,16 +693,19 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
                             getPopupContainer={() => document.body}
                             unmountOnExit={false}
                           >
-                            <span
-                              aria-label='Project actions'
+                            <Button
+                              aria-label={t('conversation.history.projectActions')}
                               className={classNames(
-                                'flex-center cursor-pointer transition-colors text-t-secondary hover:text-t-primary size-20px rd-4px sider-action-btn',
+                                '!w-20px !h-20px !p-0 !rounded-4px !text-t-secondary hover:!text-t-primary hover:!bg-fill-3 sider-action-btn',
                                 isMobile ? 'flex' : 'hidden group-hover:flex'
                               )}
+                              size='mini'
+                              type='text'
+                              icon={
+                                <MoreOne theme='outline' size='14' fill='currentColor' className='block leading-none' />
+                              }
                               onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreOne theme='outline' size='14' fill='currentColor' className='block leading-none' />
-                            </span>
+                            />
                           </Dropdown>
                         </span>
                       }
@@ -650,16 +721,23 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
         )}
 
         {/* L1: Conversations section — peer to projects, internally split by timeline */}
-        {conversationOnlySections.length > 0 && (
+        {(conversationOnlySections.length > 0 ||
+          (timelineSections.length === 0 && pinnedConversations.length === 0)) && (
           <div className='min-w-0'>
             {!collapsed && (
               <SectionLabel
                 sectionKey='conversations'
                 label={t('conversation.history.conversationsSection')}
+                count={visibleConversationCount}
                 trailing={conversationSectionActions}
               />
             )}
             {batchSelectionPanel}
+            {conversationOnlySections.length === 0 ? (
+              <div className='py-48px flex-center'>
+                <Empty description={t('conversation.history.noHistory')} />
+              </div>
+            ) : null}
             {!collapsedSections.has('conversations') &&
               conversationOnlySections.map((section) => (
                 <div key={section.timeline} className='min-w-0'>

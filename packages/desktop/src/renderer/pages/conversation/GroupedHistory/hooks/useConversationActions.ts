@@ -6,6 +6,8 @@
 
 import { ipcBridge } from '@/common';
 import type { TChatConversation } from '@/common/config/storage';
+import { buildDetachedProjectExtra } from '@/renderer/pages/conversation/projects/projectConversation';
+import { removeProject } from '@/renderer/pages/conversation/projects/projectStorage';
 import { refreshConversationCache } from '@/renderer/pages/conversation/utils/conversationCache';
 import { emitter } from '@/renderer/utils/emitter';
 import { blockMobileInputFocus, blurActiveElement } from '@/renderer/utils/ui/focus';
@@ -236,15 +238,19 @@ export const useConversationActions = ({
    * Uses project's design system: AionModal component with danger-styled action button.
    */
   const [removeProjectTarget, setRemoveProjectTarget] = useState<{
+    projectId?: string;
     name: string;
     conversations: TChatConversation[];
   } | null>(null);
   const [removeProjectLoading, setRemoveProjectLoading] = useState(false);
 
-  const handleRemoveProject = useCallback((projectName: string, conversations: TChatConversation[]) => {
-    if (conversations.length === 0) return;
-    setRemoveProjectTarget({ name: projectName, conversations });
-  }, []);
+  const handleRemoveProject = useCallback(
+    (projectName: string, conversations: TChatConversation[], projectId?: string) => {
+      if (!projectId && conversations.length === 0) return;
+      setRemoveProjectTarget({ projectId, name: projectName, conversations });
+    },
+    []
+  );
 
   const handleRemoveProjectCancel = useCallback(() => {
     if (removeProjectLoading) return;
@@ -255,26 +261,35 @@ export const useConversationActions = ({
     if (!removeProjectTarget) return;
     setRemoveProjectLoading(true);
     try {
-      const results = await Promise.all(removeProjectTarget.conversations.map((c) => removeConversation(c.id)));
-      const successCount = results.filter(Boolean).length;
-      emitter.emit('chat.history.refresh');
-      if (successCount > 0) {
-        Message.success(
-          t('conversation.history.batchDeleteSuccess', {
-            count: successCount,
+      const detachResults = await Promise.all(
+        removeProjectTarget.conversations.map((conversation) =>
+          ipcBridge.conversation.update.invoke({
+            id: conversation.id,
+            updates: {
+              extra: buildDetachedProjectExtra(conversation),
+            } as Partial<TChatConversation>,
+            merge_extra: false,
           })
-        );
+        )
+      );
+
+      const detachedAll = detachResults.every(Boolean);
+      const removedProject = removeProjectTarget.projectId ? removeProject(removeProjectTarget.projectId) : true;
+
+      emitter.emit('chat.history.refresh');
+      if (detachedAll && removedProject) {
+        Message.success(t('conversation.history.removeProjectSuccess'));
       } else {
-        Message.error(t('conversation.history.deleteFailed'));
+        Message.error(t('conversation.history.removeProjectFailed'));
       }
       setRemoveProjectTarget(null);
     } catch (error) {
       console.error('Failed to remove project:', error);
-      Message.error(t('conversation.history.deleteFailed'));
+      Message.error(t('conversation.history.removeProjectFailed'));
     } finally {
       setRemoveProjectLoading(false);
     }
-  }, [removeProjectTarget, removeConversation, t]);
+  }, [removeProjectTarget, t]);
 
   return {
     renameModalVisible,

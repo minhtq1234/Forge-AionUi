@@ -17,7 +17,25 @@
     "quickActionStar": "Подобається? Поставте нам зірку!",
     "skillsMarket": "Маркет навичок Forge",
     "skillsMarketDesc": "Шукайте та активуйте навички спільноти за запитом. Налаштуйте один раз — доступно для всіх агентів.",
-    "skillsMarketDetails": "Докладніше >>"
+    "skillsMarketDetails": "Докладніше >>",
+    "projectTitle": "What's next in {{name}}?",
+    "projectPill": "Project · {{name}}",
+    "projectModeEyebrow": "You are in a Project workspace",
+    "projectModeBody": "Unlike a regular chat, this space is connected to one local folder. New chats stay grouped here and can use the project files as working context.",
+    "projectModeBadgeFolder": "Folder-backed",
+    "projectModeBadgeChats": "Project chats",
+    "projectModeBadgeFiles": "File-aware work"
+  },
+  "projectHeader": {
+    "label": "Проєкт {{name}}",
+    "eyebrow": "ПРОЄКТ",
+    "tabs": {
+      "label": "Подання проєкту",
+      "chat": "Чат",
+      "files": "Файли",
+      "context": "Контекст",
+      "artifacts": "Артефакти"
+    }
   },
   "history": {
     "recents": "Недавні",
@@ -70,9 +88,30 @@
     "conversationsSection": "Чати",
     "removeProjectTitle": "Видалити проєкт",
     "removeProject": "Видалити проєкт",
-    "removeProjectConfirm": "Видалити проєкт «{{name}}»? Також буде видалено {{count}} розмов у ньому.",
+    "removeProjectConfirm": "Remove project \"{{name}}\" from Forge? Its {{count}} chat(s) and folder files will stay where they are.",
     "newConversationInProject": "Нова розмова в цьому проєкті",
-    "deleting": "Видалення..."
+    "deleting": "Видалення...",
+    "newProject": "New project",
+    "createProjectTitle": "Create project",
+    "projectNameLabel": "Project name",
+    "projectNamePlaceholder": "Name this project",
+    "projectFolderLabel": "Folder",
+    "projectFolderPlaceholder": "Choose a folder to start your project",
+    "chooseProjectFolder": "Choose folder",
+    "changeProjectFolder": "Change folder",
+    "createProject": "Create project",
+    "projectFolderRequired": "Choose a folder before creating a project.",
+    "projectDuplicateFolder": "This folder is already used by \"{{name}}\".",
+    "openExistingProject": "Open existing project",
+    "createProjectSuccess": "Project created",
+    "createProjectFailed": "Project could not be created",
+    "renameProject": "Rename project",
+    "revealProjectFolder": "Reveal folder",
+    "relinkProjectFolder": "Relink folder",
+    "convertWorkspaceToProject": "Save as project",
+    "removeProjectSuccess": "Project removed. Chats and files were kept.",
+    "removeProjectFailed": "Project could not be removed",
+    "projectActions": "Project actions"
   },
   "historySearch": {
     "tooltip": "Пошук повідомлень",

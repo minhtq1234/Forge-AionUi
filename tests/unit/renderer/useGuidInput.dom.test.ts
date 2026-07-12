@@ -53,4 +53,18 @@ describe('useGuidInput — ELECTRON-1K6', () => {
     expect(result.current.files).toEqual(['/tmp/c.pdf']);
     expect(result.current.dir).toBe('/Users/me/projects/my-project');
   });
+
+  it('reads workspace and Project id from route state', () => {
+    const { result } = renderHook(() =>
+      useGuidInput({
+        locationState: {
+          workspace: '/Users/me/Finance Close',
+          projectId: 'project-1',
+        },
+      })
+    );
+
+    expect(result.current.dir).toBe('/Users/me/Finance Close');
+    expect(result.current.projectId).toBe('project-1');
+  });
 });

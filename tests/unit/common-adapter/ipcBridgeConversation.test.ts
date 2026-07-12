@@ -131,6 +131,33 @@ describe('ipcBridge conversation adapter', () => {
     });
   });
 
+  it('passes project metadata through create conversation requests', async () => {
+    const { conversation } = await import('@/common/adapter/ipcBridge');
+    const input: ICreateConversationParams = {
+      type: 'aionrs',
+      name: 'Review June close',
+      extra: {
+        project_id: 'project-finance-close',
+        workspace: '/Users/me/Finance Close',
+        custom_workspace: true,
+      },
+    };
+
+    await conversation.create.invoke(input);
+
+    expect(httpBridgeMocks.calls).toContainEqual({
+      method: 'POST',
+      path: '/api/conversations',
+      body: {
+        type: 'aionrs',
+        id: undefined,
+        name: 'Review June close',
+        assistant: undefined,
+        extra: input.extra,
+      },
+    });
+  });
+
   it('passes pinned context through send message requests', async () => {
     const { conversation } = await import('@/common/adapter/ipcBridge');
     const input: ISendMessageParams = {

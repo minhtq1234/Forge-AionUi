@@ -26,6 +26,8 @@ export type GuidSendDeps = {
   setFiles: React.Dispatch<React.SetStateAction<string[]>>;
   dir: string;
   setDir: React.Dispatch<React.SetStateAction<string>>;
+  projectId?: string;
+  setProjectId: React.Dispatch<React.SetStateAction<string | undefined>>;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
   loading: boolean;
 
@@ -76,6 +78,8 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     setFiles,
     dir,
     setDir,
+    projectId,
+    setProjectId,
     setLoading,
     loading,
     selectedAssistantId,
@@ -166,6 +170,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
             conversation_overrides: assistantOverrides,
           },
           extra: {
+            project_id: projectId,
             default_files: files,
             workspace: finalWorkspace,
             custom_workspace: isCustomWorkspace,
@@ -215,6 +220,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
           conversation_overrides: assistantOverrides,
         },
         extra: {
+          project_id: projectId,
           workspace: finalWorkspace,
           custom_workspace: isCustomWorkspace,
           default_files: files,
@@ -256,6 +262,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     input,
     files,
     dir,
+    projectId,
     selectedAssistantId,
     selectedAssistantBackend,
     selectedMode,
@@ -288,6 +295,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
         setMentionActiveIndex(0);
         setFiles([]);
         setDir('');
+        setProjectId(undefined);
       })
       .catch((error) => {
         console.error('Failed to send message:', error);
@@ -308,6 +316,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     setMentionActiveIndex,
     setFiles,
     setDir,
+    setProjectId,
     t,
   ]);
 

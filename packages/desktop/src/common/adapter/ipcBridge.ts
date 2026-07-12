@@ -1614,6 +1614,7 @@ export interface ICreateConversationParams {
     };
   };
   extra: {
+    project_id?: string;
     workspace?: string;
     custom_workspace?: boolean;
     default_files?: string[];

@@ -8,6 +8,7 @@
 
 .heroHeader {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   margin-bottom: 16px;
@@ -17,6 +18,36 @@
   color: var(--color-text-3);
   font-size: 13px;
   line-height: 20px;
+}
+
+.projectPill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 12px;
+  padding: 6px 10px;
+  border: 1px solid rgb(var(--orange-3));
+  border-radius: 999px;
+  background: rgb(var(--orange-1));
+  color: rgb(var(--orange-7));
+  box-sizing: border-box;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.projectPath {
+  max-width: 100%;
+  margin: 6px 0 0;
+  overflow: hidden;
+  color: var(--color-text-3);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .guidInputCard {
@@ -115,7 +146,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 6px 10px 14px;
+  min-height: 30px;
+  margin: -4px -4px 10px;
+  padding: 2px 4px 8px;
+  border-bottom: 1px solid var(--color-border-2);
   background: transparent;
 }
 
@@ -141,6 +175,12 @@
 .workspaceEmptyBtn:hover {
   color: var(--color-text-2);
   background: var(--color-fill-3);
+}
+
+@media (max-width: 640px) {
+  .projectPath {
+    max-width: calc(100vw - 64px);
+  }
 }
 
 /* 选中态：和空状态同色系，不做颜色跳变 */
@@ -439,9 +479,14 @@
   color: var(--aou-9) !important;
 }
 
-/* 底部快捷按钮：基础间距 + 安全区 */
 .guidQuickActions {
-  bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 @media (max-width: 768px) {
@@ -455,6 +500,17 @@
 
   .guidContainer .guidLayout {
     margin-top: 0;
+  }
+
+  .guidQuickActions {
+    top: 10px;
+    right: 10px;
+    gap: 4px;
+  }
+
+  .guidQuickActions :global(.arco-btn) {
+    padding-right: 8px !important;
+    padding-left: 8px !important;
   }
 }
 

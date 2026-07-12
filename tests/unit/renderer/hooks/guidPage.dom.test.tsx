@@ -88,6 +88,8 @@ const {
     setFiles: vi.fn(),
     dir: '',
     setDir: vi.fn(),
+    projectId: undefined as string | undefined,
+    setProjectId: vi.fn(),
     loading: false,
     setLoading: vi.fn(),
     isInputFocused: false,
@@ -124,7 +126,15 @@ const {
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string; [key: string]: unknown }) => options?.defaultValue || key,
+    t: (key: string, options?: { defaultValue?: string; name?: string; [key: string]: unknown }) => {
+      if (key === 'conversation.welcome.projectTitle') {
+        return `What's next in ${options?.name}?`;
+      }
+      if (key === 'conversation.welcome.projectPill') {
+        return `Project · ${options?.name}`;
+      }
+      return options?.defaultValue || key;
+    },
     i18n: { language: 'en-US' },
   }),
 }));
@@ -277,7 +287,10 @@ import GuidPage from '@/renderer/pages/guid/GuidPage';
 
 describe('GuidPage', () => {
   beforeEach(() => {
+    localStorage.clear();
     locationMock.state = null;
+    guidInputMock.dir = '';
+    guidInputMock.projectId = undefined;
     swrMock.useSWRMock.mockReturnValue({ data: null });
     capturedGuidActionRowProps.length = 0;
     capturedAssistantSelectionAreaProps.length = 0;
@@ -327,6 +340,7 @@ describe('GuidPage', () => {
     expect(screen.queryByLabelText('common.back')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Assistant Details')).not.toBeInTheDocument();
     expect(screen.getByText('conversation.welcome.title')).toBeInTheDocument();
+    expect(screen.queryByText('conversation.welcome.projectModeEyebrow')).not.toBeInTheDocument();
     expect(screen.getByTestId('assistant-selection-area')).toBeInTheDocument();
     const latestAssistantSelectionAreaProps = capturedAssistantSelectionAreaProps.at(-1);
     const latestGuidActionRowProps = capturedGuidActionRowProps.at(-1);
@@ -345,6 +359,39 @@ describe('GuidPage', () => {
     expect(latestGuidInputCardProps).not.toHaveProperty('mentionOpen');
     expect(latestGuidInputCardProps).not.toHaveProperty('mentionSelectorBadge');
     expect(latestGuidInputCardProps).not.toHaveProperty('mentionDropdown');
+  });
+
+  it('shows a Project-specific heading when starting from a Project workspace', () => {
+    localStorage.setItem(
+      'forge.projects.v1',
+      JSON.stringify([
+        {
+          id: 'project-finance-close',
+          name: 'Finance Close',
+          workspace: '/Users/me/Finance Close',
+          created_at: 1,
+          updated_at: 1,
+        },
+      ])
+    );
+    guidInputMock.dir = '/Users/me/Finance Close';
+    guidInputMock.projectId = 'project-finance-close';
+
+    render(<GuidPage />);
+
+    expect(screen.getByText("What's next in Finance Close?")).toBeInTheDocument();
+    expect(screen.getByText('Project · Finance Close')).toBeInTheDocument();
+    expect(screen.getByText('/Users/me/Finance Close')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'guid.defaultProjectPrompts.reviewFiles' })).toBeInTheDocument();
+    expect(screen.queryByText('conversation.welcome.title')).not.toBeInTheDocument();
+  });
+
+  it('renders four starter cards in a two-column grid', () => {
+    render(<GuidPage />);
+
+    const starterGrid = screen.getByRole('region', { name: 'guid.promptExamplesHint' });
+    expect(starterGrid.querySelector('.grid-cols-2')).toBeInTheDocument();
+    expect(starterGrid.querySelectorAll('button')).toHaveLength(4);
   });
 
   it('ignores legacy selectedAgentKey navigation state when preselecting an assistant', () => {
@@ -414,6 +461,7 @@ describe('GuidPage', () => {
     expect(screen.getByRole('button', { name: 'guid.defaultPrompts.capabilities' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'guid.defaultPrompts.skills' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'guid.defaultPrompts.tools' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'guid.defaultProjectPrompts.reviewFiles' })).not.toBeInTheDocument();
   });
 
   it('does not seed skill defaults from the assistant list while detail is loading', async () => {

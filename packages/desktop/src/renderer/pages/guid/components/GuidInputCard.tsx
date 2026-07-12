@@ -113,6 +113,11 @@ const GuidInputCard: React.FC<GuidInputCardProps> = ({
           boxShadow: isInputActive && !isFileDragging ? activeShadow : 'none',
         }}
       >
+        <GuidWorkspaceFootnote
+          workspaceDir={workspaceDir}
+          onSelectWorkspace={onSelectWorkspace}
+          onClearWorkspace={onClearWorkspace}
+        />
         <Input.TextArea
           autoSize={textareaAutoSize}
           placeholder={placeholder}
@@ -141,11 +146,6 @@ const GuidInputCard: React.FC<GuidInputCardProps> = ({
           <div className='absolute left-0 right-0 top-[calc(100%+4px)] z-70'>{slashCommandMenu}</div>
         )}
       </div>
-      <GuidWorkspaceFootnote
-        workspaceDir={workspaceDir}
-        onSelectWorkspace={onSelectWorkspace}
-        onClearWorkspace={onClearWorkspace}
-      />
     </div>
   );
 };

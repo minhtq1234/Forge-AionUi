@@ -17,7 +17,19 @@
     "quickActionStar": "마음에 드시나요? 별을 주세요!",
     "skillsMarket": "Forge Skills Market",
     "skillsMarketDesc": "커뮤니티 Skills를 필요에 따라 검색하고 활성화. 한 번 설정하면 모든 Agent에서 사용 가능.",
-    "skillsMarketDetails": "자세히 >>"
+    "skillsMarketDetails": "자세히 >>",
+    "projectTitle": "What's next in {{name}}?",
+    "projectPill": "Project · {{name}}",
+    "projectModeEyebrow": "You are in a Project workspace",
+    "projectModeBody": "Unlike a regular chat, this space is connected to one local folder. New chats stay grouped here and can use the project files as working context.",
+    "projectModeBadgeFolder": "Folder-backed",
+    "projectModeBadgeChats": "Project chats",
+    "projectModeBadgeFiles": "File-aware work"
+  },
+  "projectHeader": {
+    "label": "프로젝트 {{name}}",
+    "eyebrow": "프로젝트",
+    "tabs": { "label": "프로젝트 보기", "chat": "채팅", "files": "파일", "context": "컨텍스트", "artifacts": "결과물" }
   },
   "history": {
     "recents": "최근",
@@ -70,9 +82,30 @@
     "conversationsSection": "채팅",
     "removeProjectTitle": "프로젝트 제거",
     "removeProject": "프로젝트 제거",
-    "removeProjectConfirm": "\"{{name}}\" 프로젝트를 제거하시겠습니까? 프로젝트의 {{count}}개 대화도 함께 제거됩니다.",
+    "removeProjectConfirm": "Remove project \"{{name}}\" from Forge? Its {{count}} chat(s) and folder files will stay where they are.",
     "newConversationInProject": "이 프로젝트에서 새 대화",
-    "deleting": "삭제 중..."
+    "deleting": "삭제 중...",
+    "newProject": "New project",
+    "createProjectTitle": "Create project",
+    "projectNameLabel": "Project name",
+    "projectNamePlaceholder": "Name this project",
+    "projectFolderLabel": "Folder",
+    "projectFolderPlaceholder": "Choose a folder to start your project",
+    "chooseProjectFolder": "Choose folder",
+    "changeProjectFolder": "Change folder",
+    "createProject": "Create project",
+    "projectFolderRequired": "Choose a folder before creating a project.",
+    "projectDuplicateFolder": "This folder is already used by \"{{name}}\".",
+    "openExistingProject": "Open existing project",
+    "createProjectSuccess": "Project created",
+    "createProjectFailed": "Project could not be created",
+    "renameProject": "Rename project",
+    "revealProjectFolder": "Reveal folder",
+    "relinkProjectFolder": "Relink folder",
+    "convertWorkspaceToProject": "Save as project",
+    "removeProjectSuccess": "Project removed. Chats and files were kept.",
+    "removeProjectFailed": "Project could not be removed",
+    "projectActions": "Project actions"
   },
   "historySearch": {
     "tooltip": "메시지 검색",

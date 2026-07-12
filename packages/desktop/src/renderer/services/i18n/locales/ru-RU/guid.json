@@ -1,9 +1,16 @@
 {
+  "toolbar": {
+    "label": "Действия на главной",
+    "history": "История",
+    "saved": "Сохранённое",
+    "community": "Сообщество"
+  },
   "promptExamplesHint": "Попробуйте эти инструкции",
   "defaultPrompts": {
     "capabilities": "Что ты можешь сделать для меня?",
     "skills": "Какие у тебя есть навыки?",
-    "tools": "Какие у тебя есть инструменты?"
+    "tools": "Какие у тебя есть инструменты?",
+    "reviewFolder": "Review the files in a folder"
   },
   "selectAssistantHint": "Выберите ассистента, чтобы начать задачу",
   "workspace": {
@@ -13,5 +20,11 @@
     "specifyWorkspace": "Выбрать папку проекта",
     "searchPlaceholder": "Поиск проектов…",
     "noProject": "Без проекта"
+  },
+  "defaultProjectPrompts": {
+    "reviewFiles": "Review the files in this project",
+    "summarizeFolder": "Summarize what this project contains",
+    "createPlan": "Create a plan for this project",
+    "findNextSteps": "Find the next useful steps for this project"
   }
 }
