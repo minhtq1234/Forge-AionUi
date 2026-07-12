@@ -8,6 +8,7 @@ import { ipcBridge } from '@/common';
 import { downloadFileFromPath } from '@/renderer/utils/file/download';
 import type { IDirOrFile } from '@/common/adapter/ipcBridge';
 import type { PreviewContentType } from '@/common/types/office/preview';
+import type { OpenPreviewOptions, PreviewMetadata } from '@/renderer/pages/conversation/Preview/context/PreviewContext';
 import { getContentTypeByExtension } from '@/renderer/pages/conversation/Preview/fileUtils';
 import { emitter } from '@/renderer/utils/emitter';
 import {
@@ -45,7 +46,12 @@ interface UseWorkspaceFileOpsOptions {
   setDeleteModal: React.Dispatch<React.SetStateAction<DeleteModalState>>;
 
   // Dependencies from preview context
-  openPreview: (content: string, type: PreviewContentType, metadata?: any, options?: { replace?: boolean }) => void;
+  openPreview: (
+    content: string,
+    type: PreviewContentType,
+    metadata?: PreviewMetadata,
+    options?: OpenPreviewOptions
+  ) => void;
 }
 
 /**
@@ -296,7 +302,7 @@ export function useWorkspaceFileOps(options: UseWorkspaceFileOpsOptions) {
         }
 
         // 打开预览面板并传入文件元数据 / Open preview panel with file metadata.
-        // replace: reuse the single browse preview tab instead of stacking tabs.
+        // preview: reuse the provisional preview tab instead of stacking tabs.
         openPreview(
           content,
           contentType,
@@ -311,7 +317,7 @@ export function useWorkspaceFileOps(options: UseWorkspaceFileOpsOptions) {
             // Markdown and image files default to read-only mode
             editable: contentType === 'markdown' || contentType === 'image' || isLargeTextTruncated ? false : undefined,
           },
-          { replace: true }
+          { preview: true }
         );
       } catch (error) {
         const kind = classifyPreviewError(error);

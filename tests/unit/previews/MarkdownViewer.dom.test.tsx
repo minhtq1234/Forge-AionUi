@@ -162,7 +162,7 @@ describe('MarkdownViewer', () => {
           language: 'jpg',
           editable: false,
         }),
-        { replace: true }
+        { preview: true }
       );
     });
     expect(ipcBridge.fs.getImageBase64.invoke).toHaveBeenCalledWith({ path: filePath, workspace: undefined });
@@ -192,7 +192,7 @@ describe('MarkdownViewer', () => {
           targetColumn: undefined,
           truncated: false,
         }),
-        { replace: true }
+        { preview: true }
       );
     });
 
@@ -224,7 +224,7 @@ describe('MarkdownViewer', () => {
           targetColumn: undefined,
           truncated: false,
         }),
-        { replace: true }
+        { preview: true }
       );
     });
   });

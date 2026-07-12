@@ -44,14 +44,26 @@ export interface PreviewTab {
   isDirty?: boolean; // 是否有未保存的修改 / Whether there are unsaved changes
   originalContent?: string; // 原始内容，用于对比 / Original content for comparison
   officePreviewRevision?: number;
+  /**
+   * Marks this tab as the single provisional "preview" slot (VS Code–style
+   * single-click preview). At most one tab has `preview: true` at a time.
+   * Pinned tabs (opened without `{ preview: true }`) always have this falsy.
+   */
+  preview?: boolean;
 }
 
 export interface OpenPreviewOptions {
   /**
-   * Reuse the active tab instead of opening a new one — used by file-tree
-   * browsing so switching files swaps the single preview instead of stacking
-   * tabs. Ignored when the active tab has unsaved edits (falls back to a new
-   * tab to avoid losing changes).
+   * Open into the provisional preview slot instead of stacking a new pinned
+   * tab — used by file-tree/single-click browsing so switching files reuses
+   * the one provisional tab rather than accumulating tabs. If the current
+   * provisional tab has unsaved edits, it is promoted to a pinned tab (never
+   * clobbered) and a fresh provisional tab is opened for the new content.
+   */
+  preview?: boolean;
+  /**
+   * @deprecated Alias for `preview`, kept for backward compatibility with
+   * existing callers. Prefer `preview`.
    */
   replace?: boolean;
 }
@@ -176,9 +188,6 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isOpen, setIsOpen] = useState(persistedState.isOpen);
   const [tabs, setTabs] = useState<PreviewTab[]>(persistedState.tabs);
   const [activeTabId, setActiveTabId] = useState<string | null>(persistedState.activeTabId);
-  // Mirror activeTabId in a ref so setTabs updaters can read the latest value
-  // without adding activeTabId to their dependencies.
-  const activeTabIdRef = useRef<string | null>(persistedState.activeTabId);
   // const [sendBoxHandler, setSendBoxHandlerState] = useState<((text: string) => void) | null>(null);
   const sendBoxHandler = useRef<((text: string) => void) | null>(null);
   const [domSnippets, setDomSnippets] = useState<DomSnippet[]>([]);
@@ -203,7 +212,6 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // 持久化 activeTabId（单独存储，避免切换 tab 时重复序列化大内容）
   // Persist activeTabId separately to avoid re-serializing large tab content on tab switch
   useEffect(() => {
-    activeTabIdRef.current = activeTabId;
     try {
       if (activeTabId) {
         localStorage.setItem(PREVIEW_ACTIVE_TAB_ID_KEY, activeTabId);
@@ -343,21 +351,33 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
           title,
           isDirty: false,
           originalContent: new_content, // 保存原始内容 / Save original content
+          preview: false,
         };
 
-        // Single-preview browse mode: reuse the active tab in place instead of
-        // stacking a new one — unless it has unsaved edits, then fall back to a
-        // new tab so changes aren't lost.
-        if (options?.replace) {
-          const activeIdx = activeTabIdRef.current
-            ? prevTabs.findIndex((tab) => tab.id === activeTabIdRef.current)
-            : -1;
-          const activeTab = activeIdx >= 0 ? prevTabs[activeIdx] : null;
-          if (activeTab && !activeTab.isDirty) {
-            nextActiveTabId = activeTab.id;
-            const replacedTab: PreviewTab = { ...newTab, id: activeTab.id };
-            return prevTabs.map((tab, idx) => (idx === activeIdx ? replacedTab : tab));
+        // Provisional preview mode: reuse the single provisional tab in place
+        // instead of stacking a new one — used by file-tree/single-click
+        // browsing. `replace` is kept as a back-compat alias for `preview`.
+        const wantsPreview = options?.preview ?? options?.replace ?? false;
+
+        if (wantsPreview) {
+          const provisionalIdx = prevTabs.findIndex((tab) => tab.preview);
+          const provisionalTab = provisionalIdx >= 0 ? prevTabs[provisionalIdx] : null;
+
+          if (provisionalTab && !provisionalTab.isDirty) {
+            // Reuse the existing provisional slot in place.
+            nextActiveTabId = provisionalTab.id;
+            const reusedTab: PreviewTab = { ...newTab, id: provisionalTab.id, preview: true };
+            return prevTabs.map((tab, idx) => (idx === provisionalIdx ? reusedTab : tab));
           }
+
+          // No provisional slot yet, or it has unsaved edits: promote a dirty
+          // provisional tab to pinned (never clobber it) and open a fresh
+          // provisional tab for the new content.
+          const tabsWithPromotedProvisional = provisionalTab
+            ? prevTabs.map((tab) => (tab.id === provisionalTab.id ? { ...tab, preview: false } : tab))
+            : prevTabs;
+          nextActiveTabId = tabId;
+          return [...tabsWithPromotedProvisional, { ...newTab, preview: true }];
         }
 
         nextActiveTabId = tabId;
