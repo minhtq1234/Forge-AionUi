@@ -545,7 +545,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
         // 移动端：全屏显示预览，隐藏编辑器 / Mobile: Full-screen preview, hide editor
         if (layout?.isMobile) {
           return (
-            <div className='flex-1 overflow-hidden'>
+            <div className='flex-1 overflow-hidden bg-document'>
               <MarkdownPreview content={content} file_path={metadata?.file_path} workspace={metadata?.workspace} />
             </div>
           );
@@ -559,7 +559,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
               <div className='h-40px flex items-center px-12px bg-bg-2'>
                 <span className='text-12px text-t-secondary'>{t('preview.editor')}</span>
               </div>
-              <div className='flex-1 overflow-hidden'>
+              <div className='flex-1 overflow-hidden bg-document'>
                 <MarkdownEditor
                   key={activeTabId ?? undefined}
                   value={content}
@@ -577,7 +577,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
               <div className='h-40px flex items-center px-12px bg-bg-2'>
                 <span className='text-12px text-t-secondary'>{t('preview.preview')}</span>
               </div>
-              <div className='flex flex-col flex-1 overflow-hidden'>
+              <div className='flex flex-col flex-1 overflow-hidden bg-document'>
                 <MarkdownPreview
                   content={content}
                   containerRef={previewContainerRef}
@@ -611,7 +611,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
         // 移动端：全屏显示预览，隐藏编辑器 / Mobile: Full-screen preview, hide editor
         if (layout?.isMobile) {
           return (
-            <div className='flex-1 overflow-hidden'>
+            <div className='flex-1 overflow-hidden bg-document'>
               <HTMLRenderer
                 content={content}
                 file_path={metadata?.file_path}
@@ -633,7 +633,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
               <div className='h-40px flex items-center px-12px bg-bg-2'>
                 <span className='text-12px text-t-secondary'>{t('preview.editor')}</span>
               </div>
-              <div className='flex-1 overflow-hidden'>
+              <div className='flex-1 overflow-hidden bg-document'>
                 <HTMLEditor
                   key={activeTabId ?? undefined}
                   value={content}
@@ -652,7 +652,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
               <div className='h-40px flex items-center justify-between px-12px bg-bg-2'>
                 <span className='text-12px text-t-secondary'>{t('preview.preview')}</span>
               </div>
-              <div className='flex flex-col flex-1 overflow-hidden'>
+              <div className='flex flex-col flex-1 overflow-hidden bg-document'>
                 {/* prettier-ignore */}
                 {/* eslint-disable-next-line max-len */}
                 <HTMLRenderer
@@ -675,7 +675,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
       // 非分屏模式：单栏（原文或预览）/ Non-split mode: Single panel (source or preview)
       if (viewMode === 'source') {
         return (
-          <div className='flex-1 overflow-hidden'>
+          <div className='flex-1 overflow-hidden bg-document'>
             <HTMLEditor
               key={activeTabId ?? undefined}
               value={content}
@@ -687,7 +687,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
       } else {
         // 预览模式 / Preview mode
         return (
-          <div className='flex-1 overflow-hidden'>
+          <div className='flex-1 overflow-hidden bg-document'>
             <HTMLRenderer
               content={content}
               file_path={metadata?.file_path}
@@ -716,7 +716,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
     } else if (content_type === 'code') {
       // 统一：始终可编辑的 CodeEditor（看=改）/ Unified: always-editable CodeEditor (view = edit)
       return (
-        <div className='flex-1 overflow-hidden'>
+        <div className='flex-1 overflow-hidden bg-document'>
           <CodeEditor
             key={activeTabId ?? undefined}
             value={content}

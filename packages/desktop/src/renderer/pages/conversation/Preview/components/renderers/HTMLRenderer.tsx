@@ -235,28 +235,9 @@ const HTMLRenderer: React.FC<HTMLRendererProps> = ({
   const isSyncingScrollRef = useRef(false); // 防止滚动同步循环 / Prevent scroll sync loops
   const [webviewContentHeight, setWebviewContentHeight] = useState(0); // webview 内容高度 / webview content height
   const [inlinedHtmlContent, setInlinedHtmlContent] = useState<string>(''); // 内联化后的 HTML（用于 browser iframe）/ Inlined HTML (for browser iframe)
-  const [currentTheme, setCurrentTheme] = useState<'light' | 'dark'>(() => {
-    return (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') || 'light';
-  });
 
   // 检测是否在 Electron 环境 / Detect if in Electron environment
   const isElectron = useMemo(() => typeof window !== 'undefined' && window.electronAPI !== undefined, []);
-
-  // 监听主题变化 / Monitor theme changes
-  useEffect(() => {
-    const updateTheme = () => {
-      const theme = (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') || 'light';
-      setCurrentTheme(theme);
-    };
-
-    const observer = new MutationObserver(updateTheme);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   // 判断是否应该直接从文件加载（保留正常 file:// origin 和 Web Storage）- 仅 Electron 环境
   // Determine if should load directly from file (keeps normal file:// origin and Web Storage) - Electron only
@@ -671,10 +652,7 @@ const HTMLRenderer: React.FC<HTMLRendererProps> = ({
   const proxyHeight = webviewContentHeight > 0 ? webviewContentHeight : '100%';
 
   return (
-    <div
-      ref={containerRef || divRef}
-      className={`h-full w-full overflow-auto relative ${currentTheme === 'dark' ? 'bg-bg-1' : 'bg-white'}`}
-    >
+    <div ref={containerRef || divRef} className='h-full w-full overflow-auto relative bg-document'>
       {isElectron ? (
         <>
           {/* 代理滚动层：使容器可滚动 / Proxy scroll layer: makes container scrollable */}

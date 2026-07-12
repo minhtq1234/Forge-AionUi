@@ -231,7 +231,7 @@ const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
       {/* 内容区域 / Content area */}
       <div
         ref={containerRef}
-        className={`flex-1 ${viewMode === 'source' ? 'overflow-hidden' : 'overflow-auto p-32px text-t-primary'}`}
+        className={`flex-1 bg-document ${viewMode === 'source' ? 'overflow-hidden' : 'overflow-auto p-32px text-t-primary'}`}
         style={{ minWidth: 0 }}
       >
         {viewMode === 'source' ? (

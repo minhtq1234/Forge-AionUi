@@ -76,6 +76,13 @@
   --fill-white-to-black: #ffffff; /* 白到黑填充色 */
   --border-special: var(--bg-3); /* 特殊边框色 */
   --color-guid-agent-bar: #f0e9db; /* 首页 Agent 选择条背景 — warm cream */
+
+  /* Document Surface - Light Mode
+     The artifact editor/preview body reads as a white "page" sitting inside the
+     warm cream chrome (tab bar, toolbar), instead of inheriting the cream --bg-1
+     surface. Deliberately neutral (not warm) so the page reads as paper. */
+  --bg-document: #ffffff; /* artifact editor/preview body / 文档编辑器·预览白色页面背景 */
+  --bg-document-muted: #f4f4f5; /* subtle highlight on the document surface (e.g. active line) / 文档表面上的浅色高亮 */
   /* Arco's own palettes (--arcoblue/red/green/orange/cyan) and neutral fills are
      defined on `body`, which shadows :root — so they're overridden in the
      `body[arco-theme='...']` blocks below, not here. Primary is set via ConfigProvider. */
@@ -150,6 +157,12 @@
   --fill-0: rgba(255, 255, 255, 0.08); /* 填充色 0 - 半透明白 */
   --fill-white-to-black: #000000; /* 白到黑填充色 */
   --border-special: #3b4658; /* 特殊边框色 */
+
+  /* Document Surface - Dark Mode
+     Reuses the raised dark surface (same value as --bg-3) so the document body
+     reads as an elevated "page" without the glare of pure white. */
+  --bg-document: #1e2536; /* artifact editor/preview body / 文档编辑器·预览背景（深色） */
+  --bg-document-muted: #2a3344; /* subtle highlight on the document surface (e.g. active line), same as --bg-4 / 文档表面上的浅色高亮 */
   /* Arco palettes + neutral fills are overridden in the `body[arco-theme='dark']`
      block below (Arco defines them on `body`, shadowing :root). */
 }
