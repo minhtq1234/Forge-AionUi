@@ -100,7 +100,24 @@
 }
 
 .actionsMenu {
-  min-width: 172px;
+  min-width: 176px;
+  padding: 4px;
+}
+
+/* Compact, deliberate rows: 32px tall, 13px text, rounded hover surface —
+   overriding Arco's airy 36px/14px dropdown defaults. */
+.actionsMenu :global(.arco-dropdown-menu-item) {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+  line-height: 32px;
+  border-radius: 6px;
+}
+
+/* Disabled rows mute icon and label together (icon-park strokes are
+   hardcoded, so color alone leaves the icon dark). */
+.actionsMenu :global(.arco-dropdown-menu-item.arco-dropdown-menu-disabled) {
+  opacity: 0.45;
 }
 
 .menuItemInner {
