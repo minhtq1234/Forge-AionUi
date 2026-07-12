@@ -6,6 +6,7 @@
   "source": "Source",
   "code": "Code",
   "preview": "Preview",
+  "split": "Split",
   "editor": "Editor",
   "previewEffect": "Preview",
   "downloadMarkdown": "Download Markdown file",

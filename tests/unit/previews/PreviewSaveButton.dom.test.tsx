@@ -50,17 +50,16 @@ describe('PreviewToolbar save control', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
-  it('shows a saved/idle state and disables the Save button for a clean text tab', () => {
+  it('shows a quiet saved/idle marker and renders no Save button for a clean text tab', () => {
     const onSave = vi.fn();
     render(<PreviewToolbar {...createProps({ isDirty: false, onSave })} />);
 
     expect(screen.queryByText('preview.office.editor.unsavedChanges')).not.toBeInTheDocument();
     expect(screen.getByText('preview.office.editor.saved')).toBeInTheDocument();
 
-    const saveButton = screen.getByRole('button', { name: 'common.save' });
-    expect(saveButton).toBeDisabled();
-
-    fireEvent.click(saveButton);
+    // No disabled Save button sitting next to the idle marker — the button only
+    // exists while there is something actionable to save.
+    expect(screen.queryByRole('button', { name: 'common.save' })).not.toBeInTheDocument();
     expect(onSave).not.toHaveBeenCalled();
   });
 

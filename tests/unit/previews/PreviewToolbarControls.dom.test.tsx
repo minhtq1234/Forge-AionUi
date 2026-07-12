@@ -41,38 +41,84 @@ const createProps = (overrides: Partial<ToolbarProps> = {}): ToolbarProps => ({
   ...overrides,
 });
 
-describe('PreviewToolbar view-mode and split-screen controls', () => {
-  it('switches a markdown tab between source and preview view', () => {
+describe('PreviewToolbar segmented view control (Source / Split / Preview)', () => {
+  it('renders all three segments for a markdown tab and none of the old separate controls', () => {
+    render(<PreviewToolbar {...createProps()} />);
+
+    expect(screen.getByText('preview.source')).toBeInTheDocument();
+    expect(screen.getByText('preview.split')).toBeInTheDocument();
+    expect(screen.getByText('preview.preview')).toBeInTheDocument();
+  });
+
+  it('switches a markdown tab to source view and leaves split alone when it is already off', () => {
     const onViewModeChange = vi.fn();
-    render(<PreviewToolbar {...createProps({ onViewModeChange })} />);
+    const onSplitScreenToggle = vi.fn();
+    render(<PreviewToolbar {...createProps({ onViewModeChange, onSplitScreenToggle })} />);
 
     fireEvent.click(screen.getByText('preview.source'));
     expect(onViewModeChange).toHaveBeenCalledWith('source');
+    expect(onSplitScreenToggle).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByText('preview.preview'));
     expect(onViewModeChange).toHaveBeenCalledWith('preview');
+    expect(onSplitScreenToggle).not.toHaveBeenCalled();
   });
 
-  it('labels the source tab as "code" for an HTML tab', () => {
+  it('turns split off when selecting Source while split-screen is enabled', () => {
+    const onViewModeChange = vi.fn();
+    const onSplitScreenToggle = vi.fn();
+    render(<PreviewToolbar {...createProps({ isSplitScreenEnabled: true, onViewModeChange, onSplitScreenToggle })} />);
+
+    fireEvent.click(screen.getByText('preview.source'));
+    expect(onViewModeChange).toHaveBeenCalledWith('source');
+    expect(onSplitScreenToggle).toHaveBeenCalledOnce();
+  });
+
+  it('turns split off when selecting Preview while split-screen is enabled', () => {
+    const onViewModeChange = vi.fn();
+    const onSplitScreenToggle = vi.fn();
+    render(<PreviewToolbar {...createProps({ isSplitScreenEnabled: true, onViewModeChange, onSplitScreenToggle })} />);
+
+    fireEvent.click(screen.getByText('preview.preview'));
+    expect(onViewModeChange).toHaveBeenCalledWith('preview');
+    expect(onSplitScreenToggle).toHaveBeenCalledOnce();
+  });
+
+  it('labels the source segment as "code" for an HTML tab', () => {
     render(<PreviewToolbar {...createProps({ content_type: 'html', isMarkdown: false, isHTML: true })} />);
 
     expect(screen.getByText('preview.code')).toBeInTheDocument();
   });
 
-  it('toggles split-screen mode for markdown/html but hides the control for diff', () => {
+  it('enables split-screen from the Split segment when it is currently off', () => {
+    const onSplitScreenToggle = vi.fn();
+    render(<PreviewToolbar {...createProps({ onSplitScreenToggle })} />);
+
+    fireEvent.click(screen.getByText('preview.split'));
+    expect(onSplitScreenToggle).toHaveBeenCalledOnce();
+  });
+
+  it('does not toggle again when the Split segment is clicked while already active', () => {
+    const onSplitScreenToggle = vi.fn();
+    render(<PreviewToolbar {...createProps({ isSplitScreenEnabled: true, onSplitScreenToggle })} />);
+
+    fireEvent.click(screen.getByText('preview.split'));
+    expect(onSplitScreenToggle).not.toHaveBeenCalled();
+  });
+
+  it('hides the Split segment for a diff tab, showing only Source/Preview', () => {
     const onSplitScreenToggle = vi.fn();
     const { rerender } = render(<PreviewToolbar {...createProps({ onSplitScreenToggle })} />);
-
-    fireEvent.click(screen.getByTitle('preview.openSplitScreen'));
-    expect(onSplitScreenToggle).toHaveBeenCalledOnce();
+    expect(screen.getByText('preview.split')).toBeInTheDocument();
 
     rerender(
       <PreviewToolbar
         {...createProps({ content_type: 'diff', isMarkdown: false, isHTML: false, onSplitScreenToggle })}
       />
     );
-    expect(screen.queryByTitle('preview.openSplitScreen')).not.toBeInTheDocument();
-    expect(screen.queryByTitle('preview.closeSplitScreen')).not.toBeInTheDocument();
+    expect(screen.queryByText('preview.split')).not.toBeInTheDocument();
+    expect(screen.getByText('preview.source')).toBeInTheDocument();
+    expect(screen.getByText('preview.preview')).toBeInTheDocument();
   });
 });
 

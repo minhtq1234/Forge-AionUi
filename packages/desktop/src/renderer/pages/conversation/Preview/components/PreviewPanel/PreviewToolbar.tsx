@@ -6,7 +6,7 @@
 
 import { iconColors } from '@/renderer/styles/colors';
 import { Button } from '@arco-design/web-react';
-import { Close } from '@icon-park/react';
+import { Check, Close } from '@icon-park/react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { shouldShowDownload } from './previewToolbarUtils';
@@ -164,6 +164,50 @@ const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
   const toolbarBtnActive = '!text-white bg-brand hover:!text-white hover:bg-brand-hover';
   const toolbarIconSize = 12;
 
+  // 分段控件：Source / Split / Preview（diff 类型无 Split 段）/ Segmented control:
+  // Source / Split / Preview (diff has no Split segment)
+  const showViewSegments = isMarkdown || isHTML || isDiff;
+  const showSplitSegment = showViewSegments && !isDiff;
+  const isSourceSegmentActive = viewMode === 'source' && (isDiff || !isSplitScreenEnabled);
+  const isPreviewSegmentActive = viewMode === 'preview' && (isDiff || !isSplitScreenEnabled);
+  const isSplitSegmentActive = showSplitSegment && isSplitScreenEnabled;
+  const segmentBase =
+    'flex items-center justify-center h-full px-10px cursor-pointer transition-colors duration-150 text-12px font-medium';
+  const segmentInactive = 'text-t-secondary hover:text-t-primary hover:bg-bg-3';
+  const segmentDivider = <div className='w-1px self-stretch bg-border-1' />;
+
+  // 选择 Source/Preview 时，如果当前处于分屏模式则一并关闭，避免出现"分屏 + 单栏"的矛盾状态
+  // Selecting Source/Preview also turns split off when it is currently on, so the
+  // toolbar never shows a contradictory "split + single pane" state.
+  const handleSelectSource = () => {
+    try {
+      onViewModeChange('source');
+      if (!isDiff && isSplitScreenEnabled) onSplitScreenToggle();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleSelectPreview = () => {
+    try {
+      onViewModeChange('preview');
+      if (!isDiff && isSplitScreenEnabled) onSplitScreenToggle();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // 选择 Split 时只在当前未分屏时切换，避免重复点击时把分屏又关掉
+  // Selecting Split only toggles when not already split, so re-clicking the
+  // active segment never flips it back off.
+  const handleSelectSplit = () => {
+    try {
+      if (!isSplitScreenEnabled) onSplitScreenToggle();
+    } catch {
+      /* ignore */
+    }
+  };
+
   if (officeToolbar) return <>{officeToolbar}</>;
 
   return (
@@ -172,80 +216,57 @@ const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
         {/* 左侧：Tabs（Markdown/HTML）+ 文件名 / Left: Tabs (Markdown/HTML) + Filename */}
         <div className='flex items-center h-full gap-8px'>
           {showSaveControl && (
-            <div className='flex items-center gap-8px'>
-              <div className='flex items-center gap-6px'>
-                {isDirty ? (
-                  <>
-                    <span
-                      data-testid='preview-toolbar-dirty-dot'
-                      className='w-7px h-7px rd-full flex-shrink-0'
-                      style={{ background: 'var(--primary)' }}
-                    />
-                    <span className='text-12px text-t-secondary'>{t('preview.office.editor.unsavedChanges')}</span>
-                  </>
-                ) : (
-                  <span className='text-12px text-t-tertiary'>{t('preview.office.editor.saved')}</span>
-                )}
-              </div>
-              <Button type={isDirty ? 'primary' : 'secondary'} size='mini' disabled={!isDirty} onClick={onSave}>
-                {t('common.save')}
-              </Button>
+            <div className='flex items-center gap-6px'>
+              {isDirty ? (
+                <>
+                  <span
+                    data-testid='preview-toolbar-dirty-dot'
+                    className='w-7px h-7px rd-full flex-shrink-0'
+                    style={{ background: 'var(--primary)' }}
+                  />
+                  <span className='text-12px text-t-secondary'>{t('preview.office.editor.unsavedChanges')}</span>
+                  <Button type='primary' size='mini' onClick={onSave}>
+                    {t('common.save')}
+                  </Button>
+                </>
+              ) : (
+                <span className='flex items-center gap-4px text-12px text-t-tertiary'>
+                  <Check size={12} fill={iconColors.secondary} />
+                  {t('preview.office.editor.saved')}
+                </span>
+              )}
             </div>
           )}
-          {(isMarkdown || isHTML || isDiff) && (
-            <>
-              <div className='flex items-center h-full gap-0'>
-                <div
-                  className={`flex items-center h-full px-10px cursor-pointer transition-all duration-150 text-12px font-medium ${viewMode === 'source' ? 'text-brand bg-aou-2 border-b-4 border-brand' : 'text-t-secondary hover:text-t-primary hover:bg-bg-3'}`}
-                  onClick={() => {
-                    try {
-                      onViewModeChange('source');
-                    } catch {
-                      /* ignore */
-                    }
-                  }}
-                >
-                  {isHTML ? t('preview.code') : t('preview.source')}
-                </div>
-                <div
-                  className={`flex items-center h-full px-10px cursor-pointer transition-all duration-150 text-12px font-medium ${viewMode === 'preview' ? 'text-brand bg-aou-2 border-b-4 border-brand' : 'text-t-secondary hover:text-t-primary hover:bg-bg-3'}`}
-                  onClick={() => {
-                    try {
-                      onViewModeChange('preview');
-                    } catch {
-                      /* ignore */
-                    }
-                  }}
-                >
-                  {t('preview.preview')}
-                </div>
+          {showSaveControl && showViewSegments && <div className='w-1px h-16px bg-border-1 flex-shrink-0' />}
+          {showViewSegments && (
+            <div
+              className='inline-flex items-center h-24px rd-6px border border-solid border-border-1 overflow-hidden flex-shrink-0'
+              data-testid='preview-view-segmented-control'
+            >
+              <div
+                className={`${segmentBase} ${isSourceSegmentActive ? toolbarBtnActive : segmentInactive}`}
+                onClick={handleSelectSource}
+              >
+                {isHTML ? t('preview.code') : t('preview.source')}
               </div>
-              {!isDiff && (
+              {showSplitSegment && segmentDivider}
+              {showSplitSegment && (
                 <div
-                  className={`flex items-center px-8px py-3px rd-4px cursor-pointer transition-colors duration-150 ${isSplitScreenEnabled ? toolbarBtnActive : 'text-t-secondary hover:bg-bg-3'}`}
-                  onClick={() => {
-                    try {
-                      onSplitScreenToggle();
-                    } catch {
-                      /* ignore */
-                    }
-                  }}
+                  className={`${segmentBase} ${isSplitSegmentActive ? toolbarBtnActive : segmentInactive}`}
+                  onClick={handleSelectSplit}
                   title={isSplitScreenEnabled ? t('preview.closeSplitScreen') : t('preview.openSplitScreen')}
                 >
-                  <svg
-                    width={toolbarIconSize}
-                    height={toolbarIconSize}
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeWidth='2'
-                  >
-                    <rect x='3' y='3' width='18' height='18' rx='2' />
-                    <line x1='12' y1='3' x2='12' y2='21' />
-                  </svg>
+                  {t('preview.split')}
                 </div>
               )}
-            </>
+              {segmentDivider}
+              <div
+                className={`${segmentBase} ${isPreviewSegmentActive ? toolbarBtnActive : segmentInactive}`}
+                onClick={handleSelectPreview}
+              >
+                {t('preview.preview')}
+              </div>
+            </div>
           )}
           {preferActionButtonsInFront && showOpenInSystemButton && (
             <div className={toolbarBtn} onClick={onOpenInSystem} title={t('preview.openInSystemApp')}>

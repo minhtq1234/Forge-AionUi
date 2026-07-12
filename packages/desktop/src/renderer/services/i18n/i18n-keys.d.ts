@@ -1239,6 +1239,7 @@ export type I18nKey =
   | 'preview.readOnlyLabel'
   | 'preview.saveAndClose'
   | 'preview.source'
+  | 'preview.split'
   | 'preview.truncatedBanner'
   | 'preview.unsavedChangesMessage'
   | 'preview.unsavedChangesTitle'
