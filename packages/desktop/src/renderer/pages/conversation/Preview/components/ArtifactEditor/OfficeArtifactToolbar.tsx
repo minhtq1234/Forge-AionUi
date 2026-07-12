@@ -7,7 +7,7 @@
 import type { OfficeArtifactEdit, OfficeArtifactInspection } from '@/common/types/office/artifactEditor';
 import { copyText } from '@/renderer/utils/ui/clipboard';
 import { Button, Dropdown, Menu, Typography } from '@arco-design/web-react';
-import { Attention, Down, Download, EditTwo, FolderOpen, Refresh, Undo } from '@icon-park/react';
+import { Attention, Down } from '@icon-park/react';
 import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { OfficeSelectionEditor } from './OfficeSelectionEditor';
@@ -91,28 +91,16 @@ export const OfficeArtifactToolbar: React.FC<OfficeArtifactToolbarProps> = ({
   const actionsMenu = (
     <Menu className={styles.actionsMenu}>
       <Menu.Item key='undo' disabled={undoDepth <= 0 || busy} onClick={() => void undo()}>
-        <span className={styles.menuItemInner}>
-          <Undo size={ICON_SIZE} />
-          {t('preview.office.editor.undo')}
-        </span>
+        {t('preview.office.editor.undo')}
       </Menu.Item>
       <Menu.Item key='download' onClick={download}>
-        <span className={styles.menuItemInner}>
-          <Download size={ICON_SIZE} />
-          {t('common.download')}
-        </span>
+        {t('common.download')}
       </Menu.Item>
       <Menu.Item key='reveal' onClick={revealInFolder}>
-        <span className={styles.menuItemInner}>
-          <FolderOpen size={ICON_SIZE} />
-          {t('preview.office.editor.reveal')}
-        </span>
+        {t('preview.office.editor.reveal')}
       </Menu.Item>
       <Menu.Item key='refresh' onClick={refresh}>
-        <span className={styles.menuItemInner}>
-          <Refresh size={ICON_SIZE} />
-          {t('preview.office.editor.refresh')}
-        </span>
+        {t('preview.office.editor.refresh')}
       </Menu.Item>
     </Menu>
   );
@@ -147,14 +135,12 @@ export const OfficeArtifactToolbar: React.FC<OfficeArtifactToolbarProps> = ({
             <Button
               type='secondary'
               size='small'
-              aria-label={t('preview.office.editor.openDesktop')}
-              icon={<EditTwo size={ICON_SIZE} />}
               loading={status === 'openingDesktop'}
               data-testid='office-toolbar-open-desktop'
               className={styles.actionButton}
               onClick={() => void openInDesktopApp()}
             >
-              <span className={styles.actionLabel}>{t('preview.office.editor.openDesktop')}</span>
+              {t('preview.office.editor.openDesktop')}
             </Button>
             <Dropdown trigger='click' position='br' droplist={actionsMenu} getPopupContainer={() => document.body}>
               <Button
