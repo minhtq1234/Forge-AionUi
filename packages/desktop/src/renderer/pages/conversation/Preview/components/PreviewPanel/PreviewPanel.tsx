@@ -42,6 +42,9 @@ import {
 } from '.';
 import { DEFAULT_SPLIT_RATIO, FILE_TYPES_WITH_BUILTIN_OPEN, MAX_SPLIT_WIDTH, MIN_SPLIT_WIDTH } from '../../constants';
 import { usePreviewKeyboardShortcuts, useScrollSync, useTabOverflow, useThemeDetection } from '../../hooks';
+// Imported from its module (not the barrel) so PreviewPanel tests that mock the
+// hooks barrel don't need to stub the LRU — the real logic always runs.
+import { useWarmOfficeTabs } from '../../hooks/useWarmOfficeTabs';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import './preview.css';
@@ -175,6 +178,21 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
     externalRevision: `${activeTab?.officePreviewRevision ?? 0}:${activeManualOfficeRefresh}`,
     onArtifactMutated: handleOfficeArtifactMutated,
   });
+
+  // Open office tabs (word/excel/ppt) stay mounted so switching between them is
+  // instant (no re-launched `officecli watch`). Missing-file office tabs are
+  // excluded — they show the missing-file state via renderContent rather than
+  // watching a nonexistent file.
+  // 打开的 Office 标签页保持挂载，切换即时；缺失文件的标签页走 renderContent。
+  const officeTabs = tabs.filter((tab) => isOfficeViewerContentType(tab.content_type) && !tab.metadata?.missingFile);
+  // Cap concurrently warm office viewers with an LRU: only the most-recently
+  // active office tabs stay mounted (each holds a live watch + lease); the rest
+  // go cold until reactivated. The active office tab is always warm. Called
+  // unconditionally, above the empty-state early return (Rules of Hooks).
+  const warmOfficeIds = useWarmOfficeTabs(
+    activeTabId,
+    officeTabs.map((tab) => tab.id)
+  );
 
   // 内层分割：编辑器和预览的分割比例（默认 50/50）
   // Inner split: Split ratio between editor and preview (default 50/50)
@@ -736,12 +754,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
     return null;
   };
 
-  // Open office tabs (word/excel/ppt) stay mounted so switching between them is
-  // instant (no re-launched `officecli watch`). Missing-file office tabs are
-  // excluded — they show the missing-file state via renderContent rather than
-  // watching a nonexistent file.
-  // 打开的 Office 标签页保持挂载，切换即时；缺失文件的标签页走 renderContent。
-  const officeTabs = tabs.filter((tab) => isOfficeViewerContentType(tab.content_type) && !tab.metadata?.missingFile);
   const activeOfficeTab = officeTabs.find((tab) => tab.id === activeTabId) ?? null;
 
   // Render one office viewer for a given open office tab. Only the active office
@@ -854,21 +866,24 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
           </div>
         )}
 
-        {/* Office documents: one viewer kept mounted per open office tab so
-            switching between them is instant. Only the active office tab's
-            viewer is visible; the rest stay warm behind display:none. */}
+        {/* Office documents: the most-recently-active office tabs are kept
+            mounted (warm) up to an LRU cap so switching between them is instant.
+            Only the active office tab's viewer is visible; the other warm ones
+            stay behind display:none, and cold (evicted) tabs render nothing. */}
         {officeTabs.length > 0 && (
           <div className='relative flex-1 overflow-hidden' style={{ display: activeOfficeTab ? undefined : 'none' }}>
-            {officeTabs.map((tab) => (
-              <div
-                key={tab.id}
-                data-testid={`office-viewer-container-${tab.id}`}
-                className='absolute inset-0 h-full w-full'
-                style={{ display: tab.id === activeTabId ? undefined : 'none' }}
-              >
-                {renderOfficeViewer(tab)}
-              </div>
-            ))}
+            {officeTabs
+              .filter((tab) => warmOfficeIds.has(tab.id))
+              .map((tab) => (
+                <div
+                  key={tab.id}
+                  data-testid={`office-viewer-container-${tab.id}`}
+                  className='absolute inset-0 h-full w-full'
+                  style={{ display: tab.id === activeTabId ? undefined : 'none' }}
+                >
+                  {renderOfficeViewer(tab)}
+                </div>
+              ))}
           </div>
         )}
 
