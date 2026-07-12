@@ -15,7 +15,7 @@ import { PreviewToolbarExtrasProvider, type PreviewToolbarExtras } from '../../c
 import { usePreviewContext } from '../../context/PreviewContext';
 import { getOfficePreviewRefreshToken } from '../../context/officePreviewRevision';
 import { useResizableSplit } from '@/renderer/hooks/ui/useResizableSplit';
-import { Link } from '@arco-design/web-react';
+import { Link, Message } from '@arco-design/web-react';
 import classNames from 'classnames';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DiffPreview from '../viewers/DiffViewer';
@@ -35,19 +35,12 @@ import {
   PreviewToolbar,
   PreviewContextMenu,
   PreviewConfirmModals,
-  PreviewHistoryDropdown,
   type ContextMenuState,
   type CloseTabConfirmState,
   type PreviewTab,
 } from '.';
 import { DEFAULT_SPLIT_RATIO, FILE_TYPES_WITH_BUILTIN_OPEN, MAX_SPLIT_WIDTH, MIN_SPLIT_WIDTH } from '../../constants';
-import {
-  usePreviewHistory,
-  usePreviewKeyboardShortcuts,
-  useScrollSync,
-  useTabOverflow,
-  useThemeDetection,
-} from '../../hooks';
+import { usePreviewKeyboardShortcuts, useScrollSync, useTabOverflow, useThemeDetection } from '../../hooks';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import './preview.css';
@@ -129,22 +122,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
     previewContainerRef,
   });
 
-  // eslint-disable-next-line max-len
-  const {
-    historyVersions,
-    historyLoading,
-    snapshotSaving,
-    historyError,
-    historyTarget,
-    refreshHistory,
-    handleSaveSnapshot,
-    handleSnapshotSelect,
-    messageApi,
-    messageContextHolder,
-  } = usePreviewHistory({
-    activeTab,
-    updateContent,
-  });
+  const [messageApi, messageContextHolder] = Message.useMessage();
 
   usePreviewKeyboardShortcuts({
     isDirty: activeTab?.isDirty,
@@ -507,21 +485,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
     );
   }
 
-  // 渲染历史下拉菜单 / Render history dropdown
-  const renderHistoryDropdown = () => {
-    // eslint-disable-next-line max-len
-    return (
-      <PreviewHistoryDropdown
-        historyVersions={historyVersions}
-        historyLoading={historyLoading}
-        historyError={historyError}
-        historyTarget={historyTarget}
-        currentTheme={currentTheme}
-        onSnapshotSelect={handleSnapshotSelect}
-      />
-    );
-  };
-
   const renderMissingFile = () => {
     const filePath = metadata?.file_path;
     const externalHref = filePath ? toLocalFileHref(filePath) : undefined;
@@ -826,16 +789,11 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
             isSplitScreenEnabled={isSplitScreenEnabled}
             file_name={metadata?.file_name || activeTab.title}
             showOpenInSystemButton={showOpenInSystemButton}
-            historyTarget={historyTarget}
-            snapshotSaving={snapshotSaving}
             onViewModeChange={(mode) => {
               setViewMode(mode);
               setIsSplitScreenEnabled(false); // 切换视图模式时关闭分屏 / Disable split when switching view mode
             }}
             onSplitScreenToggle={() => setIsSplitScreenEnabled(!isSplitScreenEnabled)}
-            onSaveSnapshot={handleSaveSnapshot}
-            onRefreshHistory={refreshHistory}
-            renderHistoryDropdown={renderHistoryDropdown}
             onOpenInSystem={handleOpenInSystem}
             onDownload={handleDownload}
             inspectMode={inspectMode}

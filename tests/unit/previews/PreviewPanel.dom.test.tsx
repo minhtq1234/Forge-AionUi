@@ -84,18 +84,6 @@ vi.mock('@/renderer/pages/conversation/Preview/hooks', () => ({
   }),
   useScrollSync: () => ({ handleEditorScroll: vi.fn(), handlePreviewScroll: vi.fn() }),
   usePreviewKeyboardShortcuts: vi.fn(),
-  usePreviewHistory: () => ({
-    historyVersions: [],
-    historyLoading: false,
-    snapshotSaving: false,
-    historyError: null,
-    historyTarget: null,
-    refreshHistory: vi.fn(),
-    handleSaveSnapshot: vi.fn(),
-    handleSnapshotSelect: vi.fn(),
-    messageApi: { error: vi.fn(), success: vi.fn() },
-    messageContextHolder: null,
-  }),
 }));
 
 vi.mock('@/renderer/pages/conversation/Preview/components/ArtifactEditor', () => ({

@@ -36,13 +36,8 @@ const renderToolbar = () => {
       isSplitScreenEnabled={false}
       file_name='report.docx'
       showOpenInSystemButton={false}
-      historyTarget={null}
-      snapshotSaving={false}
       onViewModeChange={vi.fn()}
       onSplitScreenToggle={vi.fn()}
-      onSaveSnapshot={vi.fn()}
-      onRefreshHistory={vi.fn()}
-      renderHistoryDropdown={() => null}
       onOpenInSystem={vi.fn()}
       onDownload={vi.fn()}
       officeToolbar={officeToolbar}
