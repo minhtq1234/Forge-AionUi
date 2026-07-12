@@ -18,7 +18,6 @@ const renderToolbar = () => {
       undoDepth={0}
       apply={vi.fn()}
       undo={vi.fn()}
-      askForge={vi.fn()}
       openInDesktopApp={openInDesktopApp}
       download={vi.fn()}
       revealInFolder={vi.fn()}
@@ -36,13 +35,8 @@ const renderToolbar = () => {
       isSplitScreenEnabled={false}
       file_name='report.docx'
       showOpenInSystemButton={false}
-      historyTarget={null}
-      snapshotSaving={false}
       onViewModeChange={vi.fn()}
       onSplitScreenToggle={vi.fn()}
-      onSaveSnapshot={vi.fn()}
-      onRefreshHistory={vi.fn()}
-      renderHistoryDropdown={() => null}
       onOpenInSystem={vi.fn()}
       onDownload={vi.fn()}
       officeToolbar={officeToolbar}

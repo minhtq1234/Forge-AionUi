@@ -49,9 +49,6 @@ vi.mock('@/common', () => ({
     preview: {
       open: { on: vi.fn(() => vi.fn()) },
     },
-    previewHistory: {
-      list: { invoke: vi.fn() },
-    },
   },
 }));
 vi.mock('@/renderer/utils/file/download', () => ({
@@ -79,18 +76,6 @@ vi.mock('@/renderer/pages/conversation/Preview/hooks', () => ({
   }),
   useScrollSync: () => ({ handleEditorScroll: vi.fn(), handlePreviewScroll: vi.fn() }),
   usePreviewKeyboardShortcuts: vi.fn(),
-  usePreviewHistory: () => ({
-    historyVersions: [],
-    historyLoading: false,
-    snapshotSaving: false,
-    historyError: null,
-    historyTarget: null,
-    refreshHistory: vi.fn(),
-    handleSaveSnapshot: vi.fn(),
-    handleSnapshotSelect: vi.fn(),
-    messageApi: { error: vi.fn(), success: vi.fn() },
-    messageContextHolder: null,
-  }),
 }));
 vi.mock('@/renderer/pages/conversation/Preview/components/ArtifactEditor', () => ({
   useOfficeArtifactEditor: () => ({
@@ -102,7 +87,6 @@ vi.mock('@/renderer/pages/conversation/Preview/components/ArtifactEditor', () =>
     handleSelectionChange: vi.fn(),
     apply: vi.fn(),
     undo: vi.fn(),
-    askForge: vi.fn(),
     openInDesktopApp: vi.fn(),
     moveSelection: vi.fn(),
   }),

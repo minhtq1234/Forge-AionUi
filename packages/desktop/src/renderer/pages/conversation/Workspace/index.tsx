@@ -416,6 +416,12 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
     [conversation_id, treeHook.expandedKeys, treeHook.setExpandedKeys, treeHook.setFiles, workspace]
   );
 
+  // 单击文件树中的文件：以固定（常驻）tab 打开，多个文件可同时累积多个 tab
+  // Clicking a file in the tree opens it as a pinned (persistent) tab — opening
+  // several files accumulates several tabs rather than replacing a single shared
+  // provisional slot. The provisional/italic preview slot is reserved for
+  // transient chat file-links (see useLocalFilePreview, which still passes
+  // `{ preview: true }`).
   const handleProjectFileOpen = useCallback(
     (node: IDirOrFile) => {
       const wasSelected = treeHook.selectedKeysRef.current.includes(node.relativePath);
@@ -430,7 +436,7 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
           hasKey: Boolean(node.relativePath),
         },
       });
-      void fileOpsHook.handlePreviewFile(node);
+      void fileOpsHook.handlePreviewFile(node, true);
       handleProjectMenuClose();
     },
     [fileOpsHook.handlePreviewFile, handleProjectMenuClose, treeHook.ensureNodeSelected, treeHook.selectedKeysRef]

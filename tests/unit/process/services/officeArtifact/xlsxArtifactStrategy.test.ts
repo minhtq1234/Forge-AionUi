@@ -102,7 +102,7 @@ describe('inspectXlsxSelection', () => {
     expect(runner.get).toHaveBeenCalledWith(FILE_PATH, '/Forecast/B4');
   });
 
-  it('inspects a contiguous range for Ask Forge but keeps direct editing disabled', async () => {
+  it('inspects a contiguous range but keeps direct editing disabled', async () => {
     mockInspectionResult(rangeEnvelope(['/Forecast/B4', '/Forecast/C4']));
 
     await expect(inspectXlsxSelection(runner, FILE_PATH, twoCellSelection)).resolves.toMatchObject({

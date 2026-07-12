@@ -39,6 +39,13 @@ export interface PreviewTab {
 
   /** Preview content type used for the compact file badge. */
   contentType?: PreviewContentType;
+
+  /**
+   * 是否为临时预览 tab（VS Code 风格的单击预览，斜体展示标题）
+   * Whether this is a provisional preview tab (VS Code–style single-click
+   * preview); its title renders in italic.
+   */
+  preview?: boolean;
 }
 
 const CONTENT_TYPE_LABELS: Record<PreviewContentType, string> = {
@@ -96,6 +103,12 @@ interface PreviewTabsProps {
   onCloseTab: (tabId: string) => void;
 
   /**
+   * 固定 Tab 回调（双击临时预览 tab 时触发）
+   * Pin tab callback (fires when a provisional preview tab is double-clicked)
+   */
+  onPinTab?: (tabId: string) => void;
+
+  /**
    * Tab 右键菜单回调
    * Tab context menu callback
    */
@@ -125,6 +138,7 @@ const PreviewTabs: React.FC<PreviewTabsProps> = ({
   tabsContainerRef,
   onSwitchTab,
   onCloseTab,
+  onPinTab,
   onContextMenu,
   onClosePanel,
 }) => {
@@ -177,6 +191,7 @@ const PreviewTabs: React.FC<PreviewTabsProps> = ({
                     tabIndex={isActive ? 0 : -1}
                     className={styles.tabButton}
                     onClick={() => onSwitchTab(tab.id)}
+                    onDoubleClick={() => onPinTab?.(tab.id)}
                     onKeyDown={(event) => handleTabKeyDown(event, index, tab.id)}
                   >
                     <span className={styles.tabContent}>
@@ -185,7 +200,7 @@ const PreviewTabs: React.FC<PreviewTabsProps> = ({
                           {CONTENT_TYPE_LABELS[tab.contentType]}
                         </span>
                       )}
-                      <span className={styles.tabTitle}>{tab.title}</span>
+                      <span className={classNames(styles.tabTitle, tab.preview && 'italic')}>{tab.title}</span>
                       {tab.isDirty && (
                         <span
                           data-testid='preview-tab-dirty'

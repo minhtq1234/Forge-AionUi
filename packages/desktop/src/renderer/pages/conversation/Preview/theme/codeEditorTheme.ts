@@ -24,18 +24,19 @@ export const codeEditorFontTheme = (): Extension => {
 };
 
 /**
- * Surface colors follow the active theme's semantic tokens (var(--bg-1)/var(--bg-2)),
- * not CodeMirror's built-in light/dark background, so every source editor matches the
- * overall theme — including decorative themes. The light/dark base theme still drives
- * syntax-highlight colors via the `theme` prop (keyed on appearance).
+ * Surface colors follow the active theme's semantic "document" tokens
+ * (var(--bg-document)/var(--bg-document-muted)) so every source editor reads as a
+ * white page inside the warm cream chrome, in both light and dark mode. The
+ * light/dark base theme still drives syntax-highlight colors via the `theme` prop
+ * (keyed on appearance).
  * Wrap in `Prec.highest(...)` at the call site so it beats the built-in theme background.
  */
 export const codeEditorSurfaceTheme = (): Extension =>
   EditorView.theme({
-    '&': { backgroundColor: 'var(--bg-1)' },
-    '.cm-gutters': { backgroundColor: 'var(--bg-1)', borderRight: '1px solid var(--border-light)' },
-    '.cm-activeLine': { backgroundColor: 'var(--bg-2)' },
-    '.cm-activeLineGutter': { backgroundColor: 'var(--bg-2)' },
+    '&': { backgroundColor: 'var(--bg-document)' },
+    '.cm-gutters': { backgroundColor: 'var(--bg-document)', borderRight: '1px solid var(--border-light)' },
+    '.cm-activeLine': { backgroundColor: 'var(--bg-document-muted)' },
+    '.cm-activeLineGutter': { backgroundColor: 'var(--bg-document-muted)' },
   });
 
 /**
