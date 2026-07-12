@@ -381,6 +381,17 @@ describe('ChatWorkspace preview selection', () => {
     expect(screen.queryByRole('menuitem', { name: /conversation.workspace.changes.filesTab/ })).not.toBeInTheDocument();
   });
 
+  it('opens a double-clicked file as a pinned tab from the Project Files flyout', () => {
+    render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' />);
+
+    fireEvent.click(screen.getByRole('button', { name: /conversation.workspace.projectMenu.trigger/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /conversation.workspace.changes.filesTab/ }));
+    fireEvent.doubleClick(screen.getByRole('button', { name: selectedFile.name }));
+
+    expect(mocks.ensureNodeSelected).toHaveBeenCalledWith(selectedFile);
+    expect(mocks.handlePreviewFile).toHaveBeenCalledWith(selectedFile, true);
+  });
+
   it('keeps existing file actions available from the Files flyout', () => {
     render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' />);
 

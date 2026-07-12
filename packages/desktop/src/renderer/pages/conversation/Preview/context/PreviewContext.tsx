@@ -88,6 +88,12 @@ export interface PreviewContextValue {
   closeTab: (tabId: string) => void;
   switchTab: (tabId: string) => void;
   updateContent: (content: string) => void;
+  /**
+   * Promotes a provisional (preview) tab to a pinned tab in place — used for
+   * double-clicking a tab in the tab bar. No-op for tabs that are already
+   * pinned or don't exist.
+   */
+  pinTab: (tabId: string) => void;
   saveContent: (tabId?: string) => Promise<boolean>; // 保存内容 / Save content
   findPreviewTab: (type: PreviewContentType, content?: string, metadata?: PreviewMetadata) => PreviewTab | null; // 查找匹配的 tab
   closePreviewByIdentity: (type: PreviewContentType, content?: string, metadata?: PreviewMetadata) => void; // 根据内容关闭指定 tab
@@ -304,18 +310,34 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     (new_content: string, type: PreviewContentType, meta?: PreviewMetadata, options?: OpenPreviewOptions) => {
       let nextActiveTabId: string | null = null;
 
+      // Provisional preview mode: reuse the single provisional tab in place
+      // instead of stacking a new one — used by file-tree/single-click
+      // browsing. `replace` is kept as a back-compat alias for `preview`.
+      const wantsPreview = options?.preview ?? options?.replace ?? false;
+      // A "pinned intent" open (no `preview`/`replace` option) — e.g. an
+      // agent/chat open or a file-tree double-click — should pin an existing
+      // provisional tab it dedupes onto, rather than leaving it provisional.
+      const pinIntent = !wantsPreview;
+
       setTabs((prevTabs) => {
         // 如果同一个文件已经打开，则直接激活现有 tab，避免重复 / Focus existing tab when the same file is opened again
         const existingTab = findPreviewTabInList(prevTabs, type, new_content, meta);
 
         if (existingTab) {
           nextActiveTabId = existingTab.id;
+          const shouldPin = pinIntent && existingTab.preview === true;
+
           return prevTabs.map((tab) => {
             if (tab.id !== existingTab.id) return tab;
 
             // 如果用户已编辑内容，则保留当前内容，仅更新元数据 / Keep edited content, only merge metadata
             if (tab.isDirty) {
-              return meta ? { ...tab, metadata: { ...tab.metadata, ...meta } } : tab;
+              if (!meta && !shouldPin) return tab;
+              return {
+                ...tab,
+                ...(meta ? { metadata: { ...tab.metadata, ...meta } } : null),
+                ...(shouldPin ? { preview: false } : null),
+              };
             }
 
             return {
@@ -323,6 +345,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
               content: new_content,
               metadata: meta ? { ...tab.metadata, ...meta } : tab.metadata,
               originalContent: new_content,
+              preview: shouldPin ? false : tab.preview,
             };
           });
         }
@@ -353,11 +376,6 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
           originalContent: new_content, // 保存原始内容 / Save original content
           preview: false,
         };
-
-        // Provisional preview mode: reuse the single provisional tab in place
-        // instead of stacking a new one — used by file-tree/single-click
-        // browsing. `replace` is kept as a back-compat alias for `preview`.
-        const wantsPreview = options?.preview ?? options?.replace ?? false;
 
         if (wantsPreview) {
           const provisionalIdx = prevTabs.findIndex((tab) => tab.preview);
@@ -461,7 +479,9 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
             if (tab.id === activeTabId) {
               // 检查内容是否与原始内容不同 / Check if content differs from original
               const isDirty = new_content !== tab.originalContent;
-              return { ...tab, content: new_content, isDirty };
+              // 编辑一个临时预览 tab 会将其自动固定为常驻 tab
+              // Editing a provisional preview tab auto-pins it to a permanent tab
+              return { ...tab, content: new_content, isDirty, preview: tab.preview ? false : tab.preview };
             }
             return tab;
           });
@@ -473,6 +493,12 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     },
     [activeTabId]
   );
+
+  // 将临时预览 tab 固定为常驻 tab（例如双击 tab 时）
+  // Promote a provisional preview tab to a pinned tab (e.g. on double-clicking a tab)
+  const pinTab = useCallback((tabId: string) => {
+    setTabs((prevTabs) => prevTabs.map((tab) => (tab.id === tabId && tab.preview ? { ...tab, preview: false } : tab)));
+  }, []);
 
   const saveContent = useCallback(
     async (tabId?: string) => {
@@ -766,6 +792,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
       closeTab,
       switchTab: setActiveTabId,
       updateContent,
+      pinTab,
       saveContent,
       findPreviewTab,
       closePreviewByIdentity,
@@ -786,6 +813,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     closeTab,
     setActiveTabId,
     updateContent,
+    pinTab,
     saveContent,
     findPreviewTab,
     closePreviewByIdentity,

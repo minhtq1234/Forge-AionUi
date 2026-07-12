@@ -137,6 +137,29 @@ describe('WorkspaceProjectFilesFlyout', () => {
     expect(onOpenFile).toHaveBeenCalledWith(expect.objectContaining({ relativePath: sourceFile.relativePath }));
   });
 
+  it('opens a file pinned when its row is double-clicked, but not for folders', () => {
+    const onOpenFilePinned = vi.fn();
+
+    render(
+      <WorkspaceProjectFilesFlyout
+        t={t}
+        workspaceDisplayName='Demo project'
+        files={[srcFolder, readmeFile]}
+        expandedKeys={['src']}
+        onToggleFolder={vi.fn()}
+        onOpenFile={vi.fn()}
+        onOpenFilePinned={onOpenFilePinned}
+      />
+    );
+
+    fireEvent.doubleClick(screen.getByRole('button', { name: 'app.ts' }));
+    expect(onOpenFilePinned).toHaveBeenCalledWith(expect.objectContaining({ relativePath: sourceFile.relativePath }));
+
+    onOpenFilePinned.mockClear();
+    fireEvent.doubleClick(screen.getByRole('button', { name: 'src' }));
+    expect(onOpenFilePinned).not.toHaveBeenCalled();
+  });
+
   it('searches recursively and opens a matching nested file without expanding its folder', () => {
     const onOpenFile = vi.fn();
 

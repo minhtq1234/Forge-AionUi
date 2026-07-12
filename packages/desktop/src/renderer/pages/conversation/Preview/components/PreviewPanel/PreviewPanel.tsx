@@ -78,6 +78,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
     activeTab,
     closeTab,
     switchTab,
+    pinTab,
     closePreview,
     updateContent,
     saveContent,
@@ -315,6 +316,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
     title: tab.title,
     isDirty: tab.isDirty,
     contentType: tab.content_type,
+    preview: tab.preview,
   }));
 
   // Derived from the active tab. Null-safe so every hook below (notably the four
@@ -479,6 +481,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
             tabsContainerRef={tabsContainerRef}
             onSwitchTab={switchTab}
             onCloseTab={handleCloseTab}
+            onPinTab={pinTab}
             onContextMenu={handleTabContextMenu}
             onClosePanel={handleClosePanel}
           />
@@ -806,6 +809,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
           tabsContainerRef={tabsContainerRef}
           onSwitchTab={switchTab}
           onCloseTab={handleCloseTab}
+          onPinTab={pinTab}
           onContextMenu={handleTabContextMenu}
           onClosePanel={handleClosePanel}
         />

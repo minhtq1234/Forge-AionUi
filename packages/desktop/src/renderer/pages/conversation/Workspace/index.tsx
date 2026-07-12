@@ -436,6 +436,17 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
     [fileOpsHook.handlePreviewFile, handleProjectMenuClose, treeHook.ensureNodeSelected, treeHook.selectedKeysRef]
   );
 
+  // 双击文件树中的文件：以固定（常驻）tab 打开，而非临时预览 tab
+  // Double-clicking a file in the tree: open it as a pinned (permanent) tab rather than the provisional preview tab
+  const handleProjectFileOpenPinned = useCallback(
+    (node: IDirOrFile) => {
+      treeHook.ensureNodeSelected(node);
+      void fileOpsHook.handlePreviewFile(node, true);
+      handleProjectMenuClose();
+    },
+    [fileOpsHook.handlePreviewFile, handleProjectMenuClose, treeHook.ensureNodeSelected]
+  );
+
   const handleProjectFileContextMenu = useCallback(
     (node: IDirOrFile, x: number, y: number) => {
       openNodeContextMenu(node, x, y);
@@ -467,6 +478,7 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
       expandedKeys={treeHook.expandedKeys}
       onToggleFolder={handleProjectFilesToggleFolder}
       onOpenFile={handleProjectFileOpen}
+      onOpenFilePinned={handleProjectFileOpenPinned}
       onOpenContextMenu={handleProjectFileContextMenu}
       searchText={searchHook.searchText}
       onSearchTextChange={handleProjectSearchChange}
