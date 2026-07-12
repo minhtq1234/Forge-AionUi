@@ -100,16 +100,16 @@
 }
 
 .actionsMenu {
-  min-width: 188px;
+  min-width: 172px;
 }
 
-.menuItem {
-  display: flex;
+.menuItemInner {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
-.menuItem :global(.i-icon) {
+.menuItemInner :global(.i-icon) {
   flex: 0 0 auto;
   font-size: 0;
 }

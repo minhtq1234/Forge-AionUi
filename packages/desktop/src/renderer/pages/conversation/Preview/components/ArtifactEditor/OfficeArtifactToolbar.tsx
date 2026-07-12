@@ -90,21 +90,29 @@ export const OfficeArtifactToolbar: React.FC<OfficeArtifactToolbarProps> = ({
 
   const actionsMenu = (
     <Menu className={styles.actionsMenu}>
-      <Menu.Item className={styles.menuItem} key='undo' disabled={undoDepth <= 0 || busy} onClick={() => void undo()}>
-        <Undo size={ICON_SIZE} />
-        {t('preview.office.editor.undo')}
+      <Menu.Item key='undo' disabled={undoDepth <= 0 || busy} onClick={() => void undo()}>
+        <span className={styles.menuItemInner}>
+          <Undo size={ICON_SIZE} />
+          {t('preview.office.editor.undo')}
+        </span>
       </Menu.Item>
-      <Menu.Item className={styles.menuItem} key='download' onClick={download}>
-        <Download size={ICON_SIZE} />
-        {t('common.download')}
+      <Menu.Item key='download' onClick={download}>
+        <span className={styles.menuItemInner}>
+          <Download size={ICON_SIZE} />
+          {t('common.download')}
+        </span>
       </Menu.Item>
-      <Menu.Item className={styles.menuItem} key='reveal' onClick={revealInFolder}>
-        <FolderOpen size={ICON_SIZE} />
-        {t('preview.office.editor.reveal')}
+      <Menu.Item key='reveal' onClick={revealInFolder}>
+        <span className={styles.menuItemInner}>
+          <FolderOpen size={ICON_SIZE} />
+          {t('preview.office.editor.reveal')}
+        </span>
       </Menu.Item>
-      <Menu.Item className={styles.menuItem} key='refresh' onClick={refresh}>
-        <Refresh size={ICON_SIZE} />
-        {t('preview.office.editor.refresh')}
+      <Menu.Item key='refresh' onClick={refresh}>
+        <span className={styles.menuItemInner}>
+          <Refresh size={ICON_SIZE} />
+          {t('preview.office.editor.refresh')}
+        </span>
       </Menu.Item>
     </Menu>
   );
@@ -150,12 +158,7 @@ export const OfficeArtifactToolbar: React.FC<OfficeArtifactToolbarProps> = ({
                 <span className={styles.actionLabel}>{t('preview.office.editor.openDesktop')}</span>
               </Button>
             </Tooltip>
-            <Dropdown
-              trigger='click'
-              position='br'
-              droplist={actionsMenu}
-              getPopupContainer={() => document.body}
-            >
+            <Dropdown trigger='click' position='br' droplist={actionsMenu} getPopupContainer={() => document.body}>
               <Tooltip content={t('preview.office.editor.more')}>
                 <Button
                   type='secondary'
