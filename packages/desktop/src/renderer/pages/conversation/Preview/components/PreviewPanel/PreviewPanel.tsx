@@ -12,8 +12,9 @@ import { isElectronDesktop } from '@/renderer/utils/platform';
 import { OfficeArtifactToolbar, useOfficeArtifactEditor } from '../ArtifactEditor';
 import ArtifactEmptyState from '../ArtifactEmptyState';
 import { PreviewToolbarExtrasProvider, type PreviewToolbarExtras } from '../../context/PreviewToolbarExtrasContext';
-import { usePreviewContext } from '../../context/PreviewContext';
+import { usePreviewContext, type PreviewTab as PreviewContextTab } from '../../context/PreviewContext';
 import { getOfficePreviewRefreshToken } from '../../context/officePreviewRevision';
+import type { PreviewContentType } from '@/common/types/office/preview';
 import { useResizableSplit } from '@/renderer/hooks/ui/useResizableSplit';
 import { Link, Message } from '@arco-design/web-react';
 import classNames from 'classnames';
@@ -62,6 +63,15 @@ type PreviewPanelProps = {
   onRequestCollapse?: () => void;
 };
 
+/**
+ * Office content types rendered through OfficeWatchViewer (each launches an
+ * `officecli watch`). These are kept mounted per open tab so switching between
+ * them is instant instead of re-launching the watch.
+ * 通过 OfficeWatchViewer 渲染的 Office 内容类型（会启动 officecli watch）。
+ */
+const isOfficeViewerContentType = (type: PreviewContentType | undefined): boolean =>
+  type === 'word' || type === 'excel' || type === 'ppt';
+
 const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onRequestCollapse }) => {
   const { t } = useTranslation();
   const { id: conversationId = '' } = useParams<{ id: string }>();
@@ -90,7 +100,11 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
   const [isSplitScreenEnabled, setIsSplitScreenEnabled] = useState(false);
   const [inspectMode, setInspectMode] = useState(false);
   const [toolbarExtras, setToolbarExtras] = useState<PreviewToolbarExtras | null>(null);
-  const [manualOfficeRefreshRevision, setManualOfficeRefreshRevision] = useState(0);
+  // Manual "refresh" bumps are tracked per tab id so refreshing the active
+  // office doc never restarts the warm (mounted-but-hidden) watches of the
+  // other open office tabs.
+  const [manualOfficeRefreshByTab, setManualOfficeRefreshByTab] = useState<Record<string, number>>({});
+  const activeManualOfficeRefresh = activeTabId ? (manualOfficeRefreshByTab[activeTabId] ?? 0) : 0;
 
   // 切换文件时把视图模式复位为预览，避免上一个文件的 source 模式串到下一个文件（如代码文件丢失语法高亮）。
   // 注意：单预览浏览模式下打开新文件会复用当前 tab 的 id，所以这里要监听实际显示的文件标识（路径 + 类型），
@@ -158,7 +172,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
     conversationId,
     workspace: activeTab?.metadata?.workspace ?? '',
     filePath: activeTab?.metadata?.file_path ?? '',
-    externalRevision: `${activeTab?.officePreviewRevision ?? 0}:${manualOfficeRefreshRevision}`,
+    externalRevision: `${activeTab?.officePreviewRevision ?? 0}:${activeManualOfficeRefresh}`,
     onArtifactMutated: handleOfficeArtifactMutated,
   });
 
@@ -303,11 +317,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
   const isMarkdown = content_type === 'markdown';
   const isHTML = content_type === 'html';
   const isOfficeDocument = content_type === 'word' || content_type === 'excel';
-  const officeRefreshToken = getOfficePreviewRefreshToken(
-    metadata?.file_path,
-    activeTab?.officePreviewRevision,
-    manualOfficeRefreshRevision
-  );
   const isEditable = metadata?.editable !== false; // 默认可编辑 / Default editable
 
   // 检查文件类型是否已有内置的打开按钮（Word、PPT、PDF、Excel 组件内部已提供）
@@ -419,8 +428,12 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
   }, [metadata?.file_path, messageApi, t]);
 
   const handleManualOfficeRefresh = useCallback(() => {
-    setManualOfficeRefreshRevision((revision) => revision + 1);
-  }, []);
+    if (!activeTabId) return;
+    setManualOfficeRefreshByTab((previous) => ({
+      ...previous,
+      [activeTabId]: (previous[activeTabId] ?? 0) + 1,
+    }));
+  }, [activeTabId]);
 
   const handleRevealOfficeInFolder = useCallback(() => {
     if (!metadata?.file_path) return;
@@ -700,32 +713,12 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
       );
     } else if (content_type === 'pdf') {
       return <PDFPreview file_path={metadata?.file_path} content={content} />;
-    } else if (content_type === 'ppt') {
-      return <PptViewer file_path={metadata?.file_path} content={content} workspace={metadata?.workspace} />;
-    } else if (content_type === 'word') {
-      return (
-        <OfficeDocPreview
-          conversationId={conversationId}
-          file_path={metadata?.file_path}
-          content={content}
-          workspace={metadata?.workspace}
-          refreshToken={officeRefreshToken}
-          onSelectionChange={officeEditorEnabled ? officeEditor.handleSelectionChange : undefined}
-          scriptRequest={officeEditorEnabled ? officeEditor.scriptRequest : undefined}
-        />
-      );
-    } else if (content_type === 'excel') {
-      return (
-        <ExcelPreview
-          conversationId={conversationId}
-          file_path={metadata?.file_path}
-          content={content}
-          workspace={metadata?.workspace}
-          refreshToken={officeRefreshToken}
-          onSelectionChange={officeEditorEnabled ? officeEditor.handleSelectionChange : undefined}
-          scriptRequest={officeEditorEnabled ? officeEditor.scriptRequest : undefined}
-        />
-      );
+    } else if (isOfficeViewerContentType(content_type)) {
+      // Office documents (word/excel/ppt) are rendered by the warm-mounted
+      // office viewer container below (one viewer kept alive per open office
+      // tab); nothing to render inline here. Missing-file office tabs are
+      // handled by the missingFile guard at the top of renderContent.
+      return null;
     } else if (content_type === 'image') {
       return (
         <ImagePreview
@@ -741,6 +734,44 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
     }
 
     return null;
+  };
+
+  // Open office tabs (word/excel/ppt) stay mounted so switching between them is
+  // instant (no re-launched `officecli watch`). Missing-file office tabs are
+  // excluded — they show the missing-file state via renderContent rather than
+  // watching a nonexistent file.
+  // 打开的 Office 标签页保持挂载，切换即时；缺失文件的标签页走 renderContent。
+  const officeTabs = tabs.filter((tab) => isOfficeViewerContentType(tab.content_type) && !tab.metadata?.missingFile);
+  const activeOfficeTab = officeTabs.find((tab) => tab.id === activeTabId) ?? null;
+
+  // Render one office viewer for a given open office tab. Only the active office
+  // tab is wired to the artifact editor (selection + guest script bridge); the
+  // hidden warm viewers stay read-only.
+  const renderOfficeViewer = (tab: PreviewContextTab) => {
+    const tabFilePath = tab.metadata?.file_path;
+    const tabWorkspace = tab.metadata?.workspace;
+
+    if (tab.content_type === 'ppt') {
+      return <PptViewer file_path={tabFilePath} content={tab.content} workspace={tabWorkspace} />;
+    }
+
+    const tabRefreshToken = getOfficePreviewRefreshToken(
+      tabFilePath,
+      tab.officePreviewRevision,
+      manualOfficeRefreshByTab[tab.id] ?? 0
+    );
+    const editorWired = tab.id === activeTabId && officeEditorEnabled;
+    const sharedProps = {
+      conversationId,
+      file_path: tabFilePath,
+      content: tab.content,
+      workspace: tabWorkspace,
+      refreshToken: tabRefreshToken,
+      onSelectionChange: editorWired ? officeEditor.handleSelectionChange : undefined,
+      scriptRequest: editorWired ? officeEditor.scriptRequest : undefined,
+    };
+
+    return tab.content_type === 'excel' ? <ExcelPreview {...sharedProps} /> : <OfficeDocPreview {...sharedProps} />;
   };
 
   return (
@@ -823,8 +854,27 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
           </div>
         )}
 
-        {/* 预览内容 / Preview content */}
-        {renderContent()}
+        {/* Office documents: one viewer kept mounted per open office tab so
+            switching between them is instant. Only the active office tab's
+            viewer is visible; the rest stay warm behind display:none. */}
+        {officeTabs.length > 0 && (
+          <div className='relative flex-1 overflow-hidden' style={{ display: activeOfficeTab ? undefined : 'none' }}>
+            {officeTabs.map((tab) => (
+              <div
+                key={tab.id}
+                data-testid={`office-viewer-container-${tab.id}`}
+                className='absolute inset-0 h-full w-full'
+                style={{ display: tab.id === activeTabId ? undefined : 'none' }}
+              >
+                {renderOfficeViewer(tab)}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 预览内容（非 Office，或缺失文件的 Office 标签页）/ Preview content
+            (non-office, or missing-file office tabs) — active tab only */}
+        {!activeOfficeTab && renderContent()}
 
         {/* Tab 右键菜单 / Tab context menu */}
         {/* eslint-disable-next-line max-len */}
