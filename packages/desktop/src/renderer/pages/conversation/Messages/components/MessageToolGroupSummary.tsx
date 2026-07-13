@@ -54,36 +54,61 @@ const planStatus: Record<'pending' | 'in_progress' | 'completed', NormalizedTool
 
 const PROVIDER_NARRATION_MAX_LENGTH = 180;
 const SHELL_COMMAND =
-  '(?:bash|sh|zsh|fish|docker|podman|deno|python(?:3(?:\\.\\d+)?)?|pip3?|bunx?|npx|npm|pnpm|yarn|git|rg|grep|find|cat|sed|node|cargo|go|mvn|gradle|just|make|curl|wget|rm|mv|cp|mkdir|powershell|pwsh|cmd|perl|ruby|java|dotnet)';
+  '(?:aws|az|bash|bunx?|cat|cargo|cmake|cmd|cp|curl|deno|docker|dotnet|echo|env|fd|find|fish|gcloud|gh|git|go|gradle|grep|helm|java|jq|just|kubectl|make|mkdir|mv|mvn|node|npm|npx|perl|pip3?|pnpm|podman|powershell|pwd|pwsh|pytest|python(?:3(?:\\.\\d+)?)?|rg|rm|ruby|sed|sh|sudo|swift|terraform|test|vitest|wget|xcodebuild|yarn|yq|zsh)';
 const SHELL_COMMAND_START = new RegExp(`^(?:(?:sudo|env)\\s+)?${SHELL_COMMAND}(?:\\s|$)`, 'i');
-const LABELED_SHELL_COMMAND = /^(?:command|execute|run)\b(?:\s|[^\w])/i;
+const LABELED_SHELL_COMMAND = new RegExp(
+  `^(?:command|execute|run|running)\\s*:?\\s+(?:(?:sudo|env)\\s+)?${SHELL_COMMAND}(?:\\s|$)`,
+  'i'
+);
 const DIAGNOSTIC_NARRATION = /\b(?:local_estimate|token\s+watermark|microcompact)\b/i;
-const TELEMETRY_IDENTIFIER =
-  /\b(?:request|trace|session|provider|token)[\s_-]*(?:id|identifier)\b|\b(?:request|trace|session|provider|token)\s*[:=]/i;
+const TELEMETRY_IDENTIFIER = /\b(?:request|trace|session|provider|token)(?:[\s_-]*(?:id|identifier))?\s*[:=]\s*\S+/i;
 const FILE_PATH_TOKEN =
   /\b[\w@.-]+\.(?:tsx?|jsx?|mjs|cjs|json|ya?ml|toml|md|css|scss|less|html?|py|rs|go|java|kt|swift|sh|bash|zsh|fish|sql|lock)\b/i;
+const ROOTED_PATH =
+  /(?:^|\s)(?:(?:\.{1,2}|~)?[\\/]|[a-z]:[\\/]|\\\\|(?:src|packages|tests?|docs?|app|lib|components|server|client)[\\/])\S+/i;
+const NESTED_PATH = /(?:^|\s)(?:[\w@.-]+[\\/]){2,}[\w@.-]+|(?:^|\s)[\w@.-]+[\\/][\w@.-]+\.[a-z0-9]{1,10}\b/i;
+const NATURAL_SLASH_PHRASE = /\b(?:and\/or|input\/output|read\/write|ui\/ux)\b/gi;
+const NATURAL_NARRATION_START =
+  /^(?:i(?:'m| am| will|'ll)|we(?:'re| are| will|'ll)|first|next|then|now|finally|active|queued|finished|completed|pending|add(?:ing)?|analyz(?:e|ing)|apply(?:ing)?|build(?:ing)?|check(?:ing)?|choos(?:e|ing)|compar(?:e|ing)|complet(?:e|ing)|creat(?:e|ing)|decid(?:e|ing)|explor(?:e|ing)|find(?:ing)?|finish(?:ing)?|fix(?:ing)?|generat(?:e|ing)|identif(?:y|ying)|implement(?:ing)?|inspect(?:ing)?|investigat(?:e|ing)|keep(?:ing)?|load(?:ing)?|locat(?:e|ing)|open(?:ing)?|plan(?:ning)?|prepar(?:e|ing)|read(?:ing)?|review(?:ing)?|run(?:ning)?|search(?:ing)?|settle|settling|summariz(?:e|ing)|test(?:ing)?|trac(?:e|ing)|understand(?:ing)?|updat(?:e|ing)|validat(?:e|ing)|verif(?:y|ying)|writ(?:e|ing))\b/i;
+const NATURAL_SENTENCE_CONNECTOR = /\b(?:a|an|and|after|before|for|the|to|while|with|without)\b/i;
 const UNSAFE_PROVIDER_NARRATION = [
   SHELL_COMMAND_START,
   LABELED_SHELL_COMMAND,
   /[\r\n`]|~~~|&&|\|\||[|;<>]|(?:^|\s)&(?:\s|$)|\$\(|\$\{/,
-  /[\\/]/,
   /\b(?:https?|file|ftp):|(?:^|\s)www\./i,
   /\b[a-z_][\w.-]*\s*=\s*(?:"[^"]*"|'[^']*'|\S+)/i,
-  /^\s*[\w.-]+\s*:\s*\S+/,
   /(?:[{}]|\[|\])|=>/,
   /(?:^|\s)--?[a-z][\w-]*(?:\s|=|$)/i,
   /^\s*[$#>%]\s*\S+/,
   TELEMETRY_IDENTIFIER,
   FILE_PATH_TOKEN,
+  ROOTED_PATH,
+  NESTED_PATH,
 ];
+
+const isSentenceLikeNarration = (narration: string): boolean => {
+  const firstLetter = narration.match(/\p{L}/u)?.[0];
+  if (!firstLetter) return false;
+
+  const hasLetterCase = firstLetter.toLocaleLowerCase() !== firstLetter.toLocaleUpperCase();
+  if (!hasLetterCase) return narration.length >= 4;
+  if (firstLetter !== firstLetter.toLocaleUpperCase()) return false;
+
+  const words = narration.match(/\p{L}[\p{L}\p{N}'’-]*/gu) ?? [];
+  if (words.length < 2) return false;
+  return NATURAL_NARRATION_START.test(narration) || (words.length >= 5 && NATURAL_SENTENCE_CONNECTOR.test(narration));
+};
 
 const getSafeProviderNarration = (value: string | undefined): string | undefined => {
   const narration = value?.trim();
+  const narrationWithoutNaturalSlashPhrases = narration?.replace(NATURAL_SLASH_PHRASE, '');
   if (
     !narration ||
     isDiagnosticTelemetryText(narration) ||
     DIAGNOSTIC_NARRATION.test(narration) ||
-    UNSAFE_PROVIDER_NARRATION.some((pattern) => pattern.test(narration))
+    UNSAFE_PROVIDER_NARRATION.some((pattern) => pattern.test(narration)) ||
+    /[\\/]/.test(narrationWithoutNaturalSlashPhrases ?? '') ||
+    !isSentenceLikeNarration(narration)
   ) {
     return undefined;
   }

@@ -467,6 +467,73 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     unsafeEntries.forEach((entry) => expect(screen.queryByText(entry)).not.toBeInTheDocument());
   });
 
+  it('replaces terse command-shaped narration even when the executable is not labeled', () => {
+    const unsafeEntries = [
+      'pwd',
+      'echo hello',
+      'swift test',
+      'pytest tests',
+      'vitest run',
+      'kubectl get pods',
+      'Acme build release',
+    ];
+    render(
+      <MessageToolGroupSummary
+        isActive
+        messages={
+          [
+            {
+              id: 'plan-terse-commands',
+              conversation_id: 'conv-1',
+              type: 'plan',
+              position: 'left',
+              content: {
+                session_id: 'sess-1',
+                entries: unsafeEntries.map((content) => ({ content, status: 'in_progress' as const })),
+              },
+            },
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    expect(screen.getAllByText('messages.toolActivity.generic.running')).toHaveLength(1);
+    unsafeEntries.forEach((entry) => expect(screen.queryByText(entry)).not.toBeInTheDocument());
+  });
+
+  it('keeps ordinary sentence-shaped plan narration visible', () => {
+    const safeEntries = [
+      'Run the focused checks to confirm behavior',
+      'Next: review the activity flow',
+      'Reviewing input/output behavior',
+      'Checking request ID validation',
+      'Understand the current implementation before making changes',
+      'We will review the implementation before changing it',
+    ];
+    render(
+      <MessageToolGroupSummary
+        isActive
+        messages={
+          [
+            {
+              id: 'plan-safe-sentences',
+              conversation_id: 'conv-1',
+              type: 'plan',
+              position: 'left',
+              content: {
+                session_id: 'sess-1',
+                entries: safeEntries.map((content) => ({ content, status: 'in_progress' as const })),
+              },
+            },
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    safeEntries.forEach((entry) => expect(screen.getByText(entry)).toBeInTheDocument());
+    expect(screen.queryByText('messages.toolActivity.generic.running')).not.toBeInTheDocument();
+  });
+
   it('rejects command and path shaped thinking subjects without exposing raw content', () => {
     render(
       <MessageToolGroupSummary
