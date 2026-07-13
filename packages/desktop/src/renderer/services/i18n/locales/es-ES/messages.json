@@ -72,7 +72,7 @@
       "headline": {
         "active": "Trabajo en curso",
         "completed": "Trabajo completado",
-        "recovered": "Trabajo completado tras reintentar",
+        "recovered": "Trabajo recuperado",
         "partial": "Trabajo completado parcialmente",
         "failed": "No se pudo completar el trabajo",
         "canceled": "Trabajo detenido"
@@ -81,27 +81,26 @@
       "subject": "Enfoque: {{subject}}.",
       "connector": { "pair": "{{first}} y {{second}}", "series": "{{first}}; además, {{rest}}" },
       "category": {
-        "web": "{{count}} búsqueda web",
-        "search": "{{count}} búsqueda de proyecto",
-        "fileRead": "{{count}} revisión de archivo",
-        "fileWrite": "{{count}} actualización de implementación",
-        "data": "{{count}} revisión de datos",
-        "report": "{{count}} tarea de informe",
-        "export": "{{count}} exportación",
-        "memory": "{{count}} actualización de memoria",
-        "code": "{{count}} paso del proyecto",
-        "verify": "{{count}} verificación",
-        "office": "{{count}} tarea de documento",
-        "generic": "{{count}} paso del proyecto"
+        "web": "Búsqueda web ({{count}})",
+        "search": "Búsqueda de proyecto ({{count}})",
+        "fileRead": "Revisión de archivo ({{count}})",
+        "fileWrite": "Actualización de implementación ({{count}})",
+        "data": "Revisión de datos ({{count}})",
+        "report": "Tarea de informe ({{count}})",
+        "export": "Exportación ({{count}})",
+        "memory": "Actualización de memoria ({{count}})",
+        "code": "Paso del proyecto ({{count}})",
+        "verify": "Verificación ({{count}})",
+        "office": "Tarea de documento ({{count}})",
+        "generic": "Paso del proyecto ({{count}})"
       },
       "outcome": {
-        "active": "Se han completado {{completed}} de {{total}} pasos y quedan {{pending}}.",
-        "completedOne": "Se completó 1 paso.",
-        "completedMany": "Se completaron los {{total}} pasos.",
-        "recovered": "Se completaron {{total}} pasos tras {{retries}} reintentos.",
-        "partial": "Se completaron {{completed}} de {{total}} pasos; {{failed}} no terminaron.",
-        "failed": "{{failed}} de {{total}} pasos no terminaron.",
-        "canceled": "El trabajo se detuvo tras {{completed}} de {{total}} pasos."
+        "active": "Completado: {{completed}} de {{total}}; sin terminar: {{unfinished}} (fallidos: {{failed}}, detenidos: {{canceled}}, restantes: {{pending}}).",
+        "completed": "Completado: {{completed}} de {{total}}.",
+        "recovered": "Completado: {{completed}} de {{total}}; reintentos: {{retries}}.",
+        "partial": "Completado: {{completed}} de {{total}}; sin terminar: {{unfinished}} (fallidos: {{failed}}, detenidos: {{canceled}}, pendientes: {{pending}}).",
+        "failed": "Completado: {{completed}} de {{total}}; sin terminar: {{unfinished}} (fallidos: {{failed}}, detenidos: {{canceled}}, pendientes: {{pending}}).",
+        "canceled": "Trabajo detenido: completado {{completed}} de {{total}}; sin terminar: {{unfinished}} (fallidos: {{failed}}, detenidos: {{canceled}}, pendientes: {{pending}})."
       }
     },
     "attempt": "(intento {{n}})",

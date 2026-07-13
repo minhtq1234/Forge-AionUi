@@ -13,6 +13,8 @@ export type TurnWorkRecap = {
   completed: number;
   failed: number;
   pending: number;
+  canceled: number;
+  unfinished: number;
   retries: number;
   categories: TurnWorkCategoryCount[];
   safeSubject?: string;
@@ -26,7 +28,7 @@ export type TurnWorkRecapRow = {
   safeSubject?: string;
 };
 
-export const buildTurnWorkRecap = (rows: TurnWorkRecapRow[]): TurnWorkRecap => {
+export const buildTurnWorkRecap = (rows: TurnWorkRecapRow[], isActive: boolean): TurnWorkRecap => {
   const categories: TurnWorkCategoryCount[] = [];
   const categoryIndex = new Map<ToolCategory, number>();
   let completed = 0;
@@ -62,13 +64,13 @@ export const buildTurnWorkRecap = (rows: TurnWorkRecapRow[]): TurnWorkRecap => {
   }
 
   const status: TurnWorkRecapStatus =
-    pending > 0
+    isActive && pending > 0
       ? 'active'
       : failed > 0 && completed > 0
         ? 'partial'
         : failed > 0
           ? 'failed'
-          : canceled > 0
+          : canceled > 0 || pending > 0
             ? 'canceled'
             : recovered
               ? 'recovered'
@@ -80,6 +82,8 @@ export const buildTurnWorkRecap = (rows: TurnWorkRecapRow[]): TurnWorkRecap => {
     completed,
     failed,
     pending,
+    canceled,
+    unfinished: failed + pending + canceled,
     retries,
     categories,
     ...(safeSubject ? { safeSubject } : {}),

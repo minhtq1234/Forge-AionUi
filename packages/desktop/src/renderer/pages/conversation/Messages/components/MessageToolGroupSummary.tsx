@@ -497,9 +497,10 @@ const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[]; 
                 status: row.status,
                 safeSubject: row.isFallback ? undefined : row.label,
               }
-        )
+        ),
+        isActive
       ),
-    [rows]
+    [isActive, rows]
   );
   const categorySummary = useMemo(() => formatCategorySummary(recap.categories, t), [recap.categories, t]);
   const outcome = useMemo(() => {
@@ -515,12 +516,7 @@ const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[]; 
       case 'canceled':
         return t('messages.toolActivity.recap.outcome.canceled', recap);
       case 'completed':
-        return t(
-          recap.total === 1
-            ? 'messages.toolActivity.recap.outcome.completedOne'
-            : 'messages.toolActivity.recap.outcome.completedMany',
-          recap
-        );
+        return t('messages.toolActivity.recap.outcome.completed', recap);
     }
   }, [recap, t]);
   const [showDetails, setShowDetails] = useState(false);

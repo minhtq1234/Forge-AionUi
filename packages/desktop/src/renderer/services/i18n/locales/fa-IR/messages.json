@@ -72,7 +72,7 @@
       "headline": {
         "active": "کار در حال انجام است",
         "completed": "کار تکمیل شد",
-        "recovered": "کار پس از تلاش مجدد تکمیل شد",
+        "recovered": "کار بازیابی شد",
         "partial": "کار تا حدی تکمیل شد",
         "failed": "کار تکمیل نشد",
         "canceled": "کار متوقف شد"
@@ -81,27 +81,26 @@
       "subject": "تمرکز: {{subject}}.",
       "connector": { "pair": "{{first}} و {{second}}", "series": "{{first}}، {{rest}}" },
       "category": {
-        "web": "{{count}} جست‌وجوی وب",
-        "search": "{{count}} جست‌وجوی پروژه",
-        "fileRead": "{{count}} بررسی پرونده",
-        "fileWrite": "{{count}} به‌روزرسانی پیاده‌سازی",
-        "data": "{{count}} بررسی داده",
-        "report": "{{count}} کار گزارش",
-        "export": "{{count}} خروجی",
-        "memory": "{{count}} به‌روزرسانی حافظه",
-        "code": "{{count}} گام پروژه",
-        "verify": "{{count}} اعتبارسنجی",
-        "office": "{{count}} کار سند",
-        "generic": "{{count}} گام پروژه"
+        "web": "جست‌وجوی وب ({{count}})",
+        "search": "جست‌وجوی پروژه ({{count}})",
+        "fileRead": "بررسی پرونده ({{count}})",
+        "fileWrite": "به‌روزرسانی پیاده‌سازی ({{count}})",
+        "data": "بررسی داده ({{count}})",
+        "report": "کار گزارش ({{count}})",
+        "export": "خروجی ({{count}})",
+        "memory": "به‌روزرسانی حافظه ({{count}})",
+        "code": "گام پروژه ({{count}})",
+        "verify": "اعتبارسنجی ({{count}})",
+        "office": "کار سند ({{count}})",
+        "generic": "گام پروژه ({{count}})"
       },
       "outcome": {
-        "active": "{{completed}} گام از {{total}} گام تکمیل شده و {{pending}} گام مانده است.",
-        "completedOne": "1 گام تکمیل شد.",
-        "completedMany": "همه {{total}} گام تکمیل شدند.",
-        "recovered": "{{total}} گام پس از {{retries}} تلاش مجدد تکمیل شدند.",
-        "partial": "{{completed}} گام از {{total}} گام تکمیل شد؛ {{failed}} گام پایان نیافت.",
-        "failed": "{{failed}} گام از {{total}} گام پایان نیافت.",
-        "canceled": "کار پس از {{completed}} گام از {{total}} گام متوقف شد."
+        "active": "تکمیل‌شده: {{completed}} از {{total}}؛ ناتمام: {{unfinished}} (ناموفق: {{failed}}، متوقف: {{canceled}}، باقی‌مانده: {{pending}}).",
+        "completed": "تکمیل‌شده: {{completed}} از {{total}}.",
+        "recovered": "تکمیل‌شده: {{completed}} از {{total}}؛ تلاش‌های مجدد: {{retries}}.",
+        "partial": "تکمیل‌شده: {{completed}} از {{total}}؛ ناتمام: {{unfinished}} (ناموفق: {{failed}}، متوقف: {{canceled}}، در انتظار: {{pending}}).",
+        "failed": "تکمیل‌شده: {{completed}} از {{total}}؛ ناتمام: {{unfinished}} (ناموفق: {{failed}}، متوقف: {{canceled}}، در انتظار: {{pending}}).",
+        "canceled": "کار متوقف شد: تکمیل‌شده {{completed}} از {{total}}؛ ناتمام: {{unfinished}} (ناموفق: {{failed}}، متوقف: {{canceled}}، در انتظار: {{pending}})."
       }
     },
     "attempt": "(تلاش {{n}})",

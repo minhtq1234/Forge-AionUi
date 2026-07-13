@@ -74,7 +74,7 @@
       "headline": {
         "active": "Робота триває",
         "completed": "Роботу завершено",
-        "recovered": "Роботу завершено після повтору",
+        "recovered": "Роботу відновлено",
         "partial": "Роботу завершено частково",
         "failed": "Не вдалося завершити роботу",
         "canceled": "Роботу зупинено"
@@ -83,27 +83,26 @@
       "subject": "Фокус: {{subject}}.",
       "connector": { "pair": "{{first}} і {{second}}", "series": "{{first}}; далі {{rest}}" },
       "category": {
-        "web": "{{count}} пошук в інтернеті",
-        "search": "{{count}} пошук у проєкті",
-        "fileRead": "{{count}} перевірка файлу",
-        "fileWrite": "{{count}} оновлення реалізації",
-        "data": "{{count}} перевірка даних",
-        "report": "{{count}} завдання звіту",
-        "export": "{{count}} експорт",
-        "memory": "{{count}} оновлення пам'яті",
-        "code": "{{count}} крок проєкту",
-        "verify": "{{count}} перевірка",
-        "office": "{{count}} завдання документа",
-        "generic": "{{count}} крок проєкту"
+        "web": "Пошук в інтернеті ({{count}})",
+        "search": "Пошук у проєкті ({{count}})",
+        "fileRead": "Перевірка файлу ({{count}})",
+        "fileWrite": "Оновлення реалізації ({{count}})",
+        "data": "Перевірка даних ({{count}})",
+        "report": "Завдання звіту ({{count}})",
+        "export": "Експорт ({{count}})",
+        "memory": "Оновлення пам'яті ({{count}})",
+        "code": "Крок проєкту ({{count}})",
+        "verify": "Перевірка ({{count}})",
+        "office": "Завдання документа ({{count}})",
+        "generic": "Крок проєкту ({{count}})"
       },
       "outcome": {
-        "active": "Завершено {{completed}} з {{total}} кроків, залишилося {{pending}}.",
-        "completedOne": "Завершено 1 крок.",
-        "completedMany": "Завершено всі {{total}} кроків.",
-        "recovered": "Завершено {{total}} кроків після {{retries}} повторів.",
-        "partial": "Завершено {{completed}} з {{total}} кроків; {{failed}} не завершено.",
-        "failed": "{{failed}} з {{total}} кроків не завершено.",
-        "canceled": "Роботу зупинено після {{completed}} з {{total}} кроків."
+        "active": "Завершено: {{completed}} з {{total}}; незавершено: {{unfinished}} (помилок: {{failed}}, зупинено: {{canceled}}, залишилося: {{pending}}).",
+        "completed": "Завершено: {{completed}} з {{total}}.",
+        "recovered": "Завершено: {{completed}} з {{total}}; повторів: {{retries}}.",
+        "partial": "Завершено: {{completed}} з {{total}}; незавершено: {{unfinished}} (помилок: {{failed}}, зупинено: {{canceled}}, очікується: {{pending}}).",
+        "failed": "Завершено: {{completed}} з {{total}}; незавершено: {{unfinished}} (помилок: {{failed}}, зупинено: {{canceled}}, очікується: {{pending}}).",
+        "canceled": "Роботу зупинено: завершено {{completed}} з {{total}}; незавершено: {{unfinished}} (помилок: {{failed}}, зупинено: {{canceled}}, очікується: {{pending}})."
       }
     },
     "attempt": "(спроба {{n}})",

@@ -72,7 +72,7 @@
       "headline": {
         "active": "Arbeit läuft",
         "completed": "Arbeit abgeschlossen",
-        "recovered": "Arbeit nach Wiederholung abgeschlossen",
+        "recovered": "Arbeit wiederhergestellt",
         "partial": "Arbeit teilweise abgeschlossen",
         "failed": "Arbeit konnte nicht abgeschlossen werden",
         "canceled": "Arbeit gestoppt"
@@ -81,27 +81,26 @@
       "subject": "Fokus: {{subject}}.",
       "connector": { "pair": "{{first}} und {{second}}", "series": "{{first}}; anschließend {{rest}}" },
       "category": {
-        "web": "{{count}} Websuche",
-        "search": "{{count}} Projektsuche",
-        "fileRead": "{{count}} Dateiprüfung",
-        "fileWrite": "{{count}} Implementierungsänderung",
-        "data": "{{count}} Datenprüfung",
-        "report": "{{count}} Berichtsaufgabe",
-        "export": "{{count}} Export",
-        "memory": "{{count}} Speicheraktualisierung",
-        "code": "{{count}} Projektschritt",
-        "verify": "{{count}} Überprüfung",
-        "office": "{{count}} Dokumentaufgabe",
-        "generic": "{{count}} Projektschritt"
+        "web": "Websuche ({{count}})",
+        "search": "Projektsuche ({{count}})",
+        "fileRead": "Dateiprüfung ({{count}})",
+        "fileWrite": "Implementierungsänderung ({{count}})",
+        "data": "Datenprüfung ({{count}})",
+        "report": "Berichtsaufgabe ({{count}})",
+        "export": "Datenexport ({{count}})",
+        "memory": "Speicheraktualisierung ({{count}})",
+        "code": "Projektschritt ({{count}})",
+        "verify": "Überprüfung ({{count}})",
+        "office": "Dokumentaufgabe ({{count}})",
+        "generic": "Projektschritt ({{count}})"
       },
       "outcome": {
-        "active": "{{completed}} von {{total}} Schritten sind abgeschlossen, {{pending}} stehen noch aus.",
-        "completedOne": "1 Schritt wurde abgeschlossen.",
-        "completedMany": "Alle {{total}} Schritte wurden abgeschlossen.",
-        "recovered": "{{total}} Schritte wurden nach {{retries}} Wiederholungen abgeschlossen.",
-        "partial": "{{completed}} von {{total}} Schritten wurden abgeschlossen; {{failed}} wurden nicht beendet.",
-        "failed": "{{failed}} von {{total}} Schritten wurden nicht beendet.",
-        "canceled": "Die Arbeit wurde nach {{completed}} von {{total}} Schritten gestoppt."
+        "active": "Abgeschlossen: {{completed}} von {{total}}; offen: {{unfinished}} (fehlgeschlagen: {{failed}}, gestoppt: {{canceled}}, verbleibend: {{pending}}).",
+        "completed": "Abgeschlossen: {{completed}} von {{total}}.",
+        "recovered": "Abgeschlossen: {{completed}} von {{total}}; Wiederholungen: {{retries}}.",
+        "partial": "Abgeschlossen: {{completed}} von {{total}}; offen: {{unfinished}} (fehlgeschlagen: {{failed}}, gestoppt: {{canceled}}, ausstehend: {{pending}}).",
+        "failed": "Abgeschlossen: {{completed}} von {{total}}; offen: {{unfinished}} (fehlgeschlagen: {{failed}}, gestoppt: {{canceled}}, ausstehend: {{pending}}).",
+        "canceled": "Arbeit gestoppt: abgeschlossen {{completed}} von {{total}}; offen: {{unfinished}} (fehlgeschlagen: {{failed}}, gestoppt: {{canceled}}, ausstehend: {{pending}})."
       }
     },
     "attempt": "(Versuch {{n}})",

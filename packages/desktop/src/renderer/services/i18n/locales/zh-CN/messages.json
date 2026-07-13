@@ -72,7 +72,7 @@
       "headline": {
         "active": "工作进行中",
         "completed": "工作已完成",
-        "recovered": "重试后已完成工作",
+        "recovered": "工作已恢复",
         "partial": "工作部分完成",
         "failed": "无法完成工作",
         "canceled": "工作已停止"
@@ -81,27 +81,26 @@
       "subject": "重点：{{subject}}。",
       "connector": { "pair": "{{first}}和{{second}}", "series": "{{first}}、{{rest}}" },
       "category": {
-        "web": "{{count}} 次网页搜索",
-        "search": "{{count}} 次项目搜索",
-        "fileRead": "{{count}} 次文件审阅",
-        "fileWrite": "{{count}} 次实现更新",
-        "data": "{{count}} 次数据审阅",
-        "report": "{{count}} 项报告任务",
-        "export": "{{count}} 次导出",
-        "memory": "{{count}} 次记忆更新",
-        "code": "{{count}} 个项目步骤",
-        "verify": "{{count}} 次验证",
-        "office": "{{count}} 项文档任务",
-        "generic": "{{count}} 个项目步骤"
+        "web": "网页搜索（{{count}}）",
+        "search": "项目搜索（{{count}}）",
+        "fileRead": "文件审阅（{{count}}）",
+        "fileWrite": "实现更新（{{count}}）",
+        "data": "数据审阅（{{count}}）",
+        "report": "报告任务（{{count}}）",
+        "export": "导出（{{count}}）",
+        "memory": "记忆更新（{{count}}）",
+        "code": "项目步骤（{{count}}）",
+        "verify": "验证（{{count}}）",
+        "office": "文档任务（{{count}}）",
+        "generic": "项目步骤（{{count}}）"
       },
       "outcome": {
-        "active": "已完成 {{completed}} 个步骤，共 {{total}} 个，还剩 {{pending}} 个。",
-        "completedOne": "已完成 1 个步骤。",
-        "completedMany": "已完成全部 {{total}} 个步骤。",
-        "recovered": "完成了 {{total}} 个步骤，经过 {{retries}} 次重试。",
-        "partial": "已完成 {{completed}} 个步骤，共 {{total}} 个；{{failed}} 个未完成。",
-        "failed": "{{failed}} 个步骤未完成，共 {{total}} 个。",
-        "canceled": "完成 {{completed}} 个步骤后，工作已停止（共 {{total}} 个）。"
+        "active": "已完成：{{completed}} / {{total}}；未完成：{{unfinished}}（失败：{{failed}}，已停止：{{canceled}}，剩余：{{pending}}）。",
+        "completed": "已完成：{{completed}} / {{total}}。",
+        "recovered": "已完成：{{completed}} / {{total}}；重试：{{retries}}。",
+        "partial": "已完成：{{completed}} / {{total}}；未完成：{{unfinished}}（失败：{{failed}}，已停止：{{canceled}}，待处理：{{pending}}）。",
+        "failed": "已完成：{{completed}} / {{total}}；未完成：{{unfinished}}（失败：{{failed}}，已停止：{{canceled}}，待处理：{{pending}}）。",
+        "canceled": "工作已停止：已完成 {{completed}} / {{total}}；未完成：{{unfinished}}（失败：{{failed}}，已停止：{{canceled}}，待处理：{{pending}}）。"
       }
     },
     "attempt": "（第 {{n}} 次尝试）",

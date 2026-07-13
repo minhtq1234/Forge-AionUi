@@ -72,7 +72,7 @@
       "headline": {
         "active": "Trabalho em andamento",
         "completed": "Trabalho concluído",
-        "recovered": "Trabalho concluído após nova tentativa",
+        "recovered": "Trabalho recuperado",
         "partial": "Trabalho parcialmente concluído",
         "failed": "Não foi possível concluir o trabalho",
         "canceled": "Trabalho interrompido"
@@ -81,27 +81,26 @@
       "subject": "Foco: {{subject}}.",
       "connector": { "pair": "{{first}} e {{second}}", "series": "{{first}}; depois, {{rest}}" },
       "category": {
-        "web": "{{count}} busca na web",
-        "search": "{{count}} busca no projeto",
-        "fileRead": "{{count}} revisão de arquivo",
-        "fileWrite": "{{count}} atualização da implementação",
-        "data": "{{count}} revisão de dados",
-        "report": "{{count}} tarefa de relatório",
-        "export": "{{count}} exportação",
-        "memory": "{{count}} atualização de memória",
-        "code": "{{count}} etapa do projeto",
-        "verify": "{{count}} verificação",
-        "office": "{{count}} tarefa de documento",
-        "generic": "{{count}} etapa do projeto"
+        "web": "Busca na web ({{count}})",
+        "search": "Busca no projeto ({{count}})",
+        "fileRead": "Revisão de arquivo ({{count}})",
+        "fileWrite": "Atualização da implementação ({{count}})",
+        "data": "Revisão de dados ({{count}})",
+        "report": "Tarefa de relatório ({{count}})",
+        "export": "Exportação ({{count}})",
+        "memory": "Atualização de memória ({{count}})",
+        "code": "Etapa do projeto ({{count}})",
+        "verify": "Verificação ({{count}})",
+        "office": "Tarefa de documento ({{count}})",
+        "generic": "Etapa do projeto ({{count}})"
       },
       "outcome": {
-        "active": "{{completed}} de {{total}} etapas foram concluídas, com {{pending}} restantes.",
-        "completedOne": "1 etapa foi concluída.",
-        "completedMany": "Todas as {{total}} etapas foram concluídas.",
-        "recovered": "{{total}} etapas foram concluídas após {{retries}} novas tentativas.",
-        "partial": "{{completed}} de {{total}} etapas foram concluídas; {{failed}} não terminaram.",
-        "failed": "{{failed}} de {{total}} etapas não terminaram.",
-        "canceled": "O trabalho parou após {{completed}} de {{total}} etapas."
+        "active": "Concluído: {{completed}} de {{total}}; não concluído: {{unfinished}} (falhas: {{failed}}, interrompidos: {{canceled}}, restantes: {{pending}}).",
+        "completed": "Concluído: {{completed}} de {{total}}.",
+        "recovered": "Concluído: {{completed}} de {{total}}; novas tentativas: {{retries}}.",
+        "partial": "Concluído: {{completed}} de {{total}}; não concluído: {{unfinished}} (falhas: {{failed}}, interrompidos: {{canceled}}, pendentes: {{pending}}).",
+        "failed": "Concluído: {{completed}} de {{total}}; não concluído: {{unfinished}} (falhas: {{failed}}, interrompidos: {{canceled}}, pendentes: {{pending}}).",
+        "canceled": "Trabalho interrompido: concluído {{completed}} de {{total}}; não concluído: {{unfinished}} (falhas: {{failed}}, interrompidos: {{canceled}}, pendentes: {{pending}})."
       }
     },
     "attempt": "(tentativa {{n}})",

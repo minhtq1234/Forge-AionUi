@@ -30,8 +30,12 @@ vi.mock('@/renderer/utils/file/download', () => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, values?: Record<string, unknown>) =>
-      key.startsWith('messages.toolActivity.recap') && values ? `${key} ${JSON.stringify(values)}` : key,
+    t: (key: string, values?: Record<string, unknown>) => {
+      if (key.startsWith('messages.toolActivity.recap.category') && typeof values?.count === 'number') {
+        return `${key} (${values.count})`;
+      }
+      return key.startsWith('messages.toolActivity.recap') && values ? `${key} ${JSON.stringify(values)}` : key;
+    },
   }),
 }));
 
@@ -788,7 +792,8 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     expect(screen.getByText('Queued work').closest('[data-status]')).toHaveAttribute('data-status', 'pending');
     expect(screen.getByText('Active work').closest('[data-status]')).toHaveAttribute('data-status', 'completed');
     expect(screen.getByText('messages.toolActivity.categories.verify.done')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('messages.toolActivity.recap.headline.active');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByText('messages.toolActivity.recap.headline.canceled')).toBeInTheDocument();
   });
 
   it('switches an unsafe plan fallback to done narration when the summary settles', () => {
@@ -983,7 +988,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       expect(screen.getByText(/messages\.toolActivity\.recap\.activity/)).toHaveTextContent(
         'messages.toolActivity.recap.category.generic'
       );
-      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.completedOne/)).toHaveTextContent('"total":1');
+      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.completed/)).toHaveTextContent('"total":1');
       expect(screen.getByText('messages.toolActivity.categories.generic.done')).not.toBeVisible();
     });
 
@@ -1021,11 +1026,88 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.active .*"pending":1/)).toBeInTheDocument();
     });
 
+    it('does not report inactive pending work as active', () => {
+      render(
+        <MessageToolGroupSummary
+          messages={
+            [
+              {
+                id: 'pending-plan',
+                conversation_id: 'conv-1',
+                type: 'plan',
+                position: 'left',
+                content: { session_id: 'sess-1', entries: [{ content: 'Queued work', status: 'pending' }] },
+              },
+            ] as WorkJournalSourceMessage[]
+          }
+        />
+      );
+
+      expect(screen.getByText('messages.toolActivity.recap.headline.canceled')).toBeInTheDocument();
+      expect(screen.queryByText('messages.toolActivity.recap.headline.active')).not.toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.canceled .*"unfinished":1/)).toBeInTheDocument();
+    });
+
+    it('keeps pending work active while the turn remains active', () => {
+      render(
+        <MessageToolGroupSummary
+          isActive
+          messages={
+            [
+              {
+                id: 'pending-plan',
+                conversation_id: 'conv-1',
+                type: 'plan',
+                position: 'left',
+                content: { session_id: 'sess-1', entries: [{ content: 'Queued work', status: 'pending' }] },
+              },
+            ] as WorkJournalSourceMessage[]
+          }
+        />
+      );
+
+      expect(screen.getByText('messages.toolActivity.recap.headline.active')).toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.active .*"unfinished":1/)).toBeInTheDocument();
+    });
+
+    it('uses count-safe category labels when a category appears twice', () => {
+      render(
+        <MessageToolGroupSummary
+          messages={[
+            commandStep('completed', 'search-1', 'rg -n needle .'),
+            activityStep('completed', 'write-1', 'write_file', 'edit'),
+            commandStep('completed', 'search-2', 'rg -n other .'),
+          ]}
+        />
+      );
+
+      expect(enUsMessages.toolActivity.recap.category.search).toBe('Project search ({{count}})');
+      expect(screen.getByText(/messages\.toolActivity\.recap\.activity/)).toHaveTextContent(
+        'messages.toolActivity.recap.category.search (2)'
+      );
+    });
+
     it('reports recovery after a successful retry', () => {
       render(<MessageToolGroupSummary messages={[acpStep('failed', 'retry-1'), acpStep('completed', 'retry-2')]} />);
 
       expect(screen.getByText('messages.toolActivity.recap.headline.recovered')).toBeInTheDocument();
       expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.recovered .*"retries":1/)).toBeInTheDocument();
+    });
+
+    it('uses plural-safe recovery copy after multiple retries', () => {
+      render(
+        <MessageToolGroupSummary
+          messages={[
+            acpStep('failed', 'retry-1'),
+            acpStep('failed', 'retry-2'),
+            acpStep('failed', 'retry-3'),
+            acpStep('completed', 'retry-4'),
+          ]}
+        />
+      );
+
+      expect(enUsMessages.toolActivity.recap.headline.recovered).toBe('Work recovered');
+      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.recovered .*"retries":3/)).toBeInTheDocument();
     });
 
     it('reports partial completion while keeping the failed step in technical details', () => {
@@ -1064,6 +1146,45 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       render(<MessageToolGroupSummary messages={[canceled]} />);
 
       expect(screen.getByText('messages.toolActivity.recap.headline.canceled')).toBeInTheDocument();
+    });
+
+    it('accounts for failed and canceled terminal work together', () => {
+      const canceled: IMessageToolGroup = {
+        id: 'canceled-1',
+        conversation_id: 'conv-1',
+        type: 'tool_group',
+        position: 'left',
+        content: [
+          {
+            call_id: 'canceled-1',
+            description: 'Canceled command',
+            name: 'Shell Command',
+            render_output_as_markdown: false,
+            status: 'Canceled',
+          },
+        ],
+      };
+
+      render(<MessageToolGroupSummary messages={[acpStep('failed', 'failed-1'), canceled]} />);
+
+      const outcome = screen.getByText(/messages\.toolActivity\.recap\.outcome\.failed/);
+      expect(outcome).toHaveTextContent('"failed":1');
+      expect(outcome).toHaveTextContent('"canceled":1');
+      expect(outcome).toHaveTextContent('"unfinished":2');
+    });
+
+    it('accounts for active and failed work together', () => {
+      render(
+        <MessageToolGroupSummary
+          isActive
+          messages={[acpStep('failed', 'failed-1'), commandStep('in_progress', 'verify-1', 'bun run test')]}
+        />
+      );
+
+      const outcome = screen.getByText(/messages\.toolActivity\.recap\.outcome\.active/);
+      expect(outcome).toHaveTextContent('"failed":1');
+      expect(outcome).toHaveTextContent('"pending":1');
+      expect(outcome).toHaveTextContent('"unfinished":2');
     });
 
     it('keeps raw command, path, output, telemetry, and provider narration out of the recap', () => {

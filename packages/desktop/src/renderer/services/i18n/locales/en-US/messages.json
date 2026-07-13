@@ -72,7 +72,7 @@
       "headline": {
         "active": "Work in progress",
         "completed": "Work completed",
-        "recovered": "Work completed after a retry",
+        "recovered": "Work recovered",
         "partial": "Work partly completed",
         "failed": "Work could not be completed",
         "canceled": "Work stopped"
@@ -81,27 +81,26 @@
       "subject": "Focus: {{subject}}.",
       "connector": { "pair": "{{first}} and {{second}}", "series": "{{first}}, {{rest}}" },
       "category": {
-        "web": "{{count}} web search",
-        "search": "{{count}} project search",
-        "fileRead": "{{count}} file review",
-        "fileWrite": "{{count}} implementation update",
-        "data": "{{count}} data review",
-        "report": "{{count}} report task",
-        "export": "{{count}} export",
-        "memory": "{{count}} memory update",
-        "code": "{{count}} project step",
-        "verify": "{{count}} verification",
-        "office": "{{count}} document task",
-        "generic": "{{count}} project step"
+        "web": "Web search ({{count}})",
+        "search": "Project search ({{count}})",
+        "fileRead": "File review ({{count}})",
+        "fileWrite": "Implementation update ({{count}})",
+        "data": "Data review ({{count}})",
+        "report": "Report task ({{count}})",
+        "export": "Export ({{count}})",
+        "memory": "Memory update ({{count}})",
+        "code": "Project step ({{count}})",
+        "verify": "Verification ({{count}})",
+        "office": "Document task ({{count}})",
+        "generic": "Project step ({{count}})"
       },
       "outcome": {
-        "active": "{{completed}} of {{total}} steps are complete, with {{pending}} remaining.",
-        "completedOne": "Completed 1 step.",
-        "completedMany": "Completed all {{total}} steps.",
-        "recovered": "Completed {{total}} steps after {{retries}} retries.",
-        "partial": "Completed {{completed}} of {{total}} steps; {{failed}} did not finish.",
-        "failed": "{{failed}} of {{total}} steps did not finish.",
-        "canceled": "Work stopped after {{completed}} of {{total}} steps."
+        "active": "Completed: {{completed}} of {{total}}; unfinished: {{unfinished}} (failed: {{failed}}, stopped: {{canceled}}, remaining: {{pending}}).",
+        "completed": "Completed: {{completed}} of {{total}}.",
+        "recovered": "Completed: {{completed}} of {{total}}; retries: {{retries}}.",
+        "partial": "Completed: {{completed}} of {{total}}; unfinished: {{unfinished}} (failed: {{failed}}, stopped: {{canceled}}, pending: {{pending}}).",
+        "failed": "Completed: {{completed}} of {{total}}; unfinished: {{unfinished}} (failed: {{failed}}, stopped: {{canceled}}, pending: {{pending}}).",
+        "canceled": "Work stopped: completed {{completed}} of {{total}}; unfinished: {{unfinished}} (failed: {{failed}}, stopped: {{canceled}}, pending: {{pending}})."
       }
     },
     "attempt": "(attempt {{n}})",

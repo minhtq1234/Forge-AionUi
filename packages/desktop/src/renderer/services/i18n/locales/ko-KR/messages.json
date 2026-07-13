@@ -72,7 +72,7 @@
       "headline": {
         "active": "작업 진행 중",
         "completed": "작업 완료",
-        "recovered": "재시도 후 작업 완료",
+        "recovered": "작업 복구됨",
         "partial": "작업 일부 완료",
         "failed": "작업을 완료하지 못했습니다",
         "canceled": "작업 중지됨"
@@ -81,27 +81,26 @@
       "subject": "중점: {{subject}}.",
       "connector": { "pair": "{{first}} 및 {{second}}", "series": "{{first}} 그리고 {{rest}}" },
       "category": {
-        "web": "웹 검색 {{count}}건",
-        "search": "프로젝트 검색 {{count}}건",
-        "fileRead": "파일 검토 {{count}}건",
-        "fileWrite": "구현 업데이트 {{count}}건",
-        "data": "데이터 검토 {{count}}건",
-        "report": "보고서 작업 {{count}}건",
-        "export": "내보내기 {{count}}건",
-        "memory": "메모리 업데이트 {{count}}건",
-        "code": "프로젝트 단계 {{count}}건",
-        "verify": "검증 {{count}}건",
-        "office": "문서 작업 {{count}}건",
-        "generic": "프로젝트 단계 {{count}}건"
+        "web": "웹 검색 ({{count}})",
+        "search": "프로젝트 검색 ({{count}})",
+        "fileRead": "파일 검토 ({{count}})",
+        "fileWrite": "구현 업데이트 ({{count}})",
+        "data": "데이터 검토 ({{count}})",
+        "report": "보고서 작업 ({{count}})",
+        "export": "내보내기 ({{count}})",
+        "memory": "메모리 업데이트 ({{count}})",
+        "code": "프로젝트 단계 ({{count}})",
+        "verify": "검증 ({{count}})",
+        "office": "문서 작업 ({{count}})",
+        "generic": "프로젝트 단계 ({{count}})"
       },
       "outcome": {
-        "active": "{{completed}}단계를 완료했고, 총 {{total}}단계 중 {{pending}}단계가 남았습니다.",
-        "completedOne": "1단계를 완료했습니다.",
-        "completedMany": "{{total}}단계를 모두 완료했습니다.",
-        "recovered": "{{total}}단계를 {{retries}}번 재시도 후 완료했습니다.",
-        "partial": "{{completed}}단계를 완료했고, 총 {{total}}단계 중 {{failed}}단계는 끝나지 않았습니다.",
-        "failed": "{{failed}}단계를 총 {{total}}단계 중 끝내지 못했습니다.",
-        "canceled": "{{completed}}단계 후 총 {{total}}단계 작업이 중지되었습니다."
+        "active": "완료: {{completed}} / {{total}}, 미완료: {{unfinished}} (실패: {{failed}}, 중지: {{canceled}}, 남음: {{pending}}).",
+        "completed": "완료: {{completed}} / {{total}}.",
+        "recovered": "완료: {{completed}} / {{total}}, 재시도: {{retries}}.",
+        "partial": "완료: {{completed}} / {{total}}, 미완료: {{unfinished}} (실패: {{failed}}, 중지: {{canceled}}, 보류: {{pending}}).",
+        "failed": "완료: {{completed}} / {{total}}, 미완료: {{unfinished}} (실패: {{failed}}, 중지: {{canceled}}, 보류: {{pending}}).",
+        "canceled": "작업이 중지되었습니다: 완료 {{completed}} / {{total}}, 미완료: {{unfinished}} (실패: {{failed}}, 중지: {{canceled}}, 보류: {{pending}})."
       }
     },
     "attempt": "({{n}}번째 시도)",
