@@ -22,6 +22,29 @@ vi.mock('@/common', () => ({
   },
 }));
 
+const truncatedAcpMessage = (status: 'in_progress' | 'completed' | 'failed', output: string): ToolMessage =>
+  ({
+    id: 'message-1',
+    conversation_id: 'conversation-1',
+    type: 'acp_tool_call',
+    content: {
+      _compact: {
+        truncated: true,
+        original_size: 90000,
+        preview_chars: 4096,
+      },
+      update: {
+        session_update: 'tool_call',
+        tool_call_id: 'tool-1',
+        status,
+        title: 'rg',
+        kind: 'search',
+        raw_input: { pattern: 'needle', path: '.' },
+        content: [{ type: 'content', content: { type: 'text', text: output } }],
+      },
+    },
+  }) as unknown as ToolMessage;
+
 describe('MessageToolGroupSummary', () => {
   it('uses existing i18n keys for raw input and output labels', () => {
     render(
@@ -110,5 +133,49 @@ describe('MessageToolGroupSummary', () => {
       });
     });
     expect(await screen.findByText('full output')).toBeInTheDocument();
+  });
+
+  it.each([
+    { finalStatus: 'completed' as const, finalOutput: 'final completed output' },
+    { finalStatus: 'failed' as const, finalOutput: 'final error output' },
+  ])(
+    'refreshes expanded truncated details when running work settles as $finalStatus',
+    async ({ finalStatus, finalOutput }) => {
+      const invoke = vi.mocked(ipcBridge.database.getConversationMessage.invoke);
+      invoke.mockReset();
+      invoke
+        .mockResolvedValueOnce(truncatedAcpMessage('in_progress', 'full running output') as unknown as TMessage)
+        .mockResolvedValueOnce(truncatedAcpMessage(finalStatus, finalOutput) as unknown as TMessage);
+
+      const { rerender } = render(
+        <MessageToolGroupSummary messages={[truncatedAcpMessage('in_progress', 'running preview')]} />
+      );
+      fireEvent.click(screen.getByText('common.technical_details'));
+      fireEvent.click(screen.getByText('rg'));
+
+      expect(await screen.findByText('full running output')).toBeInTheDocument();
+
+      rerender(<MessageToolGroupSummary messages={[truncatedAcpMessage(finalStatus, 'settled preview')]} />);
+
+      expect(await screen.findByText(finalOutput)).toBeInTheDocument();
+      expect(screen.queryByText('full running output')).not.toBeInTheDocument();
+      expect(invoke).toHaveBeenCalledTimes(2);
+    }
+  );
+
+  it('does not refetch expanded details when the source version is unchanged', async () => {
+    const invoke = vi.mocked(ipcBridge.database.getConversationMessage.invoke);
+    invoke.mockReset();
+    invoke.mockRejectedValue(new Error('unavailable'));
+    const source = truncatedAcpMessage('in_progress', 'running preview');
+
+    const { rerender } = render(<MessageToolGroupSummary messages={[source]} />);
+    fireEvent.click(screen.getByText('common.technical_details'));
+    fireEvent.click(screen.getByText('rg'));
+    expect(await screen.findByText('common.failed')).toBeInTheDocument();
+
+    rerender(<MessageToolGroupSummary messages={[truncatedAcpMessage('in_progress', 'running preview')]} />);
+
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
   });
 });

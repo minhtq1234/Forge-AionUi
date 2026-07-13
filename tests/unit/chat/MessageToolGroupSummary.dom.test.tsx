@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup } from '@/common/chat/chatLib';
 import MessageToolGroupSummary from '@/renderer/pages/conversation/Messages/components/MessageToolGroupSummary';
@@ -278,6 +278,14 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     expect(screen.getByText('messages.toolActivity.categories.search.done')).toBeInTheDocument();
     expect(screen.getByText('messages.toolActivity.categories.verify.running')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
+  });
+
+  it('announces the running action label inside the live region without duplicating it', () => {
+    const label = 'messages.toolActivity.categories.verify.running';
+    render(<MessageToolGroupSummary messages={[commandStep('in_progress', 'verify-1', 'bun run test')]} />);
+
+    expect(within(screen.getByRole('status')).getByText(label)).toBeInTheDocument();
+    expect(screen.getAllByText(label)).toHaveLength(1);
   });
 
   it('shows the done label and a technical-details toggle when settled', () => {

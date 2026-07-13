@@ -3,7 +3,7 @@ import { Badge, Button, Message, Tooltip } from '@arco-design/web-react';
 import { IconDown, IconRight } from '@arco-design/web-react/icon';
 import { Attention, CheckOne, Download, LoadingOne, Right } from '@icon-park/react';
 import { theme } from '@office-ai/platform';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ipcBridge } from '@/common';
 import { getAcpImageFileName } from '@/common/chat/acpToolCallOutput';
@@ -102,13 +102,38 @@ const buildJournalRows = (messages: WorkJournalSourceMessage[]): JournalRow[] =>
   return rows;
 };
 
+type LoadedToolItem = {
+  sourceVersion: string;
+  item: NormalizedToolCall;
+};
+
+const getToolItemVersion = (item: NormalizedToolCall): string =>
+  JSON.stringify([
+    item.status,
+    item.name,
+    item.description,
+    item.input,
+    item.output,
+    item.truncated,
+    item.imagePath,
+    item.messageId,
+    item.conversationId,
+  ]);
+
 const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const [fullItem, setFullItem] = useState<NormalizedToolCall | null>(null);
-  const [loadingFull, setLoadingFull] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-  const displayItem = fullItem ?? item;
+  const [fullItem, setFullItem] = useState<LoadedToolItem | null>(null);
+  const [loadingVersion, setLoadingVersion] = useState<string | null>(null);
+  const [loadErrorVersion, setLoadErrorVersion] = useState<string | null>(null);
+  const { conversationId, key, messageId, truncated } = item;
+  const itemVersion = getToolItemVersion(item);
+  const latestItemVersionRef = useRef(itemVersion);
+  const activeRequestVersionRef = useRef<string | undefined>(undefined);
+  latestItemVersionRef.current = itemVersion;
+  const displayItem = fullItem?.sourceVersion === itemVersion ? fullItem.item : item;
+  const loadingFull = loadingVersion === itemVersion;
+  const loadError = loadErrorVersion === itemVersion;
   const hasDetail = displayItem.input || displayItem.output || item.truncated || item.imagePath;
   const [messageApi, messageContext] = Message.useMessage();
   const handleDownloadImage = useCallback(
@@ -124,28 +149,48 @@ const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
     [messageApi, t]
   );
 
-  const loadFullItem = async () => {
-    if (!item.truncated || fullItem || loadingFull || !item.conversationId || !item.messageId) return;
-    setLoadingFull(true);
-    setLoadError(false);
+  const loadFullItem = useCallback(async () => {
+    if (
+      !truncated ||
+      fullItem?.sourceVersion === itemVersion ||
+      activeRequestVersionRef.current === itemVersion ||
+      !conversationId ||
+      !messageId
+    ) {
+      return;
+    }
+
+    const requestVersion = itemVersion;
+    activeRequestVersionRef.current = requestVersion;
+    setLoadingVersion(requestVersion);
+    setLoadErrorVersion(null);
     try {
       const message = await ipcBridge.database.getConversationMessage.invoke({
-        conversation_id: item.conversationId,
-        message_id: item.messageId,
+        conversation_id: conversationId,
+        message_id: messageId,
       });
-      const next = normalizeToolMessages([message as ToolMessage]).find((candidate) => candidate.key === item.key);
-      if (next) setFullItem(next);
+      const next = normalizeToolMessages([message as ToolMessage]).find((candidate) => candidate.key === key);
+      if (next && latestItemVersionRef.current === requestVersion) {
+        setFullItem({ sourceVersion: requestVersion, item: next });
+      }
     } catch {
-      setLoadError(true);
+      if (latestItemVersionRef.current === requestVersion) {
+        setLoadErrorVersion(requestVersion);
+      }
     } finally {
-      setLoadingFull(false);
+      if (activeRequestVersionRef.current === requestVersion) {
+        activeRequestVersionRef.current = undefined;
+        setLoadingVersion((current) => (current === requestVersion ? null : current));
+      }
     }
-  };
+  }, [conversationId, fullItem?.sourceVersion, itemVersion, key, messageId, truncated]);
+
+  useEffect(() => {
+    if (expanded) void loadFullItem();
+  }, [expanded, loadFullItem]);
 
   const toggleExpanded = () => {
-    const nextExpanded = !expanded;
-    setExpanded(nextExpanded);
-    if (nextExpanded) void loadFullItem();
+    setExpanded((value) => !value);
   };
 
   return (
@@ -222,7 +267,7 @@ const StepRow: React.FC<{ label: string; status: Exclude<NormalizedToolStatus, '
     switch (status) {
       case 'running':
         return (
-          <span role='status' aria-live='polite' data-status-icon='running'>
+          <span data-status-icon='running'>
             <LoadingOne theme='outline' size='14' fill={iconColors.primary} className='loading' />
           </span>
         );
@@ -246,7 +291,12 @@ const StepRow: React.FC<{ label: string; status: Exclude<NormalizedToolStatus, '
   })();
 
   return (
-    <div className='flex flex-row items-center gap-8px text-t-secondary' data-status={status}>
+    <div
+      className='flex flex-row items-center gap-8px text-t-secondary'
+      data-status={status}
+      role={status === 'running' ? 'status' : undefined}
+      aria-live={status === 'running' ? 'polite' : undefined}
+    >
       <span className='flex-shrink-0 flex items-center'>{icon}</span>
       <span className='text-13px'>{label}</span>
     </div>
