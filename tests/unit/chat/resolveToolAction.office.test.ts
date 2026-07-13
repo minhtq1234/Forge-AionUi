@@ -24,6 +24,24 @@ describe('resolveToolAction — office-file detection from call detail', () => {
     });
   });
 
+  it('uses shell intent before an Office filename for searches and reads', () => {
+    expect(resolveToolAction('exec', 'execute', 'rg -n revenue report.xlsx')).toEqual({
+      category: 'search',
+      purpose: 'discovering',
+    });
+    expect(resolveToolAction('exec', 'execute', 'cat report.docx')).toEqual({
+      category: 'fileRead',
+      purpose: 'reviewing',
+    });
+  });
+
+  it('uses verification intent before an Office filename', () => {
+    expect(resolveToolAction('exec', 'execute', 'bun run test report.xlsx')).toEqual({
+      category: 'verify',
+      purpose: 'verifying',
+    });
+  });
+
   it('falls back to the kind category when the detail is not office-related', () => {
     expect(resolveToolAction('Skill', 'execute', 'ls -la /tmp')).toEqual({ category: 'code', purpose: 'running' });
   });

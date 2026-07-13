@@ -56,7 +56,7 @@ const PROVIDER_NARRATION_MAX_LENGTH = 180;
 const SHELL_COMMAND =
   '(?:aws|az|bash|bunx?|cat|cargo|cmake|cmd|cp|curl|deno|docker|dotnet|echo|env|fd|find|fish|gcloud|gh|git|go|gradle|grep|helm|java|jq|just|kubectl|make|mkdir|mv|mvn|node|npm|npx|perl|pip3?|pnpm|podman|powershell|pwd|pwsh|pytest|python(?:3(?:\\.\\d+)?)?|rg|rm|ruby|sed|sh|sudo|swift|terraform|test|vitest|wget|xcodebuild|yarn|yq|zsh)';
 const LABELED_SHELL_COMMAND = new RegExp(
-  `^(?:checking|command|execute|executing|run|running|testing)\\s*:?\\s+(?:(?:sudo|env)\\s+)?${SHELL_COMMAND}(?:\\s|$)`,
+  `^(?:(?:first|next|then|now|finally)\\s*[:,]?\\s+)?(?:(?:i(?:'m| am)?|we(?:'re| are)?)\\s+)?(?:check(?:ed|ing)?|command|complet(?:ed|ing)?|execute|executed|executing|finish(?:ed|ing)?|run|running|test(?:ed|ing)?)(?:\\s+(?:execute|executing|run|running|test|testing))?\\s*:?\\s+(?:(?:sudo|env)\\s+)?${SHELL_COMMAND}(?:\\s|$)`,
   'i'
 );
 const DIAGNOSTIC_NARRATION = /\b(?:local_estimate|token\s+watermark|microcompact)\b/i;
@@ -201,6 +201,9 @@ const settleJournalRows = (rows: JournalRow[], isActive: boolean): JournalRow[] 
   return rows.map((row, index) => {
     if (row.status !== 'running' || index === activeRowIndex) return row;
     if (row.kind === 'tool') {
+      if (row.step.hadError) {
+        return { ...row, status: 'canceled', step: { ...row.step, status: 'canceled' } };
+      }
       return { ...row, status: 'completed', step: { ...row.step, status: 'completed', hadError: false } };
     }
     return { ...row, label: row.fallbackDoneLabel ?? row.label, status: 'completed' };

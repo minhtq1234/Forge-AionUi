@@ -477,6 +477,8 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       'bash -lc pwd',
       'docker compose up',
       'Run bun test',
+      'Finished echo CUSTOMER_SECRET',
+      "I'm running echo CUSTOMER_SECRET",
       'src/App.tsx',
       'request_id=abc',
       'trace id: abc',
@@ -922,7 +924,10 @@ describe('MessageToolGroupSummary plain-language activity', () => {
   it('does not claim recovery when an in-progress retry is only synthetically settled', () => {
     render(<MessageToolGroupSummary messages={[acpStep('failed', 't1'), acpStep('in_progress', 't2')]} />);
 
-    expect(screen.getByText('messages.toolActivity.tools.render_report.done')).toBeInTheDocument();
+    const row = screen.getByText('messages.toolActivity.status.stopped').closest('[data-status]');
+    expect(row).toHaveAttribute('data-status', 'canceled');
+    expect(row?.querySelector('[data-status-icon="completed"]')).not.toBeInTheDocument();
+    expect(screen.queryByText('messages.toolActivity.tools.render_report.done')).not.toBeInTheDocument();
     expect(screen.queryByText(/messages\.toolActivity\.status\.recovered/)).not.toBeInTheDocument();
   });
 

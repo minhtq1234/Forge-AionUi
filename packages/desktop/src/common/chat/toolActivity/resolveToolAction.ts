@@ -153,6 +153,25 @@ const splitShellSegments = (detail: string): string[] => {
   return segments;
 };
 
+const stripExecutionPrefixes = (segment: string): string => {
+  let command = segment.trim();
+  let previous = '';
+  while (command && command !== previous) {
+    previous = command;
+    command = command.replace(/^(?:env|sudo)\s+/i, '').replace(/^[a-z_][a-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+/i, '');
+  }
+  return command;
+};
+
+const unwrapShellSegments = (segment: string, depth = 0): string[] => {
+  const command = stripExecutionPrefixes(segment);
+  if (depth >= 3) return command ? [command] : [];
+
+  const wrapped = command.match(/^(?:bash|sh|zsh|fish)\s+-[a-z]*c[a-z]*\s+(["'])([\s\S]*)\1$/i);
+  if (!wrapped) return command ? [command] : [];
+  return splitShellSegments(wrapped[2]).flatMap((inner) => unwrapShellSegments(inner, depth + 1));
+};
+
 const KIND_CATEGORIES: Record<string, ToolCategory> = {
   read: 'fileRead',
   edit: 'fileWrite',
@@ -208,20 +227,22 @@ export function resolveToolAction(rawName: string | undefined, kind?: string, de
     }
   }
 
-  // 3. Office-file work, inferred from the command/args when the tool name is
-  //    generic (e.g. a "Skill" wrapper running officecli on an .xlsx).
-  if (detail && OFFICE_DETAIL_PATTERN.test(detail)) return actionFor('office');
-
   // Detail classification is only used when a generic execution wrapper hides the command.
   const isExplicitExecutionWrapper = EXECUTION_ID_PATTERN.test(id);
   const inspectExecutionDetail = isExplicitExecutionWrapper || kind === 'execute';
   if (inspectExecutionDetail) {
-    const shellSegments = detail ? splitShellSegments(detail) : [];
+    const shellSegments = detail ? splitShellSegments(detail).flatMap((segment) => unwrapShellSegments(segment)) : [];
     if (shellSegments.some((segment) => VERIFY_COMMAND_PATTERN.test(segment))) return actionFor('verify');
     const searchCommandPattern = isExplicitExecutionWrapper ? SEARCH_COMMAND_PATTERN : GENERIC_SEARCH_COMMAND_PATTERN;
     if (shellSegments.some((segment) => searchCommandPattern.test(segment))) return actionFor('search');
     if (shellSegments.some((segment) => READ_COMMAND_PATTERN.test(segment))) return actionFor('fileRead');
   }
+
+  // 3. Office-file work, inferred from the command/args when the tool name is
+  //    generic (e.g. a "Skill" wrapper running officecli on an .xlsx). Explicit
+  //    shell intent wins when a command is only searching, reading, or checking
+  //    an Office-named file.
+  if (detail && OFFICE_DETAIL_PATTERN.test(detail)) return actionFor('office');
 
   // 4. Kind-based category (built-in tools).
   if (EXECUTION_ID_PATTERN.test(id)) return actionFor('code');

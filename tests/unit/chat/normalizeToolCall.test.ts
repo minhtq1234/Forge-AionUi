@@ -261,6 +261,29 @@ describe('normalizeToolGroup telemetry boundaries', () => {
       },
     ]);
   });
+
+  it('omits unpadded line-wrapped inline image payloads from grouped results', () => {
+    const inlineImage = 'data:image/png;base64,iVBORw0KGgo\nAAAA';
+    const message: IMessageToolGroup = {
+      type: 'tool_group',
+      content: [
+        {
+          call_id: 'group-unpadded-image-result',
+          name: 'Image generation',
+          description: 'Generate an image',
+          render_output_as_markdown: false,
+          status: 'Success',
+          result_display: `Rendered ${inlineImage}; saved successfully`,
+        },
+      ],
+    };
+
+    expect(normalizeToolMessages([message])).toMatchObject([
+      {
+        output: 'Rendered [inline image omitted]; saved successfully',
+      },
+    ]);
+  });
 });
 
 describe('normalizeToolCall detail preservation', () => {

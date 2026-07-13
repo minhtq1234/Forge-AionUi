@@ -173,6 +173,11 @@ describe('resolveToolAction', () => {
     'cargo test',
     'cargo check',
     'cargo clippy',
+    'CI=1 bun test tests/unit/chat',
+    'env CI=1 bun run lint',
+    'sudo bunx tsc --noEmit',
+    'bash -lc "bun run test"',
+    "sh -c 'npm run lint'",
   ])('classifies validation detail hidden by a generic Skill wrapper: %s', (detail) => {
     expect(resolveToolAction('Skill', 'execute', detail)).toEqual({
       category: 'verify',

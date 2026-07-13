@@ -8,9 +8,9 @@ import type { AcpRawOutput, ToolCallUpdate } from '@/common/types/platform/acpTy
 
 const IMAGE_PATH_EXTENSION_RE = /\.(?:png|jpe?g|webp|gif)$/i;
 const WRAPPED_INLINE_IMAGE_DATA_URL_RE =
-  /data:image\/[a-z0-9.+-]+(?:;[a-z0-9.+-]+(?:=[^;,\s]*)?)*;base64,[a-z0-9+/=]+(?:\r?\n[ \t]*[a-z0-9+/=]+)*?\r?\n[ \t]*[a-z0-9+/]+={1,2}/gi;
+  /data:image\/[a-z0-9.+-]+(?:;[a-z0-9.+-]+(?:=[^;,\s]*)?)*;base64,(?=(?:iVBORw0KGgo|\/9j\/|UklGR|R0lGOD))[a-z0-9+/=]+(?:\r?\n[ \t]*[a-z0-9+/=]+)+(?=[ \t]*(?:$|[;,.!?)\]}'"]))/gi;
 const INLINE_IMAGE_DATA_URL_RE = /data:image\/[a-z0-9.+-]+(?:;[a-z0-9.+-]+(?:=[^;,\s]*)?)*;base64,[a-z0-9+/]*={0,2}/gi;
-const PURE_RASTER_BASE64_RE = /^(?:iVBORw0KGgo|\/9j\/|UklGR)[A-Za-z0-9+/]*={0,2}$/;
+const PURE_RASTER_BASE64_RE = /^(?:iVBORw0KGgo|\/9j\/|UklGR|R0lGOD)[A-Za-z0-9+/]*={0,2}$/;
 
 export const INLINE_IMAGE_OMISSION_MARKER = '[inline image omitted]';
 
@@ -31,10 +31,7 @@ const unchangedSanitization = (value: unknown): InlineImagePayloadSanitization =
 const sanitizeInlineImageString = (value: string): InlineImagePayloadSanitization => {
   const trimmedValue = value.trim();
   const compactValue = trimmedValue.replace(/[ \t\r\n]/g, '');
-  const isPureRasterPayload =
-    PURE_RASTER_BASE64_RE.test(trimmedValue) ||
-    (compactValue !== trimmedValue && /={1,2}$/.test(compactValue) && PURE_RASTER_BASE64_RE.test(compactValue));
-  if (isPureRasterPayload) {
+  if (PURE_RASTER_BASE64_RE.test(compactValue)) {
     return {
       value: INLINE_IMAGE_OMISSION_MARKER,
       omitted: true,

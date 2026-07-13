@@ -74,20 +74,24 @@ describe('ACP tool call image output', () => {
     expect(sanitized.update.rawOutput?.image).toBeUndefined();
   });
 
-  it.each(['iVBORw0KGgoAAAA==', 'iVBORw0KGgo AAAA==', '/9j/AAAA', 'UklGRkZBS0VJTUFHRQ=='])(
-    'omits short pure raster base64 payloads: %s',
-    (result) => {
-      const sanitized = sanitizeAcpToolCallContent(
-        createAcpToolCall({
-          saved_path: '/tmp/generated.png',
-          result,
-        }).content
-      );
+  it.each([
+    'iVBORw0KGgoAAAA==',
+    'iVBORw0KGgo AAAA==',
+    'iVBORw0KGgo\nAAAA',
+    '/9j/AAAA',
+    'UklGRkZBS0VJTUFHRQ==',
+    'R0lGODlhAQABAIAAAAUEBA',
+  ])('omits short pure raster base64 payloads: %s', (result) => {
+    const sanitized = sanitizeAcpToolCallContent(
+      createAcpToolCall({
+        saved_path: '/tmp/generated.png',
+        result,
+      }).content
+    );
 
-      expect(sanitized.update.rawOutput?.result).toBeUndefined();
-      expect(sanitized.update.rawOutput?.result_omitted_reason).toBe('image_base64');
-    }
-  );
+    expect(sanitized.update.rawOutput?.result).toBeUndefined();
+    expect(sanitized.update.rawOutput?.result_omitted_reason).toBe('image_base64');
+  });
 
   it('sanitizes nested and embedded data URLs while preserving useful text and image metadata', () => {
     const inlineImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
@@ -280,6 +284,23 @@ describe('ACP tool call image output', () => {
 
     expect(inserted.content.update.content?.[0].content?.text).toBe('Preview [inline image omitted]; ready');
     expect(JSON.stringify(inserted.content.update.content)).not.toContain('AAAA==');
+  });
+
+  it('sanitizes unpadded line-wrapped inline images in ACP content', () => {
+    const message = createAcpToolCall(undefined);
+    message.content.update.content = [
+      {
+        type: 'content',
+        content: {
+          type: 'text',
+          text: 'Preview data:image/png;base64,iVBORw0KGgo\nAAAA; ready',
+        },
+      },
+    ];
+
+    const sanitized = sanitizeAcpToolCallContent(message.content);
+
+    expect(sanitized.update.content?.[0].content?.text).toBe('Preview [inline image omitted]; ready');
   });
 
   it('sanitizes ACP tool call messages appended to a non-empty compose list', () => {
