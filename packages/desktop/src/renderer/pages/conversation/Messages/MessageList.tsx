@@ -6,7 +6,7 @@
 
 import type { IConversationArtifact } from '@/common/adapter/ipcBridge';
 import type { TMessage } from '@/common/chat/chatLib';
-import { isDiagnosticToolMessage } from '@/common/chat/normalizeToolCall';
+import { isDiagnosticToolMessage, type ToolMessage } from '@/common/chat/normalizeToolCall';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useConversationRuntimeView } from '@/renderer/pages/conversation/runtime/useConversationRuntimeView';
 import { getChatSurfaceWidthClass } from '@/renderer/pages/conversation/utils/chatSurfaceWidth';
@@ -87,6 +87,9 @@ const matchesTargetMessage = (item: IProcessedItem, targetMessageId?: string): b
   }
   return getProcessedItemSourceMessageIds(item).includes(targetMessageId);
 };
+
+const isToolMessage = (message: WorkJournalSourceMessage): message is ToolMessage =>
+  message.type === 'tool_group' || message.type === 'acp_tool_call' || message.type === 'tool_call';
 
 const getProcessedItemAnchorId = (item: IProcessedItem): string => {
   const sourceIds = getProcessedItemSourceMessageIds(item);
@@ -562,11 +565,10 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         return;
 
       const targetIndex = processedList.findIndex((item) => {
-        if (
-          (item as { type?: string }).type === 'file_summary' ||
-          (item as { type?: string }).type === 'work_summary' ||
-          (item as { type?: string }).type === 'artifact'
-        ) {
+        if (item.type === 'work_summary') {
+          return matchesTargetMessage(item, detail.messageId);
+        }
+        if (item.type === 'file_summary' || item.type === 'artifact') {
           return false;
         }
         const message = item as TMessage;
@@ -652,7 +654,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
           style={highlighted ? highlightStyle : undefined}
         >
           {item.type === 'file_summary' && <MessageFileChanges diffsChanges={item.diffs} />}
-          {item.type === 'work_summary' && <MessageToolGroupSummary messages={item.messages as never} />}
+          {item.type === 'work_summary' && <MessageToolGroupSummary messages={item.messages.filter(isToolMessage)} />}
         </div>
       );
     }

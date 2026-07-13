@@ -6,16 +6,19 @@
 
 import React, { type PropsWithChildren } from 'react';
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageAcpToolCall, IMessageText, TMessage } from '@/common/chat/chatLib';
+import type { ToolMessage } from '@/common/chat/normalizeToolCall';
 import {
   MessageListLoadingProvider,
   MessageListProvider,
   MessagePaginationProvider,
 } from '@/renderer/pages/conversation/Messages/hooks';
 import MessageList from '@/renderer/pages/conversation/Messages/MessageList';
+import { CHAT_MESSAGE_JUMP_EVENT } from '@/renderer/utils/chat/chatMinimapEvents';
 
-const { useTeamPermissionMock } = vi.hoisted(() => ({
+const { scrollElementIntoViewMock, useTeamPermissionMock } = vi.hoisted(() => ({
+  scrollElementIntoViewMock: vi.fn(),
   useTeamPermissionMock: vi.fn(),
 }));
 
@@ -68,7 +71,7 @@ vi.mock('@/renderer/pages/conversation/Messages/useAutoScroll', () => ({
     handlePointerDown: () => {},
     showScrollButton: false,
     scrollToBottom: () => {},
-    scrollElementIntoView: () => {},
+    scrollElementIntoView: scrollElementIntoViewMock,
     hideScrollButton: () => {},
   }),
 }));
@@ -126,7 +129,7 @@ vi.mock('@/renderer/pages/conversation/Messages/components/MessageSkillSuggest',
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/components/MessageToolGroupSummary', () => ({
-  default: ({ messages }: { messages: TMessage[] }) => (
+  default: ({ messages }: { messages: ToolMessage[] }) => (
     <div data-testid='work-summary'>{messages.map((message) => message.type).join(',')}</div>
   ),
 }));
@@ -178,7 +181,12 @@ function Wrapper({
 describe('MessageList', () => {
   beforeEach(() => {
     mockIsProcessing = false;
+    scrollElementIntoViewMock.mockReset();
     useTeamPermissionMock.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('renders message rows with external margin spacing in the plain scroll list', () => {
@@ -346,10 +354,56 @@ describe('MessageList', () => {
       wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
     });
 
-    expect(screen.getByTestId('work-summary')).toHaveTextContent('plan,thinking,tool_call,acp_tool_call');
+    expect(screen.getByTestId('work-summary')).toHaveTextContent(/^tool_call,acp_tool_call$/);
     expect(screen.queryByText(/^plan$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^thinking$/)).not.toBeInTheDocument();
     expect(screen.getByText('Finished')).toBeInTheDocument();
+  });
+
+  it('jumps a later work-summary source to the summary anchor', () => {
+    const messages = [
+      {
+        id: 'plan-1',
+        type: 'plan',
+        position: 'left',
+        content: { session_id: 's1', entries: [{ content: 'Review the activity flow', status: 'completed' }] },
+        created_at: 1,
+      },
+      {
+        id: 'thinking-1',
+        type: 'thinking',
+        position: 'left',
+        content: { content: 'private detail', subject: 'Reviewing the activity flow', status: 'done' },
+        created_at: 2,
+      },
+      {
+        id: 'tool-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'completed' },
+        created_at: 3,
+      },
+    ] as unknown as TMessage[];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    const summaryAnchor = document.getElementById('message-plan-1');
+    window.dispatchEvent(
+      new CustomEvent(CHAT_MESSAGE_JUMP_EVENT, {
+        detail: { conversation_id: 'conversation-1', messageId: 'thinking-1' },
+      })
+    );
+
+    expect(scrollElementIntoViewMock).toHaveBeenCalledWith(summaryAnchor, {
+      block: 'start',
+      behavior: 'smooth',
+    });
   });
 
   it('starts a new work summary at a permission boundary', () => {
@@ -381,6 +435,44 @@ describe('MessageList', () => {
     expect(summaries[1]).toHaveTextContent('tool_call');
     expect(screen.getByText('permission').compareDocumentPosition(summaries[0])).toBe(Node.DOCUMENT_POSITION_PRECEDING);
     expect(screen.getByText('permission').compareDocumentPosition(summaries[1])).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('keeps visible tools in one work summary across a hidden diagnostic', () => {
+    const messages = [
+      {
+        id: 'tool-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'completed' },
+        created_at: 1,
+      },
+      {
+        id: 'diagnostic-1',
+        type: 'tool_call',
+        position: 'left',
+        hidden: true,
+        content: {
+          call_id: 'diagnostic-1',
+          name: 'Token watermark override: provider=0, local_estimate=12520, using=12520',
+          status: 'completed',
+        },
+        created_at: 2,
+      },
+      {
+        id: 'tool-2',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-2', name: 'Write', status: 'completed' },
+        created_at: 3,
+      },
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    expect(screen.getAllByTestId('work-summary')).toHaveLength(1);
+    expect(screen.getByTestId('work-summary')).toHaveTextContent('tool_call,tool_call');
   });
 
   it('renders the empty slot when there are no messages', () => {
