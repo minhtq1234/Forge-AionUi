@@ -74,7 +74,7 @@ describe('ACP tool call image output', () => {
     expect(sanitized.update.rawOutput?.image).toBeUndefined();
   });
 
-  it.each(['iVBORw0KGgoAAAA==', '/9j/AAAA', 'UklGRkZBS0VJTUFHRQ=='])(
+  it.each(['iVBORw0KGgoAAAA==', 'iVBORw0KGgo AAAA==', '/9j/AAAA', 'UklGRkZBS0VJTUFHRQ=='])(
     'omits short pure raster base64 payloads: %s',
     (result) => {
       const sanitized = sanitizeAcpToolCallContent(
@@ -211,6 +211,44 @@ describe('ACP tool call image output', () => {
     expect(merged.update.rawOutput?.image?.mime_type).toBe('image/webp');
   });
 
+  it('sanitizes line-wrapped inline images in content when merging ACP updates', () => {
+    const existing = createAcpToolCall(undefined).content;
+    const incoming = createAcpToolCall(undefined).content;
+    incoming.update.content = [
+      {
+        type: 'content',
+        content: {
+          type: 'text',
+          text: 'Rendered data:image/png;base64,iVBORw0KGgo\nAAAA==; saved successfully',
+        },
+      },
+      {
+        type: 'diff',
+        path: '/tmp/report.md',
+        old_text: 'before',
+        new_text: 'after',
+      },
+    ];
+
+    const merged = mergeAcpToolCallContent(existing, incoming);
+
+    expect(merged.update.content).toEqual([
+      {
+        type: 'content',
+        content: {
+          type: 'text',
+          text: 'Rendered [inline image omitted]; saved successfully',
+        },
+      },
+      {
+        type: 'diff',
+        path: '/tmp/report.md',
+        old_text: 'before',
+        new_text: 'after',
+      },
+    ]);
+  });
+
   it('sanitizes newly inserted ACP tool call messages', () => {
     const message = createAcpToolCall({
       saved_path: '/Users/test/.codex/generated_images/session/ig_test_image.jpg',
@@ -223,6 +261,25 @@ describe('ACP tool call image output', () => {
     const inserted = list[0] as IMessageAcpToolCall;
     expect(inserted.content.update.rawOutput?.result).toBeUndefined();
     expect(inserted.content.update.rawOutput?.image?.mime_type).toBe('image/jpeg');
+  });
+
+  it('sanitizes line-wrapped inline images in content when inserting ACP messages', () => {
+    const message = createAcpToolCall(undefined);
+    message.content.update.content = [
+      {
+        type: 'content',
+        content: {
+          type: 'text',
+          text: 'Preview data:image/webp;base64,UklGRkZBS0U=\nAAAA==; ready',
+        },
+      },
+    ];
+
+    const list = composeMessage(message, []);
+    const inserted = list[0] as IMessageAcpToolCall;
+
+    expect(inserted.content.update.content?.[0].content?.text).toBe('Preview [inline image omitted]; ready');
+    expect(JSON.stringify(inserted.content.update.content)).not.toContain('AAAA==');
   });
 
   it('sanitizes ACP tool call messages appended to a non-empty compose list', () => {

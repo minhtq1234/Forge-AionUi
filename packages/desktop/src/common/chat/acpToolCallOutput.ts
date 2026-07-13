@@ -7,6 +7,8 @@
 import type { AcpRawOutput, ToolCallUpdate } from '@/common/types/platform/acpTypes';
 
 const IMAGE_PATH_EXTENSION_RE = /\.(?:png|jpe?g|webp|gif)$/i;
+const WRAPPED_INLINE_IMAGE_DATA_URL_RE =
+  /data:image\/[a-z0-9.+-]+(?:;[a-z0-9.+-]+(?:=[^;,\s]*)?)*;base64,[a-z0-9+/=]+(?:\r?\n[ \t]*[a-z0-9+/=]+)*?\r?\n[ \t]*[a-z0-9+/]+={1,2}/gi;
 const INLINE_IMAGE_DATA_URL_RE = /data:image\/[a-z0-9.+-]+(?:;[a-z0-9.+-]+(?:=[^;,\s]*)?)*;base64,[a-z0-9+/]*={0,2}/gi;
 const PURE_RASTER_BASE64_RE = /^(?:iVBORw0KGgo|\/9j\/|UklGR)[A-Za-z0-9+/]*={0,2}$/;
 
@@ -27,8 +29,12 @@ const unchangedSanitization = (value: unknown): InlineImagePayloadSanitization =
 });
 
 const sanitizeInlineImageString = (value: string): InlineImagePayloadSanitization => {
-  const compactValue = value.trim().replace(/[\r\n]/g, '');
-  if (PURE_RASTER_BASE64_RE.test(compactValue)) {
+  const trimmedValue = value.trim();
+  const compactValue = trimmedValue.replace(/[ \t\r\n]/g, '');
+  const isPureRasterPayload =
+    PURE_RASTER_BASE64_RE.test(trimmedValue) ||
+    (compactValue !== trimmedValue && /={1,2}$/.test(compactValue) && PURE_RASTER_BASE64_RE.test(compactValue));
+  if (isPureRasterPayload) {
     return {
       value: INLINE_IMAGE_OMISSION_MARKER,
       omitted: true,
@@ -38,10 +44,13 @@ const sanitizeInlineImageString = (value: string): InlineImagePayloadSanitizatio
   }
 
   let omittedCharacters = 0;
-  const sanitized = value.replace(INLINE_IMAGE_DATA_URL_RE, (match) => {
+  const omitInlineImage = (match: string): string => {
     omittedCharacters += match.length;
     return INLINE_IMAGE_OMISSION_MARKER;
-  });
+  };
+  const sanitized = value
+    .replace(WRAPPED_INLINE_IMAGE_DATA_URL_RE, omitInlineImage)
+    .replace(INLINE_IMAGE_DATA_URL_RE, omitInlineImage);
   if (omittedCharacters === 0) return unchangedSanitization(value);
 
   return {
@@ -135,11 +144,18 @@ const sanitizeAcpRawOutput = (rawOutput?: AcpRawOutput): AcpRawOutput | undefine
   return sanitized;
 };
 
-export const sanitizeAcpToolUpdate = (update: ToolCallUpdate['update']): ToolCallUpdate['update'] => ({
-  ...update,
-  rawOutput: sanitizeAcpRawOutput(update.rawOutput),
-  raw_output: sanitizeAcpRawOutput(update.raw_output),
-});
+export const sanitizeAcpToolUpdate = (update: ToolCallUpdate['update']): ToolCallUpdate['update'] => {
+  const contentSanitization = sanitizeInlineImagePayload(update.content);
+
+  return {
+    ...update,
+    rawOutput: sanitizeAcpRawOutput(update.rawOutput),
+    raw_output: sanitizeAcpRawOutput(update.raw_output),
+    ...(contentSanitization.omitted
+      ? { content: contentSanitization.value as ToolCallUpdate['update']['content'] }
+      : {}),
+  };
+};
 
 export const sanitizeAcpToolCallContent = (content: ToolCallUpdate): ToolCallUpdate => ({
   ...content,

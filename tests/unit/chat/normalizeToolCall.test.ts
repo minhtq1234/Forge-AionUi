@@ -238,6 +238,29 @@ describe('normalizeToolGroup telemetry boundaries', () => {
     ]);
     expect(normalizeToolMessages([message])[0].output).not.toContain(inlineImage);
   });
+
+  it('omits line-wrapped inline image payloads from grouped results without leaving a tail', () => {
+    const inlineImage = 'data:image/png;base64,iVBORw0KGgo\nAAAA==';
+    const message: IMessageToolGroup = {
+      type: 'tool_group',
+      content: [
+        {
+          call_id: 'group-wrapped-image-result',
+          name: 'Image generation',
+          description: 'Generate an image',
+          render_output_as_markdown: false,
+          status: 'Success',
+          result_display: `Rendered ${inlineImage}; saved successfully`,
+        },
+      ],
+    };
+
+    expect(normalizeToolMessages([message])).toMatchObject([
+      {
+        output: 'Rendered [inline image omitted]; saved successfully',
+      },
+    ]);
+  });
 });
 
 describe('normalizeToolCall detail preservation', () => {
@@ -279,6 +302,7 @@ describe('normalizeToolCall detail preservation', () => {
   it.each([
     ['input', { input: { image: 'data:image/png;base64,iVBORw0KGgoAAAA==' } }, '"image": "[inline image omitted]"'],
     ['args', { args: { image: '/9j/AAAA' } }, '"image": "[inline image omitted]"'],
+    ['args', { args: { image: 'iVBORw0KGgo AAAA==' } }, '"image": "[inline image omitted]"'],
     ['output', { output: 'data:image/webp;base64,UklGRkZBS0U=' }, '[inline image omitted]'],
     [
       'error',
