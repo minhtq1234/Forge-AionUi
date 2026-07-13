@@ -229,6 +229,12 @@ describe('utils', () => {
       expect(result).toContain(DIAGNOSTIC_REDACTION_MARKER);
     });
 
+    it('redacts the entire authorization value for any scheme', () => {
+      const result = redactDiagnosticText('Authorization: Token credentials-that-must-not-leak');
+
+      expect(result).toBe(`Authorization: ${DIAGNOSTIC_REDACTION_MARKER}`);
+    });
+
     it('normalizes errors without preserving secrets', () => {
       const error = new Error('request failed token=error-secret');
       error.stack = 'Error: request failed\nAuthorization: Bearer stack-secret';

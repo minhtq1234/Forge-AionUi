@@ -56,6 +56,7 @@ function truncate(text: string, maxLength: number): string {
 
 export function redactDiagnosticText(text: string, maxLength = DEFAULT_LIMITS.maxStringLength): string {
   const redacted = text
+    .replace(/(\b(?:proxy[_-]?authorization|authorization)\s*[=:]\s*)[^\r\n]*/gi, `$1${DIAGNOSTIC_REDACTION_MARKER}`)
     .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, `$1 ${DIAGNOSTIC_REDACTION_MARKER}`)
     .replace(/([a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:)[^@\s/]+@/gi, `$1${DIAGNOSTIC_REDACTION_MARKER}@`)
     .replace(
