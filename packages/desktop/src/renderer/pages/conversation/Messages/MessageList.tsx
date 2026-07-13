@@ -288,11 +288,17 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
 
   // Pre-process message list to group left-side work activity into summary cards.
   const processedList = useMemo(() => {
+    type PendingWorkSummary = {
+      messages: WorkJournalSourceMessage[];
+      sourceMessageIds: string[];
+      latestResultIndex: number;
+      latestCreatedAt: number;
+    };
+
     const result: Array<IMessageVO> = [];
     let diffsChanges: FileChangeInfo[] = [];
     let diffsSourceMessageIds: string[] = [];
-    let workList: WorkJournalSourceMessage[] = [];
-    let workSourceMessageIds: string[] = [];
+    let pendingWorkSummary: PendingWorkSummary | undefined;
 
     const pushFileDffChanges = (changes: FileChangeInfo, sourceMessageId: string, created_at: number) => {
       if (!diffsChanges.length) {
@@ -307,24 +313,36 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       }
       diffsChanges.push(changes);
       diffsSourceMessageIds.push(sourceMessageId);
-      workList = [];
-      workSourceMessageIds = [];
     };
-    const pushWorkMessage = (message: WorkJournalSourceMessage) => {
-      if (!workList.length) {
-        workSourceMessageIds = [];
-        result.push({
-          type: 'work_summary',
-          id: `work-summary-${message.id}`,
-          messages: workList,
-          sourceMessageIds: workSourceMessageIds,
-          created_at: message.created_at ?? 0,
-        });
-      }
-      workList.push(message);
-      workSourceMessageIds.push(message.id);
+    const resetFileDiffChanges = () => {
       diffsChanges = [];
       diffsSourceMessageIds = [];
+    };
+    const pushWorkMessage = (message: WorkJournalSourceMessage) => {
+      if (!pendingWorkSummary) {
+        pendingWorkSummary = {
+          messages: [],
+          sourceMessageIds: [],
+          latestResultIndex: result.length,
+          latestCreatedAt: message.created_at ?? 0,
+        };
+      }
+      pendingWorkSummary.messages.push(message);
+      pendingWorkSummary.sourceMessageIds.push(message.id);
+      pendingWorkSummary.latestResultIndex = result.length;
+      pendingWorkSummary.latestCreatedAt = message.created_at ?? 0;
+      resetFileDiffChanges();
+    };
+    const flushPendingWorkSummary = () => {
+      if (!pendingWorkSummary) return;
+      result.splice(pendingWorkSummary.latestResultIndex, 0, {
+        type: 'work_summary',
+        id: `work-summary-${pendingWorkSummary.messages.at(-1)?.id}`,
+        messages: pendingWorkSummary.messages,
+        sourceMessageIds: pendingWorkSummary.sourceMessageIds,
+        created_at: pendingWorkSummary.latestCreatedAt,
+      });
+      pendingWorkSummary = undefined;
     };
 
     for (let i = 0, len = list.length; i < len; i++) {
@@ -376,12 +394,13 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         pushWorkMessage(message);
         continue;
       }
-      workList = [];
-      workSourceMessageIds = [];
-      diffsChanges = [];
-      diffsSourceMessageIds = [];
+      if (message.position === 'right') {
+        flushPendingWorkSummary();
+      }
+      resetFileDiffChanges();
       result.push(message);
     }
+    flushPendingWorkSummary();
     const visibleArtifacts = artifacts
       .filter((artifact) => {
         if (artifact.kind === 'cron_trigger') return artifact.status === 'active';

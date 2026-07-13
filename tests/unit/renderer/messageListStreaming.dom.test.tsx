@@ -8,10 +8,13 @@ import React, { type PropsWithChildren } from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageText } from '@/common/chat/chatLib';
-import { MessageListProvider } from '@/renderer/pages/conversation/Messages/hooks';
+import { MessageListProvider, useUpdateMessageList } from '@/renderer/pages/conversation/Messages/hooks';
 import MessageList from '@/renderer/pages/conversation/Messages/MessageList';
+import type { WorkJournalSourceMessage } from '@/renderer/pages/conversation/Messages/types';
 
 let resizeObserverCallback: ResizeObserverCallback | null = null;
+const workSummaryMessagesMock = vi.hoisted(() => vi.fn());
+let mockIsProcessing = false;
 
 class ResizeObserverMock {
   constructor(callback: ResizeObserverCallback) {
@@ -52,6 +55,10 @@ vi.mock('@/renderer/hooks/context/ConversationContext', () => ({
 
 vi.mock('@/renderer/hooks/file/useAutoPreviewOfficeFiles', () => ({
   useAutoPreviewOfficeFiles: () => {},
+}));
+
+vi.mock('@/renderer/pages/conversation/runtime/useConversationRuntimeView', () => ({
+  useConversationRuntimeView: () => ({ isProcessing: mockIsProcessing }),
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/artifacts', () => ({
@@ -107,7 +114,14 @@ vi.mock('@/renderer/pages/conversation/Messages/components/MessageSkillSuggest',
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/components/MessageToolGroupSummary', () => ({
-  default: () => <div>tool_summary</div>,
+  default: ({ messages, isActive }: { messages: WorkJournalSourceMessage[]; isActive: boolean }) => {
+    workSummaryMessagesMock(messages);
+    return (
+      <div data-testid='work-summary' data-active={String(isActive)}>
+        {messages.map((message) => message.type).join(',')}
+      </div>
+    );
+  },
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/MessageFileChanges', () => ({
@@ -140,6 +154,16 @@ function createTextMessage(content: string): IMessageText {
 
 function Wrapper({ children, messages }: PropsWithChildren<{ messages: IMessageText[] }>): JSX.Element {
   return <MessageListProvider value={messages}>{children}</MessageListProvider>;
+}
+
+function StreamingMessageList({ message }: { message: IMessageText }): JSX.Element {
+  const updateMessageList = useUpdateMessageList();
+
+  React.useEffect(() => {
+    updateMessageList([message]);
+  }, [message, updateMessageList]);
+
+  return <MessageList />;
 }
 
 function setScrollableMetrics(
@@ -185,6 +209,8 @@ function flushResizeObserver(): void {
 
 describe('MessageList streaming scroll behavior', () => {
   beforeEach(() => {
+    mockIsProcessing = false;
+    workSummaryMessagesMock.mockReset();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-26T12:00:00.000Z'));
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
@@ -267,5 +293,37 @@ describe('MessageList streaming scroll behavior', () => {
     flushResizeObserver();
 
     expect(scroller.scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('updates the active recap during streaming without adding another summary', () => {
+    mockIsProcessing = true;
+    const inProgressTool = {
+      id: 'tool-1',
+      type: 'tool_call',
+      position: 'left',
+      content: { call_id: 'call-1', name: 'Read', status: 'in_progress' },
+      created_at: 1,
+    } as unknown as IMessageText;
+    const { rerender } = render(
+      <Wrapper messages={[inProgressTool]}>
+        <StreamingMessageList message={inProgressTool} />
+      </Wrapper>
+    );
+
+    const completedTool = {
+      ...inProgressTool,
+      content: { call_id: 'call-1', name: 'Read', status: 'completed' },
+    };
+    rerender(
+      <Wrapper messages={[completedTool]}>
+        <StreamingMessageList message={completedTool} />
+      </Wrapper>
+    );
+
+    expect(screen.getAllByTestId('work-summary')).toHaveLength(1);
+    expect(screen.getByTestId('work-summary')).toHaveAttribute('data-active', 'true');
+    expect(workSummaryMessagesMock).toHaveBeenLastCalledWith([
+      expect.objectContaining({ content: expect.objectContaining({ status: 'completed' }) }),
+    ]);
   });
 });

@@ -17,10 +17,12 @@ import MessageList from '@/renderer/pages/conversation/Messages/MessageList';
 import type { WorkJournalSourceMessage } from '@/renderer/pages/conversation/Messages/types';
 import { CHAT_MESSAGE_JUMP_EVENT } from '@/renderer/utils/chat/chatMinimapEvents';
 
-const { scrollElementIntoViewMock, useTeamPermissionMock } = vi.hoisted(() => ({
+const { scrollElementIntoViewMock, useConversationArtifactsMock, useTeamPermissionMock } = vi.hoisted(() => ({
   scrollElementIntoViewMock: vi.fn(),
+  useConversationArtifactsMock: vi.fn(),
   useTeamPermissionMock: vi.fn(),
 }));
+const workSummaryMessagesMock = vi.hoisted(() => vi.fn());
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -59,7 +61,7 @@ vi.mock('@/renderer/hooks/file/useAutoPreviewOfficeFiles', () => ({
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/artifacts', () => ({
-  useConversationArtifacts: () => [],
+  useConversationArtifacts: useConversationArtifactsMock,
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/useAutoScroll', () => ({
@@ -129,11 +131,14 @@ vi.mock('@/renderer/pages/conversation/Messages/components/MessageSkillSuggest',
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/components/MessageToolGroupSummary', () => ({
-  default: ({ messages, isActive }: { messages: WorkJournalSourceMessage[]; isActive: boolean }) => (
-    <div data-testid='work-summary' data-active={String(isActive)}>
-      {messages.map((message) => message.type).join(',')}
-    </div>
-  ),
+  default: ({ messages, isActive }: { messages: WorkJournalSourceMessage[]; isActive: boolean }) => {
+    workSummaryMessagesMock(messages);
+    return (
+      <div data-testid='work-summary' data-active={String(isActive)}>
+        {messages.map((message) => message.type).join(',')}
+      </div>
+    );
+  },
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/MessageFileChanges', () => ({
@@ -184,7 +189,9 @@ describe('MessageList', () => {
   beforeEach(() => {
     mockIsProcessing = false;
     scrollElementIntoViewMock.mockReset();
+    useConversationArtifactsMock.mockReturnValue([]);
     useTeamPermissionMock.mockReturnValue(null);
+    workSummaryMessagesMock.mockReset();
   });
 
   afterEach(() => {
@@ -362,7 +369,124 @@ describe('MessageList', () => {
     expect(screen.getByText('Finished')).toBeInTheDocument();
   });
 
-  it('marks only the trailing work summary active while processing', () => {
+  it('groups one turn of work across visible assistant narration at the latest work position', () => {
+    const messages = [
+      { id: 'user-1', type: 'text', position: 'right', content: { content: 'Please investigate' }, created_at: 1 },
+      {
+        id: 'tool-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'completed' },
+        created_at: 2,
+      },
+      { id: 'narration-1', type: 'text', position: 'left', content: { content: 'I found the cause.' }, created_at: 3 },
+      {
+        id: 'tool-2',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-2', name: 'Write', status: 'completed' },
+        created_at: 4,
+      },
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    const summaries = screen.getAllByTestId('work-summary');
+    expect(summaries).toHaveLength(1);
+    expect(workSummaryMessagesMock).toHaveBeenLastCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: 'tool-1' }), expect.objectContaining({ id: 'tool-2' })])
+    );
+    expect(screen.getByText('I found the cause.').compareDocumentPosition(summaries[0])).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+  });
+
+  it('starts a new work summary when a second visible user message starts another turn', () => {
+    const messages = [
+      { id: 'user-1', type: 'text', position: 'right', content: { content: 'First request' }, created_at: 1 },
+      {
+        id: 'tool-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'completed' },
+        created_at: 2,
+      },
+      { id: 'narration-1', type: 'text', position: 'left', content: { content: 'First update' }, created_at: 3 },
+      {
+        id: 'tool-2',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-2', name: 'Write', status: 'completed' },
+        created_at: 4,
+      },
+      { id: 'user-2', type: 'text', position: 'right', content: { content: 'Second request' }, created_at: 5 },
+      {
+        id: 'tool-3',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-3', name: 'Search', status: 'completed' },
+        created_at: 6,
+      },
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    const summaries = screen.getAllByTestId('work-summary');
+    expect(summaries).toHaveLength(2);
+    expect(summaries[0]).toHaveTextContent('tool_call,tool_call');
+    expect(summaries[1]).toHaveTextContent('tool_call');
+  });
+
+  it('keeps file summaries and artifacts independent from a turn work summary', () => {
+    useConversationArtifactsMock.mockReturnValue([
+      { id: 'artifact-1', kind: 'skill_suggest', status: 'pending', created_at: 6 },
+    ]);
+    const messages = [
+      { id: 'user-1', type: 'text', position: 'right', content: { content: 'Please update it' }, created_at: 1 },
+      {
+        id: 'tool-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'completed' },
+        created_at: 2,
+      },
+      {
+        id: 'file-1',
+        type: 'tool_group',
+        position: 'left',
+        content: [
+          {
+            name: 'WriteFile',
+            result_display: { file_diff: '@@ -1 +1 @@', file_name: 'notes.txt' },
+          },
+        ],
+        created_at: 3,
+      },
+      { id: 'narration-1', type: 'text', position: 'left', content: { content: 'Saved the change.' }, created_at: 4 },
+      {
+        id: 'tool-2',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-2', name: 'Verify', status: 'completed' },
+        created_at: 5,
+      },
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    expect(screen.getAllByTestId('work-summary')).toHaveLength(1);
+    expect(screen.getByTestId('work-summary')).toHaveTextContent('tool_call,tool_call');
+    expect(screen.getByText('file_changes')).toBeInTheDocument();
+    expect(screen.getByTestId('conversation-artifact-skill_suggest')).toBeInTheDocument();
+  });
+
+  it('marks the turn work summary active while processing', () => {
     mockIsProcessing = true;
     const messages = [
       {
@@ -387,8 +511,8 @@ describe('MessageList', () => {
     });
 
     const summaries = screen.getAllByTestId('work-summary');
-    expect(summaries[0]).toHaveAttribute('data-active', 'false');
-    expect(summaries[1]).toHaveAttribute('data-active', 'true');
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toHaveAttribute('data-active', 'true');
   });
 
   it('settles a trailing work summary when processing stops', () => {
@@ -463,19 +587,30 @@ describe('MessageList', () => {
     });
 
     const summaryAnchor = document.getElementById('message-plan-1');
-    window.dispatchEvent(
-      new CustomEvent(CHAT_MESSAGE_JUMP_EVENT, {
-        detail: { conversation_id: 'conversation-1', messageId: 'thinking-1' },
-      })
-    );
+    for (const messageId of ['plan-1', 'thinking-1', 'tool-1']) {
+      window.dispatchEvent(
+        new CustomEvent(CHAT_MESSAGE_JUMP_EVENT, {
+          detail: { conversation_id: 'conversation-1', messageId },
+        })
+      );
+    }
 
-    expect(scrollElementIntoViewMock).toHaveBeenCalledWith(summaryAnchor, {
+    expect(scrollElementIntoViewMock).toHaveBeenCalledTimes(3);
+    expect(scrollElementIntoViewMock).toHaveBeenNthCalledWith(1, summaryAnchor, {
+      block: 'start',
+      behavior: 'smooth',
+    });
+    expect(scrollElementIntoViewMock).toHaveBeenNthCalledWith(2, summaryAnchor, {
+      block: 'start',
+      behavior: 'smooth',
+    });
+    expect(scrollElementIntoViewMock).toHaveBeenNthCalledWith(3, summaryAnchor, {
       block: 'start',
       behavior: 'smooth',
     });
   });
 
-  it('starts a new work summary at a permission boundary', () => {
+  it('keeps a permission visible between work messages in the same turn', () => {
     const messages = [
       {
         id: 'tool-1',
@@ -499,11 +634,9 @@ describe('MessageList', () => {
     });
 
     const summaries = screen.getAllByTestId('work-summary');
-    expect(summaries).toHaveLength(2);
-    expect(summaries[0]).toHaveTextContent('tool_call');
-    expect(summaries[1]).toHaveTextContent('tool_call');
-    expect(screen.getByText('permission').compareDocumentPosition(summaries[0])).toBe(Node.DOCUMENT_POSITION_PRECEDING);
-    expect(screen.getByText('permission').compareDocumentPosition(summaries[1])).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toHaveTextContent('tool_call,tool_call');
+    expect(screen.getByText('permission').compareDocumentPosition(summaries[0])).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('keeps visible tools in one work summary across a hidden diagnostic', () => {
