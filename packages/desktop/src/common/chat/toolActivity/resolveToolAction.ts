@@ -1,4 +1,4 @@
-import type { ResolvedToolAction, ToolCategory } from './types';
+import type { ResolvedToolAction, ToolActivityPurpose, ToolCategory } from './types';
 
 // Seeded exact tool keys (forge-reports MCP). Keep in sync with
 // messages.toolActivity.tools.* in the en-US locale.
@@ -22,6 +22,26 @@ const KEYWORD_CATEGORIES: Array<[readonly string[], ToolCategory]> = [
 // "Skill", so the meaningful signal is the officecli invocation or an Office
 // file extension in the command/arguments.
 const OFFICE_DETAIL_PATTERN = /\bofficecli\b|\.(xlsx|xlsm|xls|csv|docx|doc|pptx|ppt)\b/i;
+const PURPOSE_BY_CATEGORY: Record<ToolCategory, ToolActivityPurpose> = {
+  web: 'discovering',
+  search: 'discovering',
+  fileRead: 'reviewing',
+  data: 'reviewing',
+  fileWrite: 'changing',
+  memory: 'changing',
+  code: 'running',
+  generic: 'running',
+  verify: 'verifying',
+  report: 'delivering',
+  export: 'delivering',
+  office: 'delivering',
+};
+
+const EXECUTION_ID_PATTERN = /(?:^|_)(exec|execute|command|bash|shell)(?:_|$)/;
+const VERIFY_DETAIL_PATTERN =
+  /\b(vitest|jest|pytest|tsc|oxlint|eslint|typecheck|format-check)\b|\b(bun|npm|pnpm|yarn)\s+(run\s+)?(test|lint|build|typecheck)\b/i;
+const SEARCH_DETAIL_PATTERN = /(?:^|[\s;&|])(rg|grep|find|fd|ls)(?:\s|$)/i;
+const READ_DETAIL_PATTERN = /(?:^|[\s;&|])(cat|head|tail)(?:\s|$)|\bsed\s+-n\b|\bgit\s+(status|diff|log)\b/i;
 
 const KIND_CATEGORIES: Record<string, ToolCategory> = {
   read: 'fileRead',
@@ -57,25 +77,41 @@ function normalizeId(rawName: string): string {
     .replace(/^_|_$/g, '');
 }
 
+const actionFor = (category: ToolCategory, toolKey?: string): ResolvedToolAction => ({
+  ...(toolKey ? { toolKey } : {}),
+  category,
+  purpose: PURPOSE_BY_CATEGORY[category],
+});
+
 export function resolveToolAction(rawName: string | undefined, kind?: string, detail?: string): ResolvedToolAction {
   const id = normalizeId(rawName ?? '');
 
   // 1. Exact tool: id === key, or id ends with `_<key>` (tolerate a server prefix).
   const toolKey = SEED_TOOL_KEYS.find((key) => id === key || id.endsWith(`_${key}`));
-  if (toolKey) return { toolKey, category: categoryForKey(toolKey) };
+  if (toolKey) return actionFor(categoryForKey(toolKey), toolKey);
 
   // 2. Keyword category on the id tokens (tool-name identity wins over detail).
-  for (const [keywords, category] of KEYWORD_CATEGORIES) {
-    if (keywords.some((kw) => id.includes(kw))) return { category };
+  if (!EXECUTION_ID_PATTERN.test(id)) {
+    for (const [keywords, category] of KEYWORD_CATEGORIES) {
+      if (keywords.some((kw) => id.includes(kw))) return actionFor(category);
+    }
   }
 
   // 3. Office-file work, inferred from the command/args when the tool name is
   //    generic (e.g. a "Skill" wrapper running officecli on an .xlsx).
-  if (detail && OFFICE_DETAIL_PATTERN.test(detail)) return { category: 'office' };
+  if (detail && OFFICE_DETAIL_PATTERN.test(detail)) return actionFor('office');
+
+  // Detail classification is only used when a generic execution wrapper hides the command.
+  if (EXECUTION_ID_PATTERN.test(id)) {
+    if (detail && VERIFY_DETAIL_PATTERN.test(detail)) return actionFor('verify');
+    if (detail && SEARCH_DETAIL_PATTERN.test(detail)) return actionFor('search');
+    if (detail && READ_DETAIL_PATTERN.test(detail)) return actionFor('fileRead');
+  }
 
   // 4. Kind-based category (built-in tools).
-  if (kind && KIND_CATEGORIES[kind]) return { category: KIND_CATEGORIES[kind] };
+  if (EXECUTION_ID_PATTERN.test(id)) return actionFor('code');
+  if (kind && KIND_CATEGORIES[kind]) return actionFor(KIND_CATEGORIES[kind]);
 
   // 5. Generic fallback — never a raw id.
-  return { category: 'generic' };
+  return actionFor('generic');
 }

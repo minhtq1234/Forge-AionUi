@@ -1,17 +1,22 @@
 import type { NormalizedToolCall } from '@/common/chat/normalizeToolCall';
+import { resolveToolAction } from './resolveToolAction';
 import type { CoalescedStep } from './types';
 
-// Merge CONSECUTIVE calls of the same tool (same raw name) into one evolving
-// step. Interleaved different tools stay separate and ordered. The merged
-// status is the last call's status; `attempts` counts the merged calls.
+const collectCallDetail = (call: NormalizedToolCall): string =>
+  [call.description, call.input].filter(Boolean).join(' ');
+
+const actionKey = (action: CoalescedStep['action']): string => `${action.purpose}:${action.toolKey ?? action.category}`;
+
+// Merge adjacent calls serving the same semantic purpose into one evolving step.
 export function coalesceToolCalls(calls: NormalizedToolCall[]): CoalescedStep[] {
   const steps: CoalescedStep[] = [];
   for (const call of calls) {
-    const prev = steps[steps.length - 1];
-    if (prev && prev.rawName === call.name) {
-      prev.calls.push(call);
-      prev.attempts += 1;
-      prev.status = call.status;
+    const action = resolveToolAction(call.name, call.kind, collectCallDetail(call));
+    const previous = steps[steps.length - 1];
+    if (previous && actionKey(previous.action) === actionKey(action)) {
+      previous.calls.push(call);
+      previous.attempts += 1;
+      previous.status = call.status;
       continue;
     }
     steps.push({
@@ -21,6 +26,7 @@ export function coalesceToolCalls(calls: NormalizedToolCall[]): CoalescedStep[] 
       status: call.status,
       attempts: 1,
       calls: [call],
+      action,
     });
   }
   return steps;

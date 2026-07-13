@@ -3,24 +3,54 @@ import { resolveToolAction } from '@/common/chat/toolActivity/resolveToolAction'
 
 describe('resolveToolAction', () => {
   it('matches a seeded tool with a server prefix', () => {
-    expect(resolveToolAction('forge-reports_render_report')).toEqual({ toolKey: 'render_report', category: 'report' });
+    expect(resolveToolAction('forge-reports_render_report')).toEqual({
+      toolKey: 'render_report',
+      category: 'report',
+      purpose: 'delivering',
+    });
   });
   it('matches a seeded tool without a prefix', () => {
-    expect(resolveToolAction('render_report')).toEqual({ toolKey: 'render_report', category: 'report' });
+    expect(resolveToolAction('render_report')).toEqual({
+      toolKey: 'render_report',
+      category: 'report',
+      purpose: 'delivering',
+    });
   });
   it('maps data_open to the fileRead category', () => {
-    expect(resolveToolAction('forge-reports_data_open')).toEqual({ toolKey: 'data_open', category: 'fileRead' });
+    expect(resolveToolAction('forge-reports_data_open')).toEqual({
+      toolKey: 'data_open',
+      category: 'fileRead',
+      purpose: 'reviewing',
+    });
   });
   it('falls back to a keyword category for unseeded tools', () => {
-    expect(resolveToolAction('acme_web_search')).toEqual({ category: 'web' });
+    expect(resolveToolAction('acme_web_search')).toEqual({ category: 'web', purpose: 'discovering' });
   });
   it('uses the ACP kind when the name has no keyword', () => {
-    expect(resolveToolAction('doit', 'read')).toEqual({ category: 'fileRead' });
+    expect(resolveToolAction('doit', 'read')).toEqual({ category: 'fileRead', purpose: 'reviewing' });
   });
   it('falls back to generic for unknown tools', () => {
-    expect(resolveToolAction('mystery_thing_42')).toEqual({ category: 'generic' });
+    expect(resolveToolAction('mystery_thing_42')).toEqual({ category: 'generic', purpose: 'running' });
   });
   it('handles undefined names', () => {
-    expect(resolveToolAction(undefined)).toEqual({ category: 'generic' });
+    expect(resolveToolAction(undefined)).toEqual({ category: 'generic', purpose: 'running' });
+  });
+  it('classifies a search command wrapped by exec as discovery work', () => {
+    expect(resolveToolAction('exec_command', 'execute', 'rg -n "toolActivity" packages/desktop/src')).toEqual({
+      category: 'search',
+      purpose: 'discovering',
+    });
+  });
+  it('classifies a test command wrapped by exec as verification work', () => {
+    expect(resolveToolAction('exec_command', 'execute', 'bun run test tests/unit/chat')).toEqual({
+      category: 'verify',
+      purpose: 'verifying',
+    });
+  });
+  it('keeps unknown execution work generic without exposing its command', () => {
+    expect(resolveToolAction('exec_command', 'execute', './private-script --secret')).toEqual({
+      category: 'code',
+      purpose: 'running',
+    });
   });
 });

@@ -44,4 +44,28 @@ describe('coalesceToolCalls', () => {
     expect(steps[0].status).toBe('running');
     expect(steps[0].attempts).toBe(2);
   });
+  it('groups different search tools serving the same purpose', () => {
+    const steps = coalesceToolCalls([
+      call({ key: 'a', name: 'exec_command', kind: 'execute', input: 'rg -n journal packages' }),
+      call({ key: 'b', name: 'find', kind: 'search', input: 'journal' }),
+    ]);
+    expect(steps).toHaveLength(1);
+    expect(steps[0].action).toMatchObject({ category: 'search', purpose: 'discovering' });
+    expect(steps[0].attempts).toBe(2);
+  });
+  it('starts a new phase when work changes from discovery to verification', () => {
+    const steps = coalesceToolCalls([
+      call({ key: 'a', name: 'exec_command', kind: 'execute', input: 'rg -n journal packages' }),
+      call({ key: 'b', name: 'exec_command', kind: 'execute', input: 'bun run test tests/unit/chat' }),
+    ]);
+    expect(steps.map((step) => step.action.purpose)).toEqual(['discovering', 'verifying']);
+  });
+  it('creates a new discovery phase after verification changes direction', () => {
+    const steps = coalesceToolCalls([
+      call({ key: 'a', name: 'find', kind: 'search' }),
+      call({ key: 'b', name: 'exec_command', kind: 'execute', input: 'bun run test tests/unit/chat' }),
+      call({ key: 'c', name: 'rg', kind: 'search' }),
+    ]);
+    expect(steps.map((step) => step.action.purpose)).toEqual(['discovering', 'verifying', 'discovering']);
+  });
 });
