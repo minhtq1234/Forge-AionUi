@@ -276,9 +276,14 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     expect(JSON.stringify(enUsMessages.toolActivity)).not.toContain('Command finished');
   });
 
+  it('defines the exact English recovery sentence', () => {
+    expect(enUsMessages.toolActivity.status.recovered).toBe('Recovered after retry.');
+  });
+
   it('keeps completed phases visible while the latest phase is running', () => {
     render(
       <MessageToolGroupSummary
+        isActive
         messages={[
           commandStep('completed', 'search-1', 'rg -n needle .'),
           commandStep('in_progress', 'verify-1', 'bun run test tests/unit/chat'),
@@ -293,7 +298,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
 
   it('announces the running action label inside the live region without duplicating it', () => {
     const label = 'messages.toolActivity.categories.verify.running';
-    render(<MessageToolGroupSummary messages={[commandStep('in_progress', 'verify-1', 'bun run test')]} />);
+    render(<MessageToolGroupSummary isActive messages={[commandStep('in_progress', 'verify-1', 'bun run test')]} />);
 
     expect(within(screen.getByRole('status')).getByText(label)).toBeInTheDocument();
     expect(screen.getAllByText(label)).toHaveLength(1);
@@ -353,6 +358,101 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     expect(screen.queryByText(/raw private reasoning/)).not.toBeInTheDocument();
   });
 
+  it('keeps safe trimmed plan narration visible', () => {
+    render(
+      <MessageToolGroupSummary
+        messages={
+          [
+            {
+              id: 'plan-1',
+              conversation_id: 'conv-1',
+              type: 'plan',
+              position: 'left',
+              content: {
+                session_id: 'sess-1',
+                entries: [{ content: '  Reviewing the activity flow  ', status: 'completed' }],
+              },
+            },
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    expect(screen.getByText('Reviewing the activity flow')).toBeInTheDocument();
+  });
+
+  it('replaces unsafe plan narration with one localized fallback row', () => {
+    const unsafeEntries = [
+      'Microcompact local_estimate=1200 token watermark',
+      'bun run test',
+      'Run: git status',
+      '`git diff`',
+      '/Users/test/project/package.json',
+      'C:\\workspace\\project\\package.json',
+      'packages/desktop/src/renderer/App.tsx',
+    ];
+    render(
+      <MessageToolGroupSummary
+        isActive
+        messages={
+          [
+            {
+              id: 'plan-1',
+              conversation_id: 'conv-1',
+              type: 'plan',
+              position: 'left',
+              content: {
+                session_id: 'sess-1',
+                entries: unsafeEntries.map((content, index) => ({
+                  content,
+                  status: index === 0 ? ('completed' as const) : ('in_progress' as const),
+                })),
+              },
+            },
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    expect(screen.getAllByText('messages.toolActivity.generic.done')).toHaveLength(1);
+    expect(screen.getAllByText('messages.toolActivity.generic.running')).toHaveLength(1);
+    unsafeEntries.forEach((entry) => expect(screen.queryByText(entry)).not.toBeInTheDocument());
+  });
+
+  it('rejects command and path shaped thinking subjects without exposing raw content', () => {
+    render(
+      <MessageToolGroupSummary
+        isActive
+        messages={
+          [
+            {
+              id: 'thinking-command',
+              conversation_id: 'conv-1',
+              type: 'thinking',
+              position: 'left',
+              content: { subject: 'Execute: npm test', content: 'raw command reasoning', status: 'thinking' },
+            },
+            {
+              id: 'thinking-path',
+              conversation_id: 'conv-1',
+              type: 'thinking',
+              position: 'left',
+              content: {
+                subject: 'Review packages/desktop/src/renderer/App.tsx',
+                content: 'raw path reasoning',
+                status: 'thinking',
+              },
+            },
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    expect(screen.queryByText(/Execute: npm test/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/packages\/desktop\/src/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/raw .* reasoning/)).not.toBeInTheDocument();
+  });
+
   it('rejects diagnostic thinking subjects', () => {
     render(
       <MessageToolGroupSummary
@@ -400,6 +500,118 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     expect(visibleSubject.textContent).toMatch(/…$/);
   });
 
+  it('truncates long plan narration to 180 characters with an ellipsis', () => {
+    const content = `Reviewing ${'a'.repeat(220)}`;
+    render(
+      <MessageToolGroupSummary
+        messages={
+          [
+            {
+              id: 'plan-1',
+              conversation_id: 'conv-1',
+              type: 'plan',
+              position: 'left',
+              content: { session_id: 'sess-1', entries: [{ content, status: 'completed' }] },
+            },
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    const visibleContent = screen.getByText((text) => text.startsWith('Reviewing'));
+    expect(visibleContent.textContent).toHaveLength(180);
+    expect(visibleContent.textContent).toMatch(/…$/);
+  });
+
+  it('keeps only the final plan, thinking, or tool phase live in an active summary', () => {
+    render(
+      <MessageToolGroupSummary
+        isActive
+        messages={
+          [
+            {
+              id: 'plan-1',
+              conversation_id: 'conv-1',
+              type: 'plan',
+              position: 'left',
+              content: { session_id: 'sess-1', entries: [{ content: 'Planning changes', status: 'in_progress' }] },
+            },
+            {
+              id: 'thinking-1',
+              conversation_id: 'conv-1',
+              type: 'thinking',
+              position: 'left',
+              content: { subject: 'Reviewing options', content: 'private detail', status: 'thinking' },
+            },
+            commandStep('in_progress', 'verify-1', 'bun run test'),
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    expect(screen.getByText('Planning changes').closest('[data-status]')).toHaveAttribute('data-status', 'completed');
+    expect(screen.getByText('Reviewing options').closest('[data-status]')).toHaveAttribute('data-status', 'completed');
+    expect(
+      screen.getByText('messages.toolActivity.categories.verify.running').closest('[data-status]')
+    ).toHaveAttribute('data-status', 'running');
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
+
+  it('settles an earlier tool step and uses its done narration when thinking follows it', () => {
+    render(
+      <MessageToolGroupSummary
+        isActive
+        messages={
+          [
+            commandStep('in_progress', 'search-1', 'rg -n needle .'),
+            {
+              id: 'thinking-1',
+              conversation_id: 'conv-1',
+              type: 'thinking',
+              position: 'left',
+              content: { subject: 'Choosing the next change', content: 'private detail', status: 'thinking' },
+            },
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    expect(screen.getByText('messages.toolActivity.categories.search.done')).toBeInTheDocument();
+    expect(screen.queryByText('messages.toolActivity.categories.search.running')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
+
+  it('settles every running row in an inactive summary while preserving pending plans', () => {
+    render(
+      <MessageToolGroupSummary
+        isActive={false}
+        messages={
+          [
+            {
+              id: 'plan-1',
+              conversation_id: 'conv-1',
+              type: 'plan',
+              position: 'left',
+              content: {
+                session_id: 'sess-1',
+                entries: [
+                  { content: 'Queued work', status: 'pending' },
+                  { content: 'Active work', status: 'in_progress' },
+                ],
+              },
+            },
+            commandStep('in_progress', 'verify-1', 'bun run test'),
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    expect(screen.getByText('Queued work').closest('[data-status]')).toHaveAttribute('data-status', 'pending');
+    expect(screen.getByText('Active work').closest('[data-status]')).toHaveAttribute('data-status', 'completed');
+    expect(screen.getByText('messages.toolActivity.categories.verify.done')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
   it('renders plan, thinking, and tool rows in source order', () => {
     render(
       <MessageToolGroupSummary
@@ -438,6 +650,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
   it('maps plan entry statuses to pending, running, and completed rows', () => {
     render(
       <MessageToolGroupSummary
+        isActive
         messages={
           [
             {
@@ -449,8 +662,8 @@ describe('MessageToolGroupSummary plain-language activity', () => {
                 session_id: 'sess-1',
                 entries: [
                   { content: 'Queued work', status: 'pending' },
-                  { content: 'Active work', status: 'in_progress' },
                   { content: 'Finished work', status: 'completed' },
+                  { content: 'Active work', status: 'in_progress' },
                 ],
               },
             },
@@ -491,11 +704,21 @@ describe('MessageToolGroupSummary plain-language activity', () => {
   it('coalesces consecutive retries into one live line with an attempt count', () => {
     render(
       <MessageToolGroupSummary
+        isActive
         messages={[acpStep('failed', 't1'), acpStep('failed', 't2'), acpStep('in_progress', 't3')]}
       />
     );
     expect(screen.getByText(/messages\.toolActivity\.tools\.render_report\.running/)).toBeInTheDocument();
     expect(screen.getByText(/messages\.toolActivity\.attempt/)).toBeInTheDocument();
+  });
+
+  it('renders a merged completed retry with recovery narration', () => {
+    render(<MessageToolGroupSummary messages={[acpStep('failed', 't1'), acpStep('completed', 't2')]} />);
+
+    expect(
+      screen.getByText('messages.toolActivity.tools.render_report.done messages.toolActivity.status.recovered')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('messages.toolActivity.tools.render_report.failedTitle')).not.toBeInTheDocument();
   });
 
   it('renders a friendly error card for a final give-up', () => {

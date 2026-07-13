@@ -70,6 +70,7 @@
     "empty": "No response to copy yet"
   },
   "toolActivity": {
+    "status": { "recovered": "Відновлено після повторної спроби." },
     "categories": {
       "verify": {
         "running": "Перевіряю зміни, щоб переконатися, що все й надалі працює.",

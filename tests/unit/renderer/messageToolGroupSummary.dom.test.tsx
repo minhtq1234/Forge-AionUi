@@ -6,6 +6,29 @@ import type { TMessage } from '@/common/chat/chatLib';
 import type { ToolMessage } from '@/common/chat/normalizeToolCall';
 import MessageToolGroupSummary from '@/renderer/pages/conversation/Messages/components/MessageToolGroupSummary';
 
+const mockDownloadFileFromPath = vi.fn().mockResolvedValue(undefined);
+const mockMessageSuccess = vi.fn();
+const mockMessageError = vi.fn();
+
+vi.mock('@arco-design/web-react', async () => {
+  const actual = await vi.importActual<typeof import('@arco-design/web-react')>('@arco-design/web-react');
+  return {
+    ...actual,
+    Message: {
+      useMessage: () => [{ success: mockMessageSuccess, error: mockMessageError }, null],
+    },
+  };
+});
+
+vi.mock('@/renderer/components/media/LocalImageView', () => ({
+  __esModule: true,
+  default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} data-testid='local-image' />,
+}));
+
+vi.mock('@/renderer/utils/file/download', () => ({
+  downloadFileFromPath: (...args: unknown[]) => mockDownloadFileFromPath(...args),
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
@@ -133,6 +156,37 @@ describe('MessageToolGroupSummary', () => {
       });
     });
     expect(await screen.findByText('full output')).toBeInTheDocument();
+  });
+
+  it('renders and downloads an image path supplied only by the lazy-loaded full item', async () => {
+    const imagePath = '/Users/test/.codex/generated_images/session/lazy-image.png';
+    const invoke = vi.mocked(ipcBridge.database.getConversationMessage.invoke);
+    invoke.mockReset();
+    invoke.mockResolvedValue({
+      id: 'message-1',
+      conversation_id: 'conversation-1',
+      type: 'acp_tool_call',
+      content: {
+        update: {
+          session_update: 'tool_call',
+          tool_call_id: 'tool-1',
+          status: 'completed',
+          title: 'rg',
+          kind: 'search',
+          raw_output: { image: { path: imagePath } },
+        },
+      },
+    } as unknown as TMessage);
+
+    render(<MessageToolGroupSummary messages={[truncatedAcpMessage('completed', 'preview')]} />);
+    fireEvent.click(screen.getByText('common.technical_details'));
+    fireEvent.click(screen.getByText('rg'));
+
+    const image = await screen.findByTestId('local-image');
+    expect(image).toHaveAttribute('src', imagePath);
+    expect(image).toHaveAttribute('alt', 'lazy-image.png');
+    fireEvent.click(screen.getByLabelText('acp.image.download_aria'));
+    await waitFor(() => expect(mockDownloadFileFromPath).toHaveBeenCalledWith(imagePath, 'lazy-image.png'));
   });
 
   it.each([

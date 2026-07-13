@@ -68,6 +68,7 @@
     "no": "아니요 (esc)"
   },
   "toolActivity": {
+    "status": { "recovered": "재시도 후 복구되었습니다." },
     "categories": {
       "verify": {
         "running": "변경 후에도 모든 기능이 정상적으로 작동하는지 확인하고 있습니다.",

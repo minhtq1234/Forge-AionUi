@@ -68,6 +68,7 @@
     "no": "Nein (Esc)"
   },
   "toolActivity": {
+    "status": { "recovered": "Nach erneutem Versuch wiederhergestellt." },
     "categories": {
       "verify": {
         "running": "Ich prüfe die Änderungen, damit weiterhin alles funktioniert.",

@@ -74,7 +74,7 @@
       "done": "Completed the next step.",
       "failedTitle": "I couldn't complete this step"
     },
-    "status": { "stopped": "Stopped" },
+    "status": { "stopped": "Stopped", "recovered": "Recovered after retry." },
     "error": {
       "suggestion": "The error details are available below. You can try this step again when you're ready."
     },

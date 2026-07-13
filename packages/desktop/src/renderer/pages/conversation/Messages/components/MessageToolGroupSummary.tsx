@@ -36,7 +36,7 @@ const statusToBadge = (status: NormalizedToolStatus): BadgeProps['status'] => {
 };
 
 type JournalRow =
-  | { key: string; kind: 'narration'; label: string; status: NormalizedToolStatus }
+  | { key: string; kind: 'narration'; label: string; status: NormalizedToolStatus; isFallback?: boolean }
   | { key: string; kind: 'tool'; step: CoalescedStep; status: NormalizedToolStatus };
 
 const planStatus: Record<'pending' | 'in_progress' | 'completed', NormalizedToolStatus> = {
@@ -45,21 +45,58 @@ const planStatus: Record<'pending' | 'in_progress' | 'completed', NormalizedTool
   completed: 'completed',
 };
 
-const THINKING_SUBJECT_MAX_LENGTH = 180;
+const PROVIDER_NARRATION_MAX_LENGTH = 180;
+const SHELL_COMMAND =
+  '(?:bun|npm|pnpm|yarn|git|rg|grep|find|cat|sed|node|python|cargo|go|mvn|gradle|just|make|curl|wget|rm|mv|cp|mkdir)';
+const SHELL_COMMAND_START = new RegExp(`^${SHELL_COMMAND}(?:\\s|$)`, 'i');
+const LABELED_SHELL_COMMAND = new RegExp(`^(?:command|execute|run):\\s*${SHELL_COMMAND}(?:\\s|$)`, 'i');
+const DIAGNOSTIC_NARRATION = /\b(?:local_estimate|token\s+watermark|microcompact)\b/i;
+const ABSOLUTE_UNIX_PATH = /(?:^|\s)\/(?:[^/\s]+\/)*[^/\s]+/;
+const ABSOLUTE_WINDOWS_PATH = /(?:^|\s)(?:[a-z]:[\\/]|\\\\)[^\s]+/i;
+const REPOSITORY_PATH = /(?:^|\s)(?:\.{1,2}[\\/])?(?:[\w@.-]+[\\/]){2,}[\w@.-]+/;
+
+const getSafeProviderNarration = (value: string | undefined): string | undefined => {
+  const narration = value?.trim();
+  if (
+    !narration ||
+    isDiagnosticTelemetryText(narration) ||
+    DIAGNOSTIC_NARRATION.test(narration) ||
+    /`/.test(narration) ||
+    SHELL_COMMAND_START.test(narration) ||
+    LABELED_SHELL_COMMAND.test(narration) ||
+    ABSOLUTE_UNIX_PATH.test(narration) ||
+    ABSOLUTE_WINDOWS_PATH.test(narration) ||
+    REPOSITORY_PATH.test(narration)
+  ) {
+    return undefined;
+  }
+  if (narration.length <= PROVIDER_NARRATION_MAX_LENGTH) return narration;
+  return `${narration.slice(0, PROVIDER_NARRATION_MAX_LENGTH - 1)}…`;
+};
 
 const isToolMessage = (message: WorkJournalSourceMessage): message is ToolMessage =>
   message.type === 'tool_group' || message.type === 'acp_tool_call' || message.type === 'tool_call';
 
-const getThinkingSubject = (message: Extract<WorkJournalSourceMessage, { type: 'thinking' }>): string | undefined => {
-  const subject = message.content.subject?.trim();
-  if (!subject || isDiagnosticTelemetryText(subject)) return undefined;
-  if (subject.length <= THINKING_SUBJECT_MAX_LENGTH) return subject;
-  return `${subject.slice(0, THINKING_SUBJECT_MAX_LENGTH - 1)}…`;
-};
-
-const buildJournalRows = (messages: WorkJournalSourceMessage[]): JournalRow[] => {
+const buildJournalRows = (
+  messages: WorkJournalSourceMessage[],
+  planFallback: { running: string; done: string }
+): JournalRow[] => {
   const rows: JournalRow[] = [];
   let bufferedTools: ToolMessage[] = [];
+
+  const pushNarration = (row: Extract<JournalRow, { kind: 'narration' }>) => {
+    const previous = rows[rows.length - 1];
+    if (
+      row.isFallback &&
+      previous?.kind === 'narration' &&
+      previous.isFallback &&
+      previous.label === row.label &&
+      previous.status === row.status
+    ) {
+      return;
+    }
+    rows.push(row);
+  };
 
   const flushTools = () => {
     for (const step of coalesceToolCalls(normalizeToolMessages(bufferedTools))) {
@@ -77,19 +114,22 @@ const buildJournalRows = (messages: WorkJournalSourceMessage[]): JournalRow[] =>
     flushTools();
     if (message.type === 'plan') {
       message.content.entries.forEach((entry, index) => {
-        rows.push({
+        const status = planStatus[entry.status];
+        const narration = getSafeProviderNarration(entry.content);
+        pushNarration({
           key: `plan-${message.id}-${index}`,
           kind: 'narration',
-          label: entry.content,
-          status: planStatus[entry.status],
+          label: narration ?? (status === 'completed' ? planFallback.done : planFallback.running),
+          status,
+          isFallback: narration === undefined,
         });
       });
       continue;
     }
 
-    const subject = getThinkingSubject(message);
+    const subject = getSafeProviderNarration(message.content.subject);
     if (subject) {
-      rows.push({
+      pushNarration({
         key: `thinking-${message.id}`,
         kind: 'narration',
         label: subject,
@@ -100,6 +140,26 @@ const buildJournalRows = (messages: WorkJournalSourceMessage[]): JournalRow[] =>
 
   flushTools();
   return rows;
+};
+
+const settleJournalRows = (rows: JournalRow[], isActive: boolean): JournalRow[] => {
+  let activeRowIndex = -1;
+  if (isActive) {
+    for (let index = rows.length - 1; index >= 0; index--) {
+      if (rows[index].status !== 'pending') {
+        activeRowIndex = index;
+        break;
+      }
+    }
+  }
+
+  return rows.map((row, index) => {
+    if (row.status !== 'running' || index === activeRowIndex) return row;
+    if (row.kind === 'tool') {
+      return { ...row, status: 'completed', step: { ...row.step, status: 'completed' } };
+    }
+    return { ...row, status: 'completed' };
+  });
 };
 
 type LoadedToolItem = {
@@ -132,9 +192,10 @@ const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
   const activeRequestVersionRef = useRef<string | undefined>(undefined);
   latestItemVersionRef.current = itemVersion;
   const displayItem = fullItem?.sourceVersion === itemVersion ? fullItem.item : item;
+  const imagePath = displayItem.imagePath;
   const loadingFull = loadingVersion === itemVersion;
   const loadError = loadErrorVersion === itemVersion;
-  const hasDetail = displayItem.input || displayItem.output || item.truncated || item.imagePath;
+  const hasDetail = displayItem.input || displayItem.output || item.truncated || imagePath;
   const [messageApi, messageContext] = Message.useMessage();
   const handleDownloadImage = useCallback(
     async (path: string) => {
@@ -238,11 +299,11 @@ const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
           )}
         </div>
       )}
-      {item.imagePath && (
+      {imagePath && (
         <div className='group relative m-l-20px m-t-8px overflow-hidden rounded border bg-1 p-2 max-w-280px'>
           <LocalImageView
-            src={item.imagePath}
-            alt={getAcpImageFileName(item.imagePath)}
+            src={imagePath}
+            alt={getAcpImageFileName(imagePath)}
             className='max-w-full max-h-320px object-contain rounded'
           />
           <Tooltip content={t('acp.image.download')}>
@@ -253,7 +314,7 @@ const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
               size='mini'
               shape='circle'
               icon={<Download theme='outline' size='14' />}
-              onClick={() => void handleDownloadImage(item.imagePath)}
+              onClick={() => void handleDownloadImage(imagePath)}
             />
           </Tooltip>
         </div>
@@ -303,12 +364,23 @@ const StepRow: React.FC<{ label: string; status: Exclude<NormalizedToolStatus, '
   );
 };
 
-const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[] }> = ({ messages }) => {
+const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[]; isActive?: boolean }> = ({
+  messages,
+  isActive = false,
+}) => {
   const { t } = useTranslation();
   const action = useToolActionText();
   const toolMessages = useMemo(() => messages.filter(isToolMessage), [messages]);
   const tools = useMemo(() => normalizeToolMessages(toolMessages), [toolMessages]);
-  const rows = useMemo(() => buildJournalRows(messages), [messages]);
+  const sourceRows = useMemo(
+    () =>
+      buildJournalRows(messages, {
+        running: t('messages.toolActivity.generic.running'),
+        done: t('messages.toolActivity.generic.done'),
+      }),
+    [messages, t]
+  );
+  const rows = useMemo(() => settleJournalRows(sourceRows, isActive), [isActive, sourceRows]);
   const [showDetails, setShowDetails] = useState(false);
 
   if (rows.length === 0 && tools.length === 0) return null;

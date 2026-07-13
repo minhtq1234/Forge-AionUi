@@ -1114,6 +1114,7 @@ export type I18nKey =
   | 'messages.toolActivity.generic.done'
   | 'messages.toolActivity.generic.failedTitle'
   | 'messages.toolActivity.generic.running'
+  | 'messages.toolActivity.status.recovered'
   | 'messages.toolActivity.status.stopped'
   | 'messages.toolActivity.tools.data_get_schema.done'
   | 'messages.toolActivity.tools.data_get_schema.failedTitle'

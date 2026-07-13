@@ -28,6 +28,9 @@ export const useToolActionText = () => {
         if (step.status === 'canceled') return t('messages.toolActivity.status.stopped');
         const form: Form = step.status === 'completed' ? 'done' : 'running';
         const base = resolveForm(step, form);
+        if (step.status === 'completed' && step.hadError) {
+          return `${base} ${t('messages.toolActivity.status.recovered')}`;
+        }
         if (step.attempts > 1 && step.status === 'running') {
           return `${base} ${t('messages.toolActivity.attempt', { n: step.attempts })}`;
         }

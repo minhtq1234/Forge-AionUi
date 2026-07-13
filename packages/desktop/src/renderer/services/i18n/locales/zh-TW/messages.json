@@ -68,6 +68,7 @@
     "no": "否 (esc)"
   },
   "toolActivity": {
+    "status": { "recovered": "重試後已恢復。" },
     "categories": {
       "verify": {
         "running": "我正在檢查這些變更，確保一切仍正常運作。",

@@ -68,6 +68,7 @@
     "no": "いいえ (esc)"
   },
   "toolActivity": {
+    "status": { "recovered": "再試行後に復旧しました。" },
     "categories": {
       "verify": {
         "running": "変更後も正常に動作するか確認しています。",

@@ -129,8 +129,10 @@ vi.mock('@/renderer/pages/conversation/Messages/components/MessageSkillSuggest',
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/components/MessageToolGroupSummary', () => ({
-  default: ({ messages }: { messages: WorkJournalSourceMessage[] }) => (
-    <div data-testid='work-summary'>{messages.map((message) => message.type).join(',')}</div>
+  default: ({ messages, isActive }: { messages: WorkJournalSourceMessage[]; isActive: boolean }) => (
+    <div data-testid='work-summary' data-active={String(isActive)}>
+      {messages.map((message) => message.type).join(',')}
+    </div>
   ),
 }));
 
@@ -358,6 +360,73 @@ describe('MessageList', () => {
     expect(screen.queryByText(/^plan$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^thinking$/)).not.toBeInTheDocument();
     expect(screen.getByText('Finished')).toBeInTheDocument();
+  });
+
+  it('marks only the trailing work summary active while processing', () => {
+    mockIsProcessing = true;
+    const messages = [
+      {
+        id: 'tool-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'in_progress' },
+        created_at: 1,
+      },
+      { id: 'answer-1', type: 'text', position: 'left', content: { content: 'First result' }, created_at: 2 },
+      {
+        id: 'tool-2',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-2', name: 'Write', status: 'in_progress' },
+        created_at: 3,
+      },
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    const summaries = screen.getAllByTestId('work-summary');
+    expect(summaries[0]).toHaveAttribute('data-active', 'false');
+    expect(summaries[1]).toHaveAttribute('data-active', 'true');
+  });
+
+  it('settles a trailing work summary when processing stops', () => {
+    const messages = [
+      {
+        id: 'tool-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'in_progress' },
+        created_at: 1,
+      },
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    expect(screen.getByTestId('work-summary')).toHaveAttribute('data-active', 'false');
+  });
+
+  it('settles a work summary followed by final assistant text while processing', () => {
+    mockIsProcessing = true;
+    const messages = [
+      {
+        id: 'tool-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'in_progress' },
+        created_at: 1,
+      },
+      { id: 'answer-1', type: 'text', position: 'left', content: { content: 'Finished' }, created_at: 2 },
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    expect(screen.getByTestId('work-summary')).toHaveAttribute('data-active', 'false');
   });
 
   it('jumps a later work-summary source to the summary anchor', () => {

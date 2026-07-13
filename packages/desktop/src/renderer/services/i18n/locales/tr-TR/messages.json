@@ -68,6 +68,7 @@
     "no": "Hayır (esc)"
   },
   "toolActivity": {
+    "status": { "recovered": "Yeniden denemenin ardından kurtarıldı." },
     "categories": {
       "verify": {
         "running": "Her şeyin çalışmaya devam ettiğinden emin olmak için değişiklikleri kontrol ediyorum.",

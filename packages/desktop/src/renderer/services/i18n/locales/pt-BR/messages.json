@@ -68,6 +68,7 @@
     "no": "Não (esc)"
   },
   "toolActivity": {
+    "status": { "recovered": "Recuperado após nova tentativa." },
     "categories": {
       "verify": {
         "running": "Estou verificando as alterações para garantir que tudo continue funcionando.",

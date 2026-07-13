@@ -400,6 +400,16 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
     );
   }, [artifacts, list]);
 
+  const activeWorkSummaryId = useMemo(() => {
+    if (!isProcessing) return undefined;
+    for (let index = processedList.length - 1; index >= 0; index--) {
+      const item = processedList[index];
+      if (item.type === 'artifact') continue;
+      return item.type === 'work_summary' ? item.id : undefined;
+    }
+    return undefined;
+  }, [isProcessing, processedList]);
+
   // An AI reply can be split into several messages (thinking / multiple text /
   // tool blocks). The hover copy + timestamp row should appear once per turn,
   // after the turn's last text — not under every intermediate text block.
@@ -651,7 +661,9 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
           style={highlighted ? highlightStyle : undefined}
         >
           {item.type === 'file_summary' && <MessageFileChanges diffsChanges={item.diffs} />}
-          {item.type === 'work_summary' && <MessageToolGroupSummary messages={item.messages} />}
+          {item.type === 'work_summary' && (
+            <MessageToolGroupSummary messages={item.messages} isActive={item.id === activeWorkSummaryId} />
+          )}
         </div>
       );
     }

@@ -68,6 +68,7 @@
   "atFile.menuLabel": "Упоминания файлов",
   "atFile.loading": "Загрузка...",
   "toolActivity": {
+    "status": { "recovered": "Восстановлено после повторной попытки." },
     "categories": {
       "verify": {
         "running": "Проверяю изменения, чтобы убедиться, что всё по-прежнему работает.",
