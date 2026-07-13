@@ -509,6 +509,9 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       'Checking request ID validation',
       'Understand the current implementation before making changes',
       'We will review the implementation before changing it',
+      'Find the relevant project files',
+      'Test the changes to confirm behavior',
+      'Echo the result to the user',
     ];
     render(
       <MessageToolGroupSummary

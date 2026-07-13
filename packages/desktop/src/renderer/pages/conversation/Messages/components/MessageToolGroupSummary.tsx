@@ -55,9 +55,8 @@ const planStatus: Record<'pending' | 'in_progress' | 'completed', NormalizedTool
 const PROVIDER_NARRATION_MAX_LENGTH = 180;
 const SHELL_COMMAND =
   '(?:aws|az|bash|bunx?|cat|cargo|cmake|cmd|cp|curl|deno|docker|dotnet|echo|env|fd|find|fish|gcloud|gh|git|go|gradle|grep|helm|java|jq|just|kubectl|make|mkdir|mv|mvn|node|npm|npx|perl|pip3?|pnpm|podman|powershell|pwd|pwsh|pytest|python(?:3(?:\\.\\d+)?)?|rg|rm|ruby|sed|sh|sudo|swift|terraform|test|vitest|wget|xcodebuild|yarn|yq|zsh)';
-const SHELL_COMMAND_START = new RegExp(`^(?:(?:sudo|env)\\s+)?${SHELL_COMMAND}(?:\\s|$)`, 'i');
 const LABELED_SHELL_COMMAND = new RegExp(
-  `^(?:command|execute|run|running)\\s*:?\\s+(?:(?:sudo|env)\\s+)?${SHELL_COMMAND}(?:\\s|$)`,
+  `^(?:checking|command|execute|executing|run|running|testing)\\s*:?\\s+(?:(?:sudo|env)\\s+)?${SHELL_COMMAND}(?:\\s|$)`,
   'i'
 );
 const DIAGNOSTIC_NARRATION = /\b(?:local_estimate|token\s+watermark|microcompact)\b/i;
@@ -69,10 +68,10 @@ const ROOTED_PATH =
 const NESTED_PATH = /(?:^|\s)(?:[\w@.-]+[\\/]){2,}[\w@.-]+|(?:^|\s)[\w@.-]+[\\/][\w@.-]+\.[a-z0-9]{1,10}\b/i;
 const NATURAL_SLASH_PHRASE = /\b(?:and\/or|input\/output|read\/write|ui\/ux)\b/gi;
 const NATURAL_NARRATION_START =
-  /^(?:i(?:'m| am| will|'ll)|we(?:'re| are| will|'ll)|first|next|then|now|finally|active|queued|finished|completed|pending|add(?:ing)?|analyz(?:e|ing)|apply(?:ing)?|build(?:ing)?|check(?:ing)?|choos(?:e|ing)|compar(?:e|ing)|complet(?:e|ing)|creat(?:e|ing)|decid(?:e|ing)|explor(?:e|ing)|find(?:ing)?|finish(?:ing)?|fix(?:ing)?|generat(?:e|ing)|identif(?:y|ying)|implement(?:ing)?|inspect(?:ing)?|investigat(?:e|ing)|keep(?:ing)?|load(?:ing)?|locat(?:e|ing)|open(?:ing)?|plan(?:ning)?|prepar(?:e|ing)|read(?:ing)?|review(?:ing)?|run(?:ning)?|search(?:ing)?|settle|settling|summariz(?:e|ing)|test(?:ing)?|trac(?:e|ing)|understand(?:ing)?|updat(?:e|ing)|validat(?:e|ing)|verif(?:y|ying)|writ(?:e|ing))\b/i;
+  /^(?:i(?:'m| am| will|'ll)|we(?:'re| are| will|'ll)|first|next|then|now|finally|active|queued|finished|completed|pending|add(?:ing)?|analyz(?:e|ing)|apply(?:ing)?|build(?:ing)?|check(?:ing)?|choos(?:e|ing)|compar(?:e|ing)|complet(?:e|ing)|creat(?:e|ing)|decid(?:e|ing)|echo(?:ing)?|explor(?:e|ing)|find(?:ing)?|finish(?:ing)?|fix(?:ing)?|generat(?:e|ing)|identif(?:y|ying)|implement(?:ing)?|inspect(?:ing)?|investigat(?:e|ing)|keep(?:ing)?|load(?:ing)?|locat(?:e|ing)|open(?:ing)?|plan(?:ning)?|prepar(?:e|ing)|read(?:ing)?|review(?:ing)?|run(?:ning)?|search(?:ing)?|settle|settling|summariz(?:e|ing)|test(?:ing)?|trac(?:e|ing)|understand(?:ing)?|updat(?:e|ing)|validat(?:e|ing)|verif(?:y|ying)|writ(?:e|ing))\b/i;
+const AMBIGUOUS_COMMAND_NARRATION_START = /^(?:build|echo|find|run|test)\b/i;
 const NATURAL_SENTENCE_CONNECTOR = /\b(?:a|an|and|after|before|for|the|to|while|with|without)\b/i;
 const UNSAFE_PROVIDER_NARRATION = [
-  SHELL_COMMAND_START,
   LABELED_SHELL_COMMAND,
   /[\r\n`]|~~~|&&|\|\||[|;<>]|(?:^|\s)&(?:\s|$)|\$\(|\$\{/,
   /\b(?:https?|file|ftp):|(?:^|\s)www\./i,
@@ -96,7 +95,10 @@ const isSentenceLikeNarration = (narration: string): boolean => {
 
   const words = narration.match(/\p{L}[\p{L}\p{N}'’-]*/gu) ?? [];
   if (words.length < 2) return false;
-  return NATURAL_NARRATION_START.test(narration) || (words.length >= 5 && NATURAL_SENTENCE_CONNECTOR.test(narration));
+  const hasNaturalStart = NATURAL_NARRATION_START.test(narration);
+  const hasSentenceStructure = words.length >= 5 && NATURAL_SENTENCE_CONNECTOR.test(narration);
+  if (AMBIGUOUS_COMMAND_NARRATION_START.test(narration)) return hasNaturalStart && hasSentenceStructure;
+  return hasNaturalStart || hasSentenceStructure;
 };
 
 const getSafeProviderNarration = (value: string | undefined): string | undefined => {
