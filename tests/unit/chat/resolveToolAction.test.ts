@@ -106,6 +106,49 @@ describe('resolveToolAction', () => {
   ] as const)('ignores verifier-like segments after escaped operators for %s', (detail, category, purpose) => {
     expect(resolveToolAction('exec_command', 'execute', detail)).toEqual({ category, purpose });
   });
+  it.each([
+    ["printf $'status\\'; vitest'", 'code', 'running'],
+    ['echo ready # note; cargo check', 'code', 'running'],
+    ['printf ${value:-status|vitest}', 'code', 'running'],
+    ['printf $(echo status | vitest)', 'code', 'running'],
+  ] as const)('keeps verifier-like text inside protected shell syntax for %s', (detail, category, purpose) => {
+    expect(resolveToolAction('exec_command', 'execute', detail)).toEqual({ category, purpose });
+  });
+  it('removes line continuations before matching verifier commands', () => {
+    expect(resolveToolAction('exec_command', 'execute', 'cd packages && \\\nbun test')).toEqual({
+      category: 'verify',
+      purpose: 'verifying',
+    });
+    expect(resolveToolAction('exec_command', 'execute', 'cd packages && bun run \\\ntest')).toEqual({
+      category: 'verify',
+      purpose: 'verifying',
+    });
+  });
+  it.each([
+    `printf 'status|vitest' && bun test`,
+    "printf $'status\\'; vitest' && bun test",
+    'printf ${value:-status|vitest} && bun test',
+  ])('finds a real verifier after protected operator text for %s', (detail) => {
+    expect(resolveToolAction('exec_command', 'execute', detail)).toEqual({
+      category: 'verify',
+      purpose: 'verifying',
+    });
+  });
+  it.each(['printf rg', 'printf cat'])(
+    'keeps generic execute detail as code when command arguments name another command: %s',
+    (detail) => {
+      expect(resolveToolAction('Skill', 'execute', detail)).toEqual({ category: 'code', purpose: 'running' });
+    }
+  );
+  it.each([
+    ['rg -n journal tests', 'search', 'discovering'],
+    ['echo ready && find tests -name "*.ts"', 'search', 'discovering'],
+    ['cat package.json', 'fileRead', 'reviewing'],
+    ['echo ready; sed -n "1,20p" package.json', 'fileRead', 'reviewing'],
+    ['printf ready | git status', 'fileRead', 'reviewing'],
+  ] as const)('classifies a real segment-start command in %s', (detail, category, purpose) => {
+    expect(resolveToolAction('Skill', 'execute', detail)).toEqual({ category, purpose });
+  });
   it('keeps unknown execution work generic without exposing its command', () => {
     expect(resolveToolAction('exec_command', 'execute', './private-script --secret')).toEqual({
       category: 'code',
