@@ -73,10 +73,38 @@ describe('resolveToolAction', () => {
       category: 'verify',
       purpose: 'verifying',
     });
+    expect(resolveToolAction('exec_command', 'execute', 'echo ready || npm test')).toEqual({
+      category: 'verify',
+      purpose: 'verifying',
+    });
+    expect(resolveToolAction('exec_command', 'execute', 'echo ready; cargo clippy')).toEqual({
+      category: 'verify',
+      purpose: 'verifying',
+    });
     expect(resolveToolAction('exec_command', 'execute', 'cat package.json | cargo check')).toEqual({
       category: 'verify',
       purpose: 'verifying',
     });
+    expect(resolveToolAction('exec_command', 'execute', 'echo ready\nnode scripts/check-i18n.js')).toEqual({
+      category: 'verify',
+      purpose: 'verifying',
+    });
+  });
+  it.each([
+    [`rg -n 'jest|vitest' tests`, 'search', 'discovering'],
+    [`printf 'status|vitest'`, 'code', 'running'],
+    [`echo 'x; cargo check'`, 'code', 'running'],
+    ['printf "status|vitest"', 'code', 'running'],
+    ['printf `status|vitest`', 'code', 'running'],
+  ] as const)('ignores verifier-like segments inside quotes for %s', (detail, category, purpose) => {
+    expect(resolveToolAction('exec_command', 'execute', detail)).toEqual({ category, purpose });
+  });
+  it.each([
+    ['printf status\\|vitest', 'code', 'running'],
+    ['echo x\\; cargo check', 'code', 'running'],
+    ['echo ready\\\nvitest', 'code', 'running'],
+  ] as const)('ignores verifier-like segments after escaped operators for %s', (detail, category, purpose) => {
+    expect(resolveToolAction('exec_command', 'execute', detail)).toEqual({ category, purpose });
   });
   it('keeps unknown execution work generic without exposing its command', () => {
     expect(resolveToolAction('exec_command', 'execute', './private-script --secret')).toEqual({

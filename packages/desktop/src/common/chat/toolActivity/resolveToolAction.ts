@@ -44,8 +44,62 @@ const SEARCH_DETAIL_PATTERN = /(?:^|[\s;&|])(rg|grep|find|fd|ls)(?:\s|$)/i;
 const GENERIC_SEARCH_DETAIL_PATTERN = /(?:^|[\s;&|])(rg|grep|find|fd)(?:\s|$)/i;
 const READ_DETAIL_PATTERN = /(?:^|[\s;&|])(cat|head|tail)(?:\s|$)|\bsed\s+-n\b|\bgit\s+(status|diff|log)\b/i;
 
+type ShellQuote = "'" | '"' | '`';
+
+const isShellQuote = (value: string): value is ShellQuote => value === "'" || value === '"' || value === '`';
+
+const splitShellSegments = (detail: string): string[] => {
+  const segments: string[] = [];
+  let segment = '';
+  let quote: ShellQuote | undefined;
+  let escaped = false;
+
+  const pushSegment = (): void => {
+    const trimmed = segment.trim();
+    if (trimmed) segments.push(trimmed);
+    segment = '';
+  };
+
+  for (let index = 0; index < detail.length; index += 1) {
+    const character = detail[index];
+    if (escaped) {
+      segment += character;
+      escaped = false;
+      continue;
+    }
+    if (character === '\\' && quote !== "'") {
+      segment += character;
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      segment += character;
+      if (character === quote) quote = undefined;
+      continue;
+    }
+    if (isShellQuote(character)) {
+      segment += character;
+      quote = character;
+      continue;
+    }
+
+    const nextCharacter = detail[index + 1];
+    const isDoubleSeparator =
+      (character === '&' && nextCharacter === '&') || (character === '|' && nextCharacter === '|');
+    if (isDoubleSeparator || character === '|' || character === ';' || character === '\n') {
+      pushSegment();
+      if (isDoubleSeparator) index += 1;
+      continue;
+    }
+    segment += character;
+  }
+
+  pushSegment();
+  return segments;
+};
+
 const hasVerificationCommand = (detail: string): boolean =>
-  detail.split(/&&|\|\||[;|\n]/).some((segment) => VERIFY_COMMAND_PATTERN.test(segment.trim()));
+  splitShellSegments(detail).some((segment) => VERIFY_COMMAND_PATTERN.test(segment));
 
 const KIND_CATEGORIES: Record<string, ToolCategory> = {
   read: 'fileRead',
