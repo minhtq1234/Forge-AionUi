@@ -8,6 +8,7 @@ import { ipcBridge } from '@/common';
 import type { AgentStreamErrorInfo, IMessageText, IMessageTips, TMessage } from '@/common/chat/chatLib';
 import {
   composeMessage,
+  isDiagnosticTelemetryTip,
   mergeAcpToolCallContent,
   mergeTextMessageContent,
   normalizeAgentStreamError,
@@ -606,8 +607,7 @@ const classifyPersistedSendFailure = (
   return undefined;
 };
 
-const normalizeDbTipsMessage = (msg: TMessage): TMessage => {
-  if (msg.type !== 'tips') return msg;
+const normalizeDbTipsMessage = (msg: IMessageTips): IMessageTips => {
   const parsed = parseJsonRecord(msg.content);
   if (!parsed || typeof parsed.content !== 'string') return msg;
 
@@ -648,14 +648,17 @@ const normalizeDbTipsMessage = (msg: TMessage): TMessage => {
       ...(tipType !== 'error' && params ? { params } : {}),
       ...(structuredError ? { error: structuredError } : {}),
     },
-  } as IMessageTips;
+  };
 };
 
 /**
  * Normalize a message loaded from backend DB into renderer runtime shape.
  */
 export function normalizeDbMessage(msg: TMessage): TMessage {
-  if (msg.type === 'tips') return normalizeDbTipsMessage(msg);
+  if (msg.type === 'tips') {
+    const normalized = normalizeDbTipsMessage(msg);
+    return isDiagnosticTelemetryTip(normalized.content.content) ? { ...normalized, hidden: true } : normalized;
+  }
   if (msg.type !== 'text') return msg;
 
   return {

@@ -653,7 +653,7 @@ export const extractDiagnosticTokenEstimate = (content: unknown): number | null 
   return parsePositiveInteger(/\blocal_estimate=(\d+)\b/i.exec(content)?.[1]);
 };
 
-const isDiagnosticTelemetryTip = (content: unknown): boolean =>
+export const isDiagnosticTelemetryTip = (content: unknown): boolean =>
   typeof content === 'string' &&
   (extractDiagnosticTokenEstimate(content) !== null ||
     DIAGNOSTIC_TELEMETRY_PATTERNS.some((pattern) => pattern.test(content)));

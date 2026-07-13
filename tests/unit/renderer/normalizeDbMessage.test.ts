@@ -9,6 +9,38 @@ import { normalizeDbMessage } from '@/renderer/pages/conversation/Messages/hooks
 import type { IMessageText, IMessageTips } from '@/common/chat/chatLib';
 
 describe('normalizeDbMessage', () => {
+  it.each([
+    'Token watermark override: provider=0, local_estimate=20946, using=20946',
+    'Microcompact: cleared 6 tool results (~54 tokens freed)',
+  ])('hides persisted internal telemetry tips: %s', (content) => {
+    const normalized = normalizeDbMessage({
+      id: 'tip-diagnostic',
+      type: 'tips',
+      conversation_id: 'conversation-1',
+      position: 'center',
+      status: 'finish',
+      content: JSON.stringify({ content, type: 'success' }),
+    } as unknown as IMessageTips);
+
+    expect(normalized.hidden).toBe(true);
+  });
+
+  it('keeps ordinary persisted tips visible when they mention diagnostic terminology', () => {
+    const normalized = normalizeDbMessage({
+      id: 'tip-ordinary',
+      type: 'tips',
+      conversation_id: 'conversation-1',
+      position: 'center',
+      status: 'finish',
+      content: JSON.stringify({
+        content: 'Compare Microcompact with compact behavior in the project fixture.',
+        type: 'info',
+      }),
+    } as unknown as IMessageTips);
+
+    expect(normalized.hidden).not.toBe(true);
+  });
+
   it('keeps persisted info tip localization metadata from db content', () => {
     const normalized = normalizeDbMessage({
       id: 'tip-info',
