@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { IMessageAcpToolCall, IMessageToolCall } from '@/common/chat/chatLib';
+import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup } from '@/common/chat/chatLib';
 import { normalizeAcpToolCall, normalizeToolCall, normalizeToolMessages } from '@/common/chat/normalizeToolCall';
 import { describe, expect, it } from 'vitest';
 
@@ -47,6 +47,52 @@ describe('normalizeAcpToolCall', () => {
     };
 
     expect(normalizeAcpToolCall(message)).toBeUndefined();
+  });
+
+  it('keeps ACP execute commands containing diagnostic-like text', () => {
+    const command = `printf 'Microcompact: local_estimate=42\\n'`;
+    const message: IMessageAcpToolCall = {
+      id: 'acp-execute-1',
+      conversation_id: 'conv-1',
+      type: 'acp_tool_call',
+      content: {
+        sessionId: 'sess-1',
+        update: {
+          sessionUpdate: 'tool_call_update',
+          tool_call_id: 'acp-execute-1',
+          status: 'completed',
+          title: 'Execute',
+          kind: 'execute',
+          rawInput: { command },
+        },
+      },
+    };
+
+    expect(normalizeToolMessages([message])).toMatchObject([{ name: 'Execute', description: command }]);
+  });
+
+  it('keeps grouped execute commands containing diagnostic-like text', () => {
+    const command = `printf 'Microcompact: local_estimate=42\\n'`;
+    const message: IMessageToolGroup = {
+      type: 'tool_group',
+      content: [
+        {
+          call_id: 'group-execute-1',
+          name: 'Shell',
+          description: 'Run shell command',
+          render_output_as_markdown: false,
+          status: 'Success',
+          confirmationDetails: {
+            type: 'exec',
+            title: 'Execute',
+            rootCommand: 'printf',
+            command,
+          },
+        },
+      ],
+    };
+
+    expect(normalizeToolMessages([message])).toMatchObject([{ name: 'Shell', description: command }]);
   });
 
   it('preserves generated image paths for grouped tool summaries', () => {
@@ -109,6 +155,17 @@ describe('normalizeAcpToolCall', () => {
 
     expect(output).toEqual(expect.stringContaining('"result_omitted_reason": "image_base64"'));
     expect(output).not.toContain(inlineImage);
+  });
+
+  it('omits short inline image data from normalized text and keeps its image path', () => {
+    const inlineImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
+    const imagePath = '/tmp/short-preview.png';
+    const normalized = normalizeAcpToolCall(acpToolCall({ rawOutput: { result: inlineImage, saved_path: imagePath } }));
+
+    expect(normalized?.output).toEqual(expect.stringContaining('"result_omitted_reason": "image_base64"'));
+    expect(normalized?.output).toEqual(expect.stringContaining(`"saved_path": "${imagePath}"`));
+    expect(normalized?.output).not.toContain(inlineImage);
+    expect(normalized?.imagePath).toBe(imagePath);
   });
 });
 

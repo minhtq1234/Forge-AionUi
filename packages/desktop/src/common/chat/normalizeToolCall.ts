@@ -1,3 +1,4 @@
+import type { AcpRawOutput } from '@/common/types/platform/acpTypes';
 import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup } from './chatLib';
 import { getAcpImagePath, sanitizeAcpToolUpdate } from './acpToolCallOutput';
 
@@ -26,6 +27,25 @@ const formatValue = (value: unknown): string => {
   }
 };
 
+const isInlineImageResult = (value: string): boolean =>
+  value.startsWith('iVBORw0KGgo') ||
+  value.startsWith('/9j/') ||
+  value.startsWith('UklGR') ||
+  value.toLowerCase().startsWith('data:image/');
+
+const omitInlineImageResultFromText = (rawOutput: AcpRawOutput): AcpRawOutput => {
+  const result = rawOutput.result;
+  if (typeof result !== 'string' || !isInlineImageResult(result)) return rawOutput;
+
+  const { result: _result, ...safeOutput } = rawOutput;
+  return {
+    ...safeOutput,
+    result_omitted: true,
+    result_omitted_reason: rawOutput.result_omitted_reason ?? 'image_base64',
+    result_bytes: rawOutput.result_bytes ?? result.length,
+  };
+};
+
 const DIAGNOSTIC_TELEMETRY_PATTERNS = [
   /^\s*Token watermark override\b/i,
   /\blocal_estimate=\d/i,
@@ -35,8 +55,7 @@ const DIAGNOSTIC_TELEMETRY_PATTERNS = [
 export const isDiagnosticTelemetryText = (value?: string): boolean =>
   typeof value === 'string' && DIAGNOSTIC_TELEMETRY_PATTERNS.some((pattern) => pattern.test(value));
 
-const isDiagnosticToolCall = (item: NormalizedToolCall): boolean =>
-  isDiagnosticTelemetryText(item.name) || isDiagnosticTelemetryText(item.description);
+const isDiagnosticToolCall = (item: NormalizedToolCall): boolean => isDiagnosticTelemetryText(item.name);
 
 // ===== tool_group → NormalizedToolCall[] =====
 
@@ -180,7 +199,8 @@ export function normalizeAcpToolCall(message: IMessageAcpToolCall): NormalizedTo
   }
   if (!output) {
     const sanitizedUpdate = sanitizeAcpToolUpdate(update);
-    const rawOutput = sanitizedUpdate.rawOutput ?? sanitizedUpdate.raw_output;
+    const sanitizedRawOutput = sanitizedUpdate.rawOutput ?? sanitizedUpdate.raw_output;
+    const rawOutput = sanitizedRawOutput ? omitInlineImageResultFromText(sanitizedRawOutput) : undefined;
     if (rawOutput) {
       const rawOutputKeys = Object.keys(rawOutput);
       output =
@@ -227,7 +247,7 @@ function normalizeToolCallStatus(status?: string, hasOutput = false, hasError = 
 export function normalizeToolCall(message: IMessageToolCall): NormalizedToolCall | undefined {
   const { call_id, name, status, input, output, error, args, description } = message.content;
   if (!call_id) return undefined;
-  if (isDiagnosticTelemetryText(name) || isDiagnosticTelemetryText(description)) return undefined;
+  if (isDiagnosticTelemetryText(name)) return undefined;
 
   const displayInput = input
     ? formatValue(input)

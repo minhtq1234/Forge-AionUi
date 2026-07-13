@@ -29,7 +29,7 @@ describe('resolveToolAction', () => {
   it.each(['Search', 'search_files'])('classifies generic project search identity %s as project discovery', (name) => {
     expect(resolveToolAction(name, 'search')).toEqual({ category: 'search', purpose: 'discovering' });
   });
-  it.each(['web_search', 'WebSearch', 'browse', 'fetch'])(
+  it.each(['web_search', 'WebSearch', 'WebFetch', 'browse', 'fetch'])(
     'reserves web discovery for explicit web identity %s',
     (name) => {
       expect(resolveToolAction(name, 'search')).toEqual({ category: 'web', purpose: 'discovering' });
@@ -52,6 +52,28 @@ describe('resolveToolAction', () => {
   });
   it('classifies a test command wrapped by exec as verification work', () => {
     expect(resolveToolAction('exec_command', 'execute', 'bun run test tests/unit/chat')).toEqual({
+      category: 'verify',
+      purpose: 'verifying',
+    });
+  });
+  it('classifies verification only when a verifier starts a shell segment', () => {
+    expect(resolveToolAction('exec_command', 'execute', 'rg -n vitest tests')).toEqual({
+      category: 'search',
+      purpose: 'discovering',
+    });
+    expect(resolveToolAction('exec_command', 'execute', 'cat vitest.config.ts')).toEqual({
+      category: 'fileRead',
+      purpose: 'reviewing',
+    });
+    expect(resolveToolAction('exec_command', 'execute', 'printf vitest')).toEqual({
+      category: 'code',
+      purpose: 'running',
+    });
+    expect(resolveToolAction('exec_command', 'execute', 'cd packages && bun run lint')).toEqual({
+      category: 'verify',
+      purpose: 'verifying',
+    });
+    expect(resolveToolAction('exec_command', 'execute', 'cat package.json | cargo check')).toEqual({
       category: 'verify',
       purpose: 'verifying',
     });

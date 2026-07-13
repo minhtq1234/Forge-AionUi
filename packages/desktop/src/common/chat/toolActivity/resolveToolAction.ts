@@ -37,12 +37,15 @@ const PURPOSE_BY_CATEGORY: Record<ToolCategory, ToolActivityPurpose> = {
 };
 
 const EXECUTION_ID_PATTERN = /(?:^|_)(exec|execute|command|bash|shell)(?:_|$)/;
-const EXPLICIT_WEB_ID_PATTERN = /(?:^|_)(web|web_search|websearch|browse|fetch)(?:_|$)/;
-const VERIFY_DETAIL_PATTERN =
-  /\b(vitest|jest|pytest|tsc|oxlint|eslint|typecheck|format-check)\b|\b(bun|npm|pnpm|yarn)\s+(run\s+)?(test|lint|build|format|check|typecheck)\b|\bnode\s+scripts\/check-i18n\.js\b|\bcargo\s+(test|check|clippy)\b/i;
+const EXPLICIT_WEB_ID_PATTERN = /(?:^|_)(web|web_search|websearch|webfetch|browse|fetch)(?:_|$)/;
+const VERIFY_COMMAND_PATTERN =
+  /^(?:(vitest|jest|pytest|tsc|oxlint|eslint|typecheck|format-check)\b|(bun|npm|pnpm|yarn)\s+(run\s+)?(test|lint|build|format|check|typecheck)(:[\w:-]+)?\b|(bunx|npx|pnpx)\s+(vitest|jest|tsc|oxlint|eslint)\b|node\s+(\.\/)?scripts\/check-i18n\.js\b|cargo\s+(test|check|clippy)\b)/i;
 const SEARCH_DETAIL_PATTERN = /(?:^|[\s;&|])(rg|grep|find|fd|ls)(?:\s|$)/i;
 const GENERIC_SEARCH_DETAIL_PATTERN = /(?:^|[\s;&|])(rg|grep|find|fd)(?:\s|$)/i;
 const READ_DETAIL_PATTERN = /(?:^|[\s;&|])(cat|head|tail)(?:\s|$)|\bsed\s+-n\b|\bgit\s+(status|diff|log)\b/i;
+
+const hasVerificationCommand = (detail: string): boolean =>
+  detail.split(/&&|\|\||[;|\n]/).some((segment) => VERIFY_COMMAND_PATTERN.test(segment.trim()));
 
 const KIND_CATEGORIES: Record<string, ToolCategory> = {
   read: 'fileRead',
@@ -107,7 +110,7 @@ export function resolveToolAction(rawName: string | undefined, kind?: string, de
   const isExplicitExecutionWrapper = EXECUTION_ID_PATTERN.test(id);
   const inspectExecutionDetail = isExplicitExecutionWrapper || kind === 'execute';
   if (inspectExecutionDetail) {
-    if (detail && VERIFY_DETAIL_PATTERN.test(detail)) return actionFor('verify');
+    if (detail && hasVerificationCommand(detail)) return actionFor('verify');
     const searchDetailPattern = isExplicitExecutionWrapper ? SEARCH_DETAIL_PATTERN : GENERIC_SEARCH_DETAIL_PATTERN;
     if (detail && searchDetailPattern.test(detail)) return actionFor('search');
     if (detail && READ_DETAIL_PATTERN.test(detail)) return actionFor('fileRead');
