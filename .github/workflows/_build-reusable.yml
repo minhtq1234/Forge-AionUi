@@ -464,8 +464,19 @@ jobs:
         run: |
           set +e  # Handle errors manually
 
-          # Run build command
-          ${{ matrix.command }} 2>&1 | tee "${RUNNER_TEMP}/build.log"
+          run_build() {
+            ${{ matrix.command }} "$@"
+          }
+
+          if [ "${FORGE_RELEASE_CHANNEL}" = "stable" ]; then
+            if ! node -e "require('./scripts/afterSign.js').readStableReleaseConfig(process.env)"; then
+              echo "::error title=Stable macOS Build Rejected::Signing configuration preflight failed."
+              exit 1
+            fi
+            run_build --config.forceCodeSigning=true 2>&1 | tee "${RUNNER_TEMP}/build.log"
+          else
+            run_build 2>&1 | tee "${RUNNER_TEMP}/build.log"
+          fi
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
 
           # Check if DMG was created (most important artifact)

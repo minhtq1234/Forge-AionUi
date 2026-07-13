@@ -22,6 +22,9 @@ function readStableReleaseConfig(env) {
   if (missing.length > 0) {
     throw new Error(`Stable macOS release requires: ${missing.join(', ')}`);
   }
+  if (env.CSC_NAME.trim().startsWith('Developer ID Application:')) {
+    throw new Error('Stable macOS release requires CSC_NAME to be an unprefixed Electron Builder identity selector.');
+  }
   return {
     appleId: env.appleId,
     appleIdPassword: env.appleIdPassword,
@@ -48,14 +51,15 @@ function parseCodesignMetadata(output) {
 }
 
 function assertTrustedSignature(metadata, config) {
+  const expectedDeveloperIdentity = `Developer ID Application: ${config.cscName}`;
   const developerIdentity = metadata.authorities.find((authority) => authority.startsWith('Developer ID Application:'));
-  if (metadata.signature === 'adhoc' || !developerIdentity) {
+  if (!metadata.signature || metadata.signature === 'adhoc' || !developerIdentity) {
     throw new Error('Stable macOS release rejected an unsigned or ad-hoc signature.');
   }
   if (metadata.teamIdentifier !== config.teamId) {
     throw new Error('Stable macOS release rejected a mismatched Apple team.');
   }
-  if (developerIdentity !== config.cscName) {
+  if (developerIdentity !== expectedDeveloperIdentity) {
     throw new Error('Stable macOS release rejected a mismatched Developer ID identity.');
   }
 }

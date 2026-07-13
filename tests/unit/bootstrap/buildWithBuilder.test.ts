@@ -116,4 +116,82 @@ childProcess.execSync = function mockedExecSync(command) {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('does not retry a failed stable macOS build with --prepackaged', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'aionui-stable-build-test-'));
+    const hookPath = join(tempDir, 'hook.cjs');
+    const callsPath = join(tempDir, 'exec-calls.json');
+
+    writeFileSync(
+      hookPath,
+      `
+const childProcess = require('node:child_process');
+const fs = require('node:fs');
+const Module = require('node:module');
+const path = require('node:path');
+
+Object.defineProperty(process, 'platform', { value: 'darwin' });
+const originalLoad = Module._load;
+
+Module._load = function patchedLoad(request, parent, isMain) {
+  if (request.endsWith('packages/shared-scripts/src/prepare-aioncore.js')) {
+    return { prepareAioncore: () => ({ prepared: true }) };
+  }
+  if (request === './resolveAioncoreVersion.js' || request.endsWith('/resolveAioncoreVersion.js')) {
+    return { resolveAioncoreVersion: () => 'v-test' };
+  }
+  return originalLoad.call(this, request, parent, isMain);
+};
+
+function ensurePlaceholder(relativePath) {
+  const target = path.join(process.cwd(), relativePath);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  if (!fs.existsSync(target)) fs.writeFileSync(target, '');
+}
+
+childProcess.execSync = function mockedExecSync(command) {
+  const commandText = String(command);
+  const calls = fs.existsSync(process.env.AIONUI_EXEC_CALLS_FILE)
+    ? JSON.parse(fs.readFileSync(process.env.AIONUI_EXEC_CALLS_FILE, 'utf8'))
+    : [];
+  calls.push(commandText);
+  fs.writeFileSync(process.env.AIONUI_EXEC_CALLS_FILE, JSON.stringify(calls));
+
+  if (commandText.includes('electron-vite build')) {
+    ensurePlaceholder('out/main/index.js');
+    ensurePlaceholder('out/renderer/index.html');
+  }
+  if (commandText.includes('electron-builder')) {
+    ensurePlaceholder('out/mac/Forge.app/Contents/Info.plist');
+    throw new Error('stable signing failed');
+  }
+  return Buffer.from('');
+};
+childProcess.spawnSync = function mockedSpawnSync() {
+  return { status: 0, stdout: '', stderr: '' };
+};
+`,
+      'utf8'
+    );
+
+    try {
+      const result = spawnSync(process.execPath, ['scripts/build-with-builder.js', 'auto', '--mac', '--x64'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          AIONUI_EXEC_CALLS_FILE: callsPath,
+          FORGE_RELEASE_CHANNEL: 'stable',
+          NODE_OPTIONS: [process.env.NODE_OPTIONS, `--require=${hookPath}`].filter(Boolean).join(' '),
+        },
+      });
+
+      expect(result.status).not.toBe(0);
+      const calls = JSON.parse(readFileSync(callsPath, 'utf8')) as string[];
+      expect(calls.filter((command) => command.includes('electron-builder'))).toHaveLength(1);
+      expect(calls).not.toEqual(expect.arrayContaining([expect.stringContaining('--prepackaged')]));
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });

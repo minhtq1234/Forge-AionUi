@@ -36,7 +36,7 @@ const stableEnv: NodeJS.ProcessEnv = {
   appleId: 'release@example.com',
   appleIdPassword: 'fixture-password',
   teamId: 'TEAM123456',
-  CSC_NAME: 'Developer ID Application: Forge Corp (TEAM123456)',
+  CSC_NAME: 'Forge Corp (TEAM123456)',
 };
 const trustedOutput = `
 Signature size=8971

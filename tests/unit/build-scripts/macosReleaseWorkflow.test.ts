@@ -18,6 +18,21 @@ describe('stable macOS release workflow contract', () => {
     expect(reusable).toContain('FORGE_RELEASE_CHANNEL: ${{ inputs.release_channel }}');
   });
 
+  it('preflights stable signing config and forces Electron Builder signing before the build', () => {
+    const macBuildStep = reusable.slice(
+      reusable.indexOf('- name: Build with electron-builder (macOS)'),
+      reusable.indexOf('# Linux: Standard build without special error handling')
+    );
+    const preflight = macBuildStep.indexOf('readStableReleaseConfig(process.env)');
+    const forcedSigning = macBuildStep.indexOf('--config.forceCodeSigning=true');
+    const build = macBuildStep.indexOf('2>&1 | tee');
+
+    expect(preflight).toBeGreaterThan(-1);
+    expect(forcedSigning).toBeGreaterThan(preflight);
+    expect(macBuildStep.slice(preflight, forcedSigning)).toContain('exit 1');
+    expect(build).toBeGreaterThan(forcedSigning);
+  });
+
   it('checks stable failure before the DMG warning-only exception', () => {
     const stableGuard = reusable.indexOf('if [ "${FORGE_RELEASE_CHANNEL}" = "stable" ]; then');
     const dmgException = reusable.indexOf('if [ "$DMG_EXISTS" = true ]; then');

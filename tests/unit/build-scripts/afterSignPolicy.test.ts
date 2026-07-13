@@ -29,8 +29,10 @@ const config: StableConfig = {
   appleId: 'release@example.com',
   appleIdPassword: 'fixture-password',
   teamId: 'TEAM123456',
-  cscName: 'Developer ID Application: Forge Corp (TEAM123456)',
+  cscName: 'Forge Corp (TEAM123456)',
 };
+
+const expectedAuthority = `Developer ID Application: ${config.cscName}`;
 
 describe('stable macOS release policy', () => {
   it.each([
@@ -66,6 +68,17 @@ describe('stable macOS release policy', () => {
     }
   );
 
+  it('rejects a prefixed CSC_NAME selector', () => {
+    expect(() =>
+      policy.readStableReleaseConfig({
+        appleId: config.appleId,
+        appleIdPassword: config.appleIdPassword,
+        teamId: config.teamId,
+        CSC_NAME: expectedAuthority,
+      })
+    ).toThrow('unprefixed');
+  });
+
   it('parses Developer ID signing metadata', () => {
     const metadata = policy.parseCodesignMetadata(`
 Signature size=8971
@@ -87,11 +100,24 @@ TeamIdentifier=TEAM123456
     ).toThrow('ad-hoc');
   });
 
+  it('rejects missing signature metadata as unsigned', () => {
+    expect(() =>
+      policy.assertTrustedSignature(
+        {
+          authorities: [expectedAuthority],
+          signature: null,
+          teamIdentifier: config.teamId,
+        },
+        config
+      )
+    ).toThrow('unsigned');
+  });
+
   it('rejects a mismatched Apple team', () => {
     expect(() =>
       policy.assertTrustedSignature(
         {
-          authorities: [config.cscName],
+          authorities: [expectedAuthority],
           signature: '8971',
           teamIdentifier: 'OTHERTEAM',
         },
