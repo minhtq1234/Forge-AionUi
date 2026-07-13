@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { IMessageAcpToolCall } from '@/common/chat/chatLib';
-import { normalizeAcpToolCall, normalizeToolMessages } from '@/common/chat/normalizeToolCall';
+import type { IMessageAcpToolCall, IMessageToolCall } from '@/common/chat/chatLib';
+import { normalizeAcpToolCall, normalizeToolCall, normalizeToolMessages } from '@/common/chat/normalizeToolCall';
 import { describe, expect, it } from 'vitest';
 
 describe('normalizeAcpToolCall', () => {
@@ -86,4 +86,88 @@ describe('normalizeAcpToolCall', () => {
       '/Users/test/.codex/generated_images/session/ig_test_image.png'
     );
   });
+
+  it('uses a result-only rawOutput as output when structured content is absent', () => {
+    const message = acpToolCall({ rawOutput: { result: 'verification passed' } });
+
+    expect(normalizeAcpToolCall(message)?.output).toBe('verification passed');
+  });
+
+  it('uses an error-like raw_output object as output when structured content is absent', () => {
+    const message = acpToolCall({ raw_output: { error: 'verification failed', exit_code: 1 } });
+
+    expect(normalizeAcpToolCall(message)?.output).toBe(`{
+  "error": "verification failed",
+  "exit_code": 1
+}`);
+  });
+
+  it('does not expose inline image base64 while preserving raw output fallback', () => {
+    const inlineImage = `iVBORw0KGgo${'a'.repeat(64 * 1024)}`;
+    const message = acpToolCall({ rawOutput: { result: inlineImage, saved_path: '/tmp/generated.png' } });
+    const output = normalizeAcpToolCall(message)?.output;
+
+    expect(output).toEqual(expect.stringContaining('"result_omitted_reason": "image_base64"'));
+    expect(output).not.toContain(inlineImage);
+  });
+});
+
+describe('normalizeToolCall detail preservation', () => {
+  it('keeps legitimate diagnostic-like terms in normalized input and output', () => {
+    const message = toolCall({
+      input: { query: 'compare Microcompact and compact behavior' },
+      output: 'Microcompact: local_estimate=42 is legitimate project data',
+    });
+
+    expect(normalizeToolMessages([message])).toMatchObject([
+      {
+        input: expect.stringContaining('Microcompact and compact'),
+        output: 'Microcompact: local_estimate=42 is legitimate project data',
+      },
+    ]);
+  });
+
+  it('preserves error detail and infers error status when output and status are absent', () => {
+    const message = toolCall({ error: 'permission denied' });
+
+    expect(normalizeToolCall(message)).toMatchObject({
+      status: 'error',
+      output: 'permission denied',
+    });
+  });
+
+  it('infers completed status when output exists and status is absent', () => {
+    const message = toolCall({ output: 'done' });
+
+    expect(normalizeToolCall(message)?.status).toBe('completed');
+  });
+});
+
+const acpToolCall = (
+  rawOutput: Pick<IMessageAcpToolCall['content']['update'], 'rawOutput' | 'raw_output'>
+): IMessageAcpToolCall => ({
+  id: 'raw-output-message',
+  conversation_id: 'conv-1',
+  type: 'acp_tool_call',
+  content: {
+    sessionId: 'sess-1',
+    update: {
+      sessionUpdate: 'tool_call_update',
+      tool_call_id: 'raw-output-call',
+      status: 'completed',
+      title: 'Execute',
+      kind: 'execute',
+      ...rawOutput,
+    },
+  },
+});
+
+const toolCall = (content: Partial<IMessageToolCall['content']>): IMessageToolCall => ({
+  type: 'tool_call',
+  content: {
+    call_id: 'tool-call-1',
+    name: 'Search',
+    args: {},
+    ...content,
+  },
 });

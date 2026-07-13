@@ -26,6 +26,15 @@ describe('resolveToolAction', () => {
   it('falls back to a keyword category for unseeded tools', () => {
     expect(resolveToolAction('acme_web_search')).toEqual({ category: 'web', purpose: 'discovering' });
   });
+  it.each(['Search', 'search_files'])('classifies generic project search identity %s as project discovery', (name) => {
+    expect(resolveToolAction(name, 'search')).toEqual({ category: 'search', purpose: 'discovering' });
+  });
+  it.each(['web_search', 'WebSearch', 'browse', 'fetch'])(
+    'reserves web discovery for explicit web identity %s',
+    (name) => {
+      expect(resolveToolAction(name, 'search')).toEqual({ category: 'web', purpose: 'discovering' });
+    }
+  );
   it('uses the ACP kind when the name has no keyword', () => {
     expect(resolveToolAction('doit', 'read')).toEqual({ category: 'fileRead', purpose: 'reviewing' });
   });
@@ -52,5 +61,30 @@ describe('resolveToolAction', () => {
       category: 'code',
       purpose: 'running',
     });
+  });
+  it.each([
+    'bun test tests/unit/chat',
+    'bun run lint',
+    'npm run build',
+    'pnpm run format',
+    'yarn check',
+    'bunx tsc --noEmit',
+    'node scripts/check-i18n.js',
+    'cargo test',
+    'cargo check',
+    'cargo clippy',
+  ])('classifies validation detail hidden by a generic Skill wrapper: %s', (detail) => {
+    expect(resolveToolAction('Skill', 'execute', detail)).toEqual({
+      category: 'verify',
+      purpose: 'verifying',
+    });
+  });
+  it.each([
+    ['rg -n journal packages', 'search', 'discovering'],
+    ['find packages -name "*.ts"', 'search', 'discovering'],
+    ['sed -n "1,120p" package.json', 'fileRead', 'reviewing'],
+    ['cat package.json', 'fileRead', 'reviewing'],
+  ] as const)('classifies %s detail hidden by a generic Skill wrapper', (detail, category, purpose) => {
+    expect(resolveToolAction('Skill', 'execute', detail)).toEqual({ category, purpose });
   });
 });

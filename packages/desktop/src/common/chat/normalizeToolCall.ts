@@ -1,5 +1,5 @@
 import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup } from './chatLib';
-import { getAcpImagePath } from './acpToolCallOutput';
+import { getAcpImagePath, sanitizeAcpToolUpdate } from './acpToolCallOutput';
 
 export type NormalizedToolStatus = 'pending' | 'running' | 'completed' | 'error' | 'canceled';
 
@@ -36,10 +36,7 @@ export const isDiagnosticTelemetryText = (value?: string): boolean =>
   typeof value === 'string' && DIAGNOSTIC_TELEMETRY_PATTERNS.some((pattern) => pattern.test(value));
 
 const isDiagnosticToolCall = (item: NormalizedToolCall): boolean =>
-  isDiagnosticTelemetryText(item.name) ||
-  isDiagnosticTelemetryText(item.description) ||
-  isDiagnosticTelemetryText(item.input) ||
-  isDiagnosticTelemetryText(item.output);
+  isDiagnosticTelemetryText(item.name) || isDiagnosticTelemetryText(item.description);
 
 // ===== tool_group → NormalizedToolCall[] =====
 
@@ -181,6 +178,17 @@ export function normalizeAcpToolCall(message: IMessageAcpToolCall): NormalizedTo
       .filter(Boolean)
       .join('\n');
   }
+  if (!output) {
+    const sanitizedUpdate = sanitizeAcpToolUpdate(update);
+    const rawOutput = sanitizedUpdate.rawOutput ?? sanitizedUpdate.raw_output;
+    if (rawOutput) {
+      const rawOutputKeys = Object.keys(rawOutput);
+      output =
+        rawOutputKeys.length === 1 && rawOutputKeys[0] === 'result'
+          ? formatValue(rawOutput.result)
+          : formatValue(rawOutput);
+    }
+  }
 
   const keyParam = buildParamSummary(update.kind, rawInput);
 
@@ -201,7 +209,7 @@ export function normalizeAcpToolCall(message: IMessageAcpToolCall): NormalizedTo
 
 // ===== tool_call → NormalizedToolCall =====
 
-function normalizeToolCallStatus(status?: string): NormalizedToolStatus {
+function normalizeToolCallStatus(status?: string, hasOutput = false, hasError = false): NormalizedToolStatus {
   switch (status) {
     case 'completed':
       return 'completed';
@@ -210,12 +218,14 @@ function normalizeToolCallStatus(status?: string): NormalizedToolStatus {
     case 'running':
       return 'running';
     default:
+      if (hasError) return 'error';
+      if (hasOutput) return 'completed';
       return 'pending';
   }
 }
 
 export function normalizeToolCall(message: IMessageToolCall): NormalizedToolCall | undefined {
-  const { call_id, name, status, input, output, args, description } = message.content;
+  const { call_id, name, status, input, output, error, args, description } = message.content;
   if (!call_id) return undefined;
   if (isDiagnosticTelemetryText(name) || isDiagnosticTelemetryText(description)) return undefined;
 
@@ -224,14 +234,15 @@ export function normalizeToolCall(message: IMessageToolCall): NormalizedToolCall
     : args && Object.keys(args).length > 0
       ? formatValue(args)
       : undefined;
+  const displayOutput = output ?? error;
 
   return {
     key: call_id,
     name,
-    status: normalizeToolCallStatus(status),
+    status: normalizeToolCallStatus(status, output !== undefined, output === undefined && error !== undefined),
     description: description || undefined,
     input: displayInput,
-    output,
+    output: displayOutput,
   };
 }
 

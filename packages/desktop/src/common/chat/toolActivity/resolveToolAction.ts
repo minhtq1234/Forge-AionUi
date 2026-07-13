@@ -6,8 +6,7 @@ const SEED_TOOL_KEYS = ['data_open', 'data_get_schema', 'data_run_sql', 'render_
 
 // Keyword → category, checked in order against the normalized id tokens.
 const KEYWORD_CATEGORIES: Array<[readonly string[], ToolCategory]> = [
-  [['search', 'web', 'fetch', 'browse'], 'web'],
-  [['grep', 'glob', 'find'], 'search'],
+  [['search', 'grep', 'glob', 'find'], 'search'],
   [['sql', 'query', 'schema', 'db', 'data'], 'data'],
   [['report', 'render'], 'report'],
   [['export', 'pdf', 'download'], 'export'],
@@ -38,9 +37,11 @@ const PURPOSE_BY_CATEGORY: Record<ToolCategory, ToolActivityPurpose> = {
 };
 
 const EXECUTION_ID_PATTERN = /(?:^|_)(exec|execute|command|bash|shell)(?:_|$)/;
+const EXPLICIT_WEB_ID_PATTERN = /(?:^|_)(web|web_search|websearch|browse|fetch)(?:_|$)/;
 const VERIFY_DETAIL_PATTERN =
-  /\b(vitest|jest|pytest|tsc|oxlint|eslint|typecheck|format-check)\b|\b(bun|npm|pnpm|yarn)\s+(run\s+)?(test|lint|build|typecheck)\b/i;
+  /\b(vitest|jest|pytest|tsc|oxlint|eslint|typecheck|format-check)\b|\b(bun|npm|pnpm|yarn)\s+(run\s+)?(test|lint|build|format|check|typecheck)\b|\bnode\s+scripts\/check-i18n\.js\b|\bcargo\s+(test|check|clippy)\b/i;
 const SEARCH_DETAIL_PATTERN = /(?:^|[\s;&|])(rg|grep|find|fd|ls)(?:\s|$)/i;
+const GENERIC_SEARCH_DETAIL_PATTERN = /(?:^|[\s;&|])(rg|grep|find|fd)(?:\s|$)/i;
 const READ_DETAIL_PATTERN = /(?:^|[\s;&|])(cat|head|tail)(?:\s|$)|\bsed\s+-n\b|\bgit\s+(status|diff|log)\b/i;
 
 const KIND_CATEGORIES: Record<string, ToolCategory> = {
@@ -92,6 +93,7 @@ export function resolveToolAction(rawName: string | undefined, kind?: string, de
 
   // 2. Keyword category on the id tokens (tool-name identity wins over detail).
   if (!EXECUTION_ID_PATTERN.test(id)) {
+    if (EXPLICIT_WEB_ID_PATTERN.test(id)) return actionFor('web');
     for (const [keywords, category] of KEYWORD_CATEGORIES) {
       if (keywords.some((kw) => id.includes(kw))) return actionFor(category);
     }
@@ -102,9 +104,12 @@ export function resolveToolAction(rawName: string | undefined, kind?: string, de
   if (detail && OFFICE_DETAIL_PATTERN.test(detail)) return actionFor('office');
 
   // Detail classification is only used when a generic execution wrapper hides the command.
-  if (EXECUTION_ID_PATTERN.test(id)) {
+  const isExplicitExecutionWrapper = EXECUTION_ID_PATTERN.test(id);
+  const inspectExecutionDetail = isExplicitExecutionWrapper || kind === 'execute';
+  if (inspectExecutionDetail) {
     if (detail && VERIFY_DETAIL_PATTERN.test(detail)) return actionFor('verify');
-    if (detail && SEARCH_DETAIL_PATTERN.test(detail)) return actionFor('search');
+    const searchDetailPattern = isExplicitExecutionWrapper ? SEARCH_DETAIL_PATTERN : GENERIC_SEARCH_DETAIL_PATTERN;
+    if (detail && searchDetailPattern.test(detail)) return actionFor('search');
     if (detail && READ_DETAIL_PATTERN.test(detail)) return actionFor('fileRead');
   }
 

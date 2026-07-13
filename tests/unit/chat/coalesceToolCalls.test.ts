@@ -30,6 +30,12 @@ describe('coalesceToolCalls', () => {
     expect(steps[0].status).toBe('completed');
     expect(steps[0].key).toBe('a');
   });
+  it('retains error history when a same-purpose retry later completes', () => {
+    const steps = coalesceToolCalls([call({ key: 'a', status: 'error' }), call({ key: 'b', status: 'completed' })]);
+
+    expect(steps[0].status).toBe('completed');
+    expect(steps[0].hadError).toBe(true);
+  });
   it('keeps interleaved different tools separate and ordered', () => {
     const steps = coalesceToolCalls([
       call({ key: 'a', name: 'data_open' }),

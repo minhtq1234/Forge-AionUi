@@ -27,6 +27,7 @@ export type CoalescedStep = {
   rawName: string;
   kind?: string;
   status: NormalizedToolStatus;
+  hadError: boolean;
   attempts: number;
   calls: NormalizedToolCall[];
   action: ResolvedToolAction;

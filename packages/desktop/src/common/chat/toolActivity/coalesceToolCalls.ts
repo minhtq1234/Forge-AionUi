@@ -17,6 +17,7 @@ export function coalesceToolCalls(calls: NormalizedToolCall[]): CoalescedStep[] 
       previous.calls.push(call);
       previous.attempts += 1;
       previous.status = call.status;
+      previous.hadError ||= call.status === 'error';
       continue;
     }
     steps.push({
@@ -24,6 +25,7 @@ export function coalesceToolCalls(calls: NormalizedToolCall[]): CoalescedStep[] 
       rawName: call.name,
       kind: call.kind,
       status: call.status,
+      hadError: call.status === 'error',
       attempts: 1,
       calls: [call],
       action,
