@@ -54,6 +54,14 @@ const flattenStringLeaves = (value: unknown, prefix = ''): Record<string, string
 
 const getPlaceholders = (value: string): string[] => value.match(/{{[^{}]+}}/g) ?? [];
 
+const findCopiedReferenceLeaves = (
+  referenceLeaves: Record<string, string>,
+  localeLeaves: Record<string, string>
+): string[] =>
+  Object.entries(referenceLeaves)
+    .filter(([key, referenceValue]) => localeLeaves[key] === referenceValue)
+    .map(([key]) => key);
+
 describe('i18n', () => {
   describe('normalizeLanguageCode', () => {
     it('passes through exact supported tags', () => {
@@ -95,7 +103,20 @@ describe('i18n', () => {
   });
 
   describe('messages.toolActivity locale parity', () => {
-    it('keeps every configured locale complete with matching placeholders', () => {
+    it('detects a leaf copied verbatim from en-US', () => {
+      const referenceLeaves = {
+        'generic.running': "I'm working through the next step.",
+        'status.stopped': 'Stopped',
+      };
+      const localeLeaves = {
+        'generic.running': "I'm working through the next step.",
+        'status.stopped': 'Gestoppt',
+      };
+
+      expect(findCopiedReferenceLeaves(referenceLeaves, localeLeaves)).toEqual(['generic.running']);
+    });
+
+    it('keeps every configured locale complete, translated, and placeholder-compatible', () => {
       const issues: string[] = [];
       const configuredLocales = i18nConfig.supportedLanguages.toSorted();
       const importedLocales = Object.keys(MESSAGE_LOCALES).toSorted();
@@ -122,6 +143,12 @@ describe('i18n', () => {
         }
         if (extraKeys.length > 0) {
           issues.push(`${locale} has extra keys: ${extraKeys.join(', ')}`);
+        }
+        if (locale !== i18nConfig.referenceLanguage) {
+          const copiedReferenceKeys = findCopiedReferenceLeaves(referenceLeaves, localeLeaves);
+          if (copiedReferenceKeys.length > 0) {
+            issues.push(`${locale} matches en-US: ${copiedReferenceKeys.join(', ')}`);
+          }
         }
 
         for (const key of referenceKeys) {
