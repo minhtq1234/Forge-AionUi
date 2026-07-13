@@ -126,7 +126,9 @@ vi.mock('@/renderer/pages/conversation/Messages/components/MessageSkillSuggest',
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/components/MessageToolGroupSummary', () => ({
-  default: () => <div>tool_summary</div>,
+  default: ({ messages }: { messages: TMessage[] }) => (
+    <div data-testid='work-summary'>{messages.map((message) => message.type).join(',')}</div>
+  ),
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/MessageFileChanges', () => ({
@@ -294,8 +296,91 @@ describe('MessageList', () => {
       wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
     });
 
-    expect(screen.queryByText('tool_summary')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('work-summary')).not.toBeInTheDocument();
     expect(screen.queryByText(/Token watermark override/)).not.toBeInTheDocument();
+  });
+
+  it('groups plan, thinking, and tool messages into one renderer-only work summary', () => {
+    const messages = [
+      {
+        id: 'plan-1',
+        type: 'plan',
+        position: 'left',
+        content: { session_id: 's1', entries: [{ content: 'Review the activity flow', status: 'completed' }] },
+        created_at: 1,
+      },
+      {
+        id: 'thinking-1',
+        type: 'thinking',
+        position: 'left',
+        content: { content: 'private detail', subject: 'Reviewing the activity flow', status: 'done' },
+        created_at: 2,
+      },
+      {
+        id: 'tool-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'completed' },
+        created_at: 3,
+      },
+      {
+        id: 'tool-2',
+        type: 'acp_tool_call',
+        position: 'left',
+        content: {
+          sessionId: 'session-1',
+          update: {
+            sessionUpdate: 'tool_call_update',
+            tool_call_id: 'call-2',
+            status: 'completed',
+            title: 'Search',
+            kind: 'search',
+          },
+        },
+        created_at: 4,
+      },
+      { id: 'answer-1', type: 'text', position: 'left', content: { content: 'Finished' }, created_at: 5 },
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    expect(screen.getByTestId('work-summary')).toHaveTextContent('plan,thinking,tool_call,acp_tool_call');
+    expect(screen.queryByText(/^plan$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^thinking$/)).not.toBeInTheDocument();
+    expect(screen.getByText('Finished')).toBeInTheDocument();
+  });
+
+  it('starts a new work summary at a permission boundary', () => {
+    const messages = [
+      {
+        id: 'tool-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'completed' },
+        created_at: 1,
+      },
+      { id: 'permission-1', type: 'permission', position: 'left', content: {}, created_at: 2 },
+      {
+        id: 'tool-2',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-2', name: 'Write', status: 'completed' },
+        created_at: 3,
+      },
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    const summaries = screen.getAllByTestId('work-summary');
+    expect(summaries).toHaveLength(2);
+    expect(summaries[0]).toHaveTextContent('tool_call');
+    expect(summaries[1]).toHaveTextContent('tool_call');
+    expect(screen.getByText('permission').compareDocumentPosition(summaries[0])).toBe(Node.DOCUMENT_POSITION_PRECEDING);
+    expect(screen.getByText('permission').compareDocumentPosition(summaries[1])).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('renders the empty slot when there are no messages', () => {

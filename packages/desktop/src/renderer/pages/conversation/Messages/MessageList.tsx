@@ -5,7 +5,7 @@
  */
 
 import type { IConversationArtifact } from '@/common/adapter/ipcBridge';
-import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup, TMessage } from '@/common/chat/chatLib';
+import type { TMessage } from '@/common/chat/chatLib';
 import { isDiagnosticToolMessage } from '@/common/chat/normalizeToolCall';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useConversationRuntimeView } from '@/renderer/pages/conversation/runtime/useConversationRuntimeView';
@@ -45,7 +45,7 @@ import MessageCronTrigger from './components/MessageCronTrigger';
 import MessageSkillSuggest from './components/MessageSkillSuggest';
 import MessageText from './components/MessageText';
 import MessageThinking from './components/MessageThinking';
-import type { WriteFileResult } from './types';
+import type { WorkJournalSourceMessage, WriteFileResult } from './types';
 import { useAutoScroll } from './useAutoScroll';
 import { useAutoPreviewOfficeFiles } from '@/renderer/hooks/file/useAutoPreviewOfficeFiles';
 import SelectionReplyButton from './components/SelectionReplyButton';
@@ -54,9 +54,9 @@ type IMessageVO =
   | TMessage
   | { type: 'file_summary'; id: string; diffs: FileChangeInfo[]; sourceMessageIds: string[]; created_at: number }
   | {
-      type: 'tool_summary';
+      type: 'work_summary';
       id: string;
-      messages: Array<IMessageToolGroup | IMessageAcpToolCall | IMessageToolCall>;
+      messages: WorkJournalSourceMessage[];
       sourceMessageIds: string[];
       created_at: number;
     };
@@ -72,7 +72,7 @@ const getProcessedItemSourceMessageIds = (item: IProcessedItem): string[] => {
   if ('type' in item && item.type === 'artifact') {
     return [item.id];
   }
-  if ('type' in item && item.type === 'tool_summary') {
+  if ('type' in item && item.type === 'work_summary') {
     return item.sourceMessageIds;
   }
   if ('type' in item && item.type === 'file_summary') {
@@ -94,7 +94,7 @@ const getProcessedItemAnchorId = (item: IProcessedItem): string => {
 };
 
 const getProcessedItemCreatedAt = (item: IProcessedItem): number => {
-  if ('type' in item && ['file_summary', 'tool_summary', 'artifact'].includes(item.type)) {
+  if ('type' in item && ['file_summary', 'work_summary', 'artifact'].includes(item.type)) {
     return item.created_at;
   }
   return item.created_at ?? 0;
@@ -286,13 +286,13 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
   const scrollerElementRef = useRef<HTMLDivElement | null>(null);
   const contentElementRef = useRef<HTMLDivElement | null>(null);
 
-  // Pre-process message list to group tool outputs into summary cards
+  // Pre-process message list to group left-side work activity into summary cards.
   const processedList = useMemo(() => {
     const result: Array<IMessageVO> = [];
     let diffsChanges: FileChangeInfo[] = [];
     let diffsSourceMessageIds: string[] = [];
-    let toolList: Array<IMessageToolGroup | IMessageAcpToolCall | IMessageToolCall> = [];
-    let toolSourceMessageIds: string[] = [];
+    let workList: WorkJournalSourceMessage[] = [];
+    let workSourceMessageIds: string[] = [];
 
     const pushFileDffChanges = (changes: FileChangeInfo, sourceMessageId: string, created_at: number) => {
       if (!diffsChanges.length) {
@@ -307,22 +307,22 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       }
       diffsChanges.push(changes);
       diffsSourceMessageIds.push(sourceMessageId);
-      toolList = [];
-      toolSourceMessageIds = [];
+      workList = [];
+      workSourceMessageIds = [];
     };
-    const pushToolList = (message: IMessageToolGroup | IMessageAcpToolCall | IMessageToolCall) => {
-      if (!toolList.length) {
-        toolSourceMessageIds = [];
+    const pushWorkMessage = (message: WorkJournalSourceMessage) => {
+      if (!workList.length) {
+        workSourceMessageIds = [];
         result.push({
-          type: 'tool_summary',
-          id: `tool-summary-${message.id}`,
-          messages: toolList,
-          sourceMessageIds: toolSourceMessageIds,
+          type: 'work_summary',
+          id: `work-summary-${message.id}`,
+          messages: workList,
+          sourceMessageIds: workSourceMessageIds,
           created_at: message.created_at ?? 0,
         });
       }
-      toolList.push(message);
-      toolSourceMessageIds.push(message.id);
+      workList.push(message);
+      workSourceMessageIds.push(message.id);
       diffsChanges = [];
       diffsSourceMessageIds = [];
     };
@@ -353,21 +353,31 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
             continue;
           }
         }
-        pushToolList(message);
-        continue;
+        if (message.position === 'left') {
+          pushWorkMessage(message);
+          continue;
+        }
       }
       if (message.type === 'acp_tool_call') {
         if (isDiagnosticToolMessage(message)) continue;
-        pushToolList(message);
-        continue;
+        if (message.position === 'left') {
+          pushWorkMessage(message);
+          continue;
+        }
       }
       if (message.type === 'tool_call') {
         if (isDiagnosticToolMessage(message)) continue;
-        pushToolList(message);
+        if (message.position === 'left') {
+          pushWorkMessage(message);
+          continue;
+        }
+      }
+      if (message.position === 'left' && (message.type === 'plan' || message.type === 'thinking')) {
+        pushWorkMessage(message);
         continue;
       }
-      toolList = [];
-      toolSourceMessageIds = [];
+      workList = [];
+      workSourceMessageIds = [];
       diffsChanges = [];
       diffsSourceMessageIds = [];
       result.push(message);
@@ -410,7 +420,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
     for (const item of processedList) {
       if (
         'type' in item &&
-        (item.type === 'file_summary' || item.type === 'tool_summary' || item.type === 'artifact')
+        (item.type === 'file_summary' || item.type === 'work_summary' || item.type === 'artifact')
       ) {
         continue;
       }
@@ -437,7 +447,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
 
     for (let index = processedList.length - 1; index >= 0; index -= 1) {
       const item = processedList[index];
-      if ('type' in item && ['file_summary', 'tool_summary', 'artifact'].includes(item.type)) {
+      if ('type' in item && ['file_summary', 'work_summary', 'artifact'].includes(item.type)) {
         continue;
       }
       const message = item as TMessage;
@@ -554,7 +564,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       const targetIndex = processedList.findIndex((item) => {
         if (
           (item as { type?: string }).type === 'file_summary' ||
-          (item as { type?: string }).type === 'tool_summary' ||
+          (item as { type?: string }).type === 'work_summary' ||
           (item as { type?: string }).type === 'artifact'
         ) {
           return false;
@@ -633,7 +643,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         </div>
       );
     }
-    if ('type' in item && ['file_summary', 'tool_summary'].includes(item.type)) {
+    if ('type' in item && ['file_summary', 'work_summary'].includes(item.type)) {
       return (
         <div
           key={item.id}
@@ -642,7 +652,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
           style={highlighted ? highlightStyle : undefined}
         >
           {item.type === 'file_summary' && <MessageFileChanges diffsChanges={item.diffs} />}
-          {item.type === 'tool_summary' && <MessageToolGroupSummary messages={item.messages}></MessageToolGroupSummary>}
+          {item.type === 'work_summary' && <MessageToolGroupSummary messages={item.messages as never} />}
         </div>
       );
     }
