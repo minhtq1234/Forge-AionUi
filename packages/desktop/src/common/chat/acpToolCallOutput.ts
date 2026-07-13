@@ -6,15 +6,91 @@
 
 import type { AcpRawOutput, ToolCallUpdate } from '@/common/types/platform/acpTypes';
 
-const INLINE_IMAGE_RESULT_LIMIT = 64 * 1024;
 const IMAGE_PATH_EXTENSION_RE = /\.(?:png|jpe?g|webp|gif)$/i;
+const INLINE_IMAGE_DATA_URL_RE = /data:image\/[a-z0-9.+-]+(?:;[a-z0-9.+-]+(?:=[^;,\s]*)?)*;base64,[a-z0-9+/]*={0,2}/gi;
+const PURE_RASTER_BASE64_RE = /^(?:iVBORw0KGgo|\/9j\/|UklGR)[A-Za-z0-9+/]*={0,2}$/;
 
-const isProbablyInlineImageResult = (value: string): boolean =>
-  value.length > INLINE_IMAGE_RESULT_LIMIT &&
-  (value.startsWith('iVBORw0KGgo') ||
-    value.startsWith('/9j/') ||
-    value.startsWith('UklGR') ||
-    value.startsWith('data:image/'));
+export const INLINE_IMAGE_OMISSION_MARKER = '[inline image omitted]';
+
+export type InlineImagePayloadSanitization = {
+  value: unknown;
+  omitted: boolean;
+  omittedCharacters: number;
+  wholeValueOmitted: boolean;
+};
+
+const unchangedSanitization = (value: unknown): InlineImagePayloadSanitization => ({
+  value,
+  omitted: false,
+  omittedCharacters: 0,
+  wholeValueOmitted: false,
+});
+
+const sanitizeInlineImageString = (value: string): InlineImagePayloadSanitization => {
+  const compactValue = value.trim().replace(/[\r\n]/g, '');
+  if (PURE_RASTER_BASE64_RE.test(compactValue)) {
+    return {
+      value: INLINE_IMAGE_OMISSION_MARKER,
+      omitted: true,
+      omittedCharacters: value.length,
+      wholeValueOmitted: true,
+    };
+  }
+
+  let omittedCharacters = 0;
+  const sanitized = value.replace(INLINE_IMAGE_DATA_URL_RE, (match) => {
+    omittedCharacters += match.length;
+    return INLINE_IMAGE_OMISSION_MARKER;
+  });
+  if (omittedCharacters === 0) return unchangedSanitization(value);
+
+  return {
+    value: sanitized,
+    omitted: true,
+    omittedCharacters,
+    wholeValueOmitted: sanitized.trim() === INLINE_IMAGE_OMISSION_MARKER,
+  };
+};
+
+export const sanitizeInlineImagePayload = (value: unknown): InlineImagePayloadSanitization => {
+  if (typeof value === 'string') return sanitizeInlineImageString(value);
+
+  if (Array.isArray(value)) {
+    let omittedCharacters = 0;
+    let omitted = false;
+    const sanitized = value.map((item) => {
+      const itemSanitization = sanitizeInlineImagePayload(item);
+      omitted = omitted || itemSanitization.omitted;
+      omittedCharacters += itemSanitization.omittedCharacters;
+      return itemSanitization.value;
+    });
+
+    return omitted
+      ? { value: sanitized, omitted, omittedCharacters, wholeValueOmitted: false }
+      : unchangedSanitization(value);
+  }
+
+  if (value && typeof value === 'object') {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return unchangedSanitization(value);
+
+    let omittedCharacters = 0;
+    let omitted = false;
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      const itemSanitization = sanitizeInlineImagePayload(item);
+      omitted = omitted || itemSanitization.omitted;
+      omittedCharacters += itemSanitization.omittedCharacters;
+      sanitized[key] = itemSanitization.value;
+    }
+
+    return omitted
+      ? { value: sanitized, omitted, omittedCharacters, wholeValueOmitted: false }
+      : unchangedSanitization(value);
+  }
+
+  return unchangedSanitization(value);
+};
 
 const isImagePath = (path: string): boolean => IMAGE_PATH_EXTENSION_RE.test(path);
 
@@ -29,23 +105,27 @@ const mimeTypeFromImagePath = (path: string): string => {
 const sanitizeAcpRawOutput = (rawOutput?: AcpRawOutput): AcpRawOutput | undefined => {
   if (!rawOutput) return rawOutput;
 
-  const result = rawOutput.result;
-  const savedPath = rawOutput.saved_path;
-  if (typeof result !== 'string' || !isProbablyInlineImageResult(result)) {
-    return rawOutput;
+  const rawOutputSanitization = sanitizeInlineImagePayload(rawOutput);
+  const resultSanitization = sanitizeInlineImagePayload(rawOutput.result);
+  let sanitizedRawOutput = rawOutputSanitization.value as AcpRawOutput;
+  if (!resultSanitization.omitted) return sanitizedRawOutput;
+
+  if (resultSanitization.wholeValueOmitted) {
+    const { result: _result, ...rest } = sanitizedRawOutput;
+    sanitizedRawOutput = rest;
   }
 
-  const { result: _result, ...rest } = rawOutput;
+  const savedPath = sanitizedRawOutput.saved_path;
   const sanitized: AcpRawOutput = {
-    ...rest,
+    ...sanitizedRawOutput,
     result_omitted: true,
-    result_omitted_reason: rawOutput.result_omitted_reason || 'image_base64',
-    result_bytes: rawOutput.result_bytes || result.length,
+    result_omitted_reason: rawOutput.result_omitted_reason ?? 'image_base64',
+    result_bytes: rawOutput.result_bytes ?? resultSanitization.omittedCharacters,
   };
 
-  if (rawOutput.image || (typeof savedPath === 'string' && savedPath)) {
-    const path = rawOutput.image?.path || savedPath;
-    sanitized.image = rawOutput.image || {
+  if (sanitized.image || (typeof savedPath === 'string' && savedPath !== INLINE_IMAGE_OMISSION_MARKER)) {
+    const path = sanitized.image?.path || savedPath;
+    sanitized.image = sanitized.image || {
       path,
       mime_type: mimeTypeFromImagePath(path),
       source: 'codex_image_generation',

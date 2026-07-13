@@ -1,6 +1,5 @@
-import type { AcpRawOutput } from '@/common/types/platform/acpTypes';
 import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup } from './chatLib';
-import { getAcpImagePath, sanitizeAcpToolUpdate } from './acpToolCallOutput';
+import { getAcpImagePath, sanitizeAcpToolUpdate, sanitizeInlineImagePayload } from './acpToolCallOutput';
 
 export type NormalizedToolStatus = 'pending' | 'running' | 'completed' | 'error' | 'canceled';
 
@@ -19,31 +18,13 @@ export interface NormalizedToolCall {
 }
 
 const formatValue = (value: unknown): string => {
-  if (typeof value === 'string') return value;
+  const sanitizedValue = sanitizeInlineImagePayload(value).value;
+  if (typeof sanitizedValue === 'string') return sanitizedValue;
   try {
-    return JSON.stringify(value, null, 2);
+    return JSON.stringify(sanitizedValue, null, 2);
   } catch {
-    return String(value);
+    return String(sanitizedValue);
   }
-};
-
-const isInlineImageResult = (value: string): boolean =>
-  value.startsWith('iVBORw0KGgo') ||
-  value.startsWith('/9j/') ||
-  value.startsWith('UklGR') ||
-  value.toLowerCase().startsWith('data:image/');
-
-const omitInlineImageResultFromText = (rawOutput: AcpRawOutput): AcpRawOutput => {
-  const result = rawOutput.result;
-  if (typeof result !== 'string' || !isInlineImageResult(result)) return rawOutput;
-
-  const { result: _result, ...safeOutput } = rawOutput;
-  return {
-    ...safeOutput,
-    result_omitted: true,
-    result_omitted_reason: rawOutput.result_omitted_reason ?? 'image_base64',
-    result_bytes: rawOutput.result_bytes ?? result.length,
-  };
 };
 
 const DIAGNOSTIC_TELEMETRY_PATTERNS = [
@@ -80,9 +61,9 @@ const getResultDisplayText = (
   result_display: IMessageToolGroup['content'][0]['result_display']
 ): string | undefined => {
   if (!result_display) return undefined;
-  if (typeof result_display === 'string') return result_display;
-  if ('file_diff' in result_display) return result_display.file_diff;
-  if ('img_url' in result_display) return result_display.relative_path || result_display.img_url;
+  if (typeof result_display === 'string') return formatValue(result_display);
+  if ('file_diff' in result_display) return formatValue(result_display.file_diff);
+  if ('img_url' in result_display) return formatValue(result_display.relative_path || result_display.img_url);
   return undefined;
 };
 
@@ -107,14 +88,14 @@ export function normalizeToolGroup(message: IMessageToolGroup): NormalizedToolCa
         const { title: _title, type: _type, ...rest } = confirmationDetails;
         if (Object.keys(rest).length) input = formatValue(rest);
       } else if (description) {
-        input = description;
+        input = formatValue(description);
       }
 
       return {
         key: call_id,
-        name,
+        name: formatValue(name),
         status: normalizeToolGroupStatus(status),
-        description: desc,
+        description: formatValue(desc),
         input,
         output: getResultDisplayText(result_display),
       };
@@ -188,6 +169,7 @@ export function normalizeAcpToolCall(message: IMessageAcpToolCall): NormalizedTo
   const update = content?.update;
   if (!update) return undefined;
   if (isDiagnosticTelemetryText(update.title)) return undefined;
+  const sanitizedUpdate = sanitizeAcpToolUpdate(update);
 
   const rawInput = update.rawInput ?? update.raw_input;
   const input = rawInput ? formatValue(rawInput) : undefined;
@@ -196,17 +178,15 @@ export function normalizeAcpToolCall(message: IMessageAcpToolCall): NormalizedTo
   if (Array.isArray(update.content) && update.content.length) {
     output = update.content
       .map((item) => {
-        if (item.type === 'content' && item.content?.text) return item.content.text;
-        if (item.type === 'diff' && 'path' in item) return `[diff] ${item.path}`;
+        if (item.type === 'content' && item.content?.text) return formatValue(item.content.text);
+        if (item.type === 'diff' && 'path' in item) return formatValue(`[diff] ${item.path}`);
         return '';
       })
       .filter(Boolean)
       .join('\n');
   }
   if (!output) {
-    const sanitizedUpdate = sanitizeAcpToolUpdate(update);
-    const sanitizedRawOutput = sanitizedUpdate.rawOutput ?? sanitizedUpdate.raw_output;
-    const rawOutput = sanitizedRawOutput ? omitInlineImageResultFromText(sanitizedRawOutput) : undefined;
+    const rawOutput = sanitizedUpdate.rawOutput ?? sanitizedUpdate.raw_output;
     if (rawOutput) {
       const rawOutputKeys = Object.keys(rawOutput);
       output =
@@ -220,16 +200,16 @@ export function normalizeAcpToolCall(message: IMessageAcpToolCall): NormalizedTo
 
   return {
     key: update.tool_call_id,
-    name: update.title,
+    name: formatValue(update.title),
     status: normalizeAcpStatus(update.status),
     kind: update.kind,
-    description: keyParam || (rawInput?.command as string) || update.kind,
+    description: formatValue(keyParam || (rawInput?.command as string) || update.kind),
     input,
     output,
     truncated: content?._compact?.truncated === true,
     messageId: message.id,
     conversationId: message.conversation_id,
-    imagePath: getAcpImagePath(update),
+    imagePath: getAcpImagePath(sanitizedUpdate),
   };
 }
 
@@ -264,11 +244,11 @@ export function normalizeToolCall(message: IMessageToolCall): NormalizedToolCall
 
   return {
     key: call_id,
-    name,
+    name: formatValue(name),
     status: normalizeToolCallStatus(status, output !== undefined, output === undefined && error !== undefined),
-    description: description || undefined,
+    description: description ? formatValue(description) : undefined,
     input: displayInput,
-    output: displayOutput,
+    output: displayOutput !== undefined ? formatValue(displayOutput) : undefined,
   };
 }
 

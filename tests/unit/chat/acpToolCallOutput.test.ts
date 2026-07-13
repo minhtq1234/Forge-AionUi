@@ -74,6 +74,60 @@ describe('ACP tool call image output', () => {
     expect(sanitized.update.rawOutput?.image).toBeUndefined();
   });
 
+  it.each(['iVBORw0KGgoAAAA==', '/9j/AAAA', 'UklGRkZBS0VJTUFHRQ=='])(
+    'omits short pure raster base64 payloads: %s',
+    (result) => {
+      const sanitized = sanitizeAcpToolCallContent(
+        createAcpToolCall({
+          saved_path: '/tmp/generated.png',
+          result,
+        }).content
+      );
+
+      expect(sanitized.update.rawOutput?.result).toBeUndefined();
+      expect(sanitized.update.rawOutput?.result_omitted_reason).toBe('image_base64');
+    }
+  );
+
+  it('sanitizes nested and embedded data URLs while preserving useful text and image metadata', () => {
+    const inlineImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
+    const sanitized = sanitizeAcpToolCallContent(
+      createAcpToolCall({
+        saved_path: '/tmp/generated.png',
+        image: {
+          path: '/tmp/preview.png',
+          mime_type: 'image/png',
+          source: 'existing',
+        },
+        result: {
+          summary: 'render completed',
+          nested: {
+            preview: `before ${inlineImage}; after`,
+          },
+        },
+      }).content
+    );
+
+    expect(sanitized.update.rawOutput).toMatchObject({
+      saved_path: '/tmp/generated.png',
+      image: {
+        path: '/tmp/preview.png',
+        mime_type: 'image/png',
+        source: 'existing',
+      },
+      result: {
+        summary: 'render completed',
+        nested: {
+          preview: 'before [inline image omitted]; after',
+        },
+      },
+      result_omitted: true,
+      result_omitted_reason: 'image_base64',
+      result_bytes: inlineImage.length,
+    });
+    expect(JSON.stringify(sanitized.update.rawOutput)).not.toContain(inlineImage);
+  });
+
   it('omits oversized inline image results even without saved_path', () => {
     const content = createAcpToolCall({
       result: `iVBORw0KGgo${'A'.repeat(128 * 1024)}`,

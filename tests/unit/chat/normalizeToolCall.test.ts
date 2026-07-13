@@ -167,6 +167,26 @@ describe('normalizeAcpToolCall', () => {
     expect(normalized?.output).not.toContain(inlineImage);
     expect(normalized?.imagePath).toBe(imagePath);
   });
+
+  it('omits an embedded inline image from ACP content text while preserving surrounding text', () => {
+    const inlineImage = 'data:image/webp;base64,UklGRkZBS0VJTUFHRQ==';
+    const normalized = normalizeAcpToolCall(
+      acpToolCall({
+        content: [
+          {
+            type: 'content',
+            content: {
+              type: 'text',
+              text: `Rendered preview ${inlineImage}; saved successfully`,
+            },
+          },
+        ],
+      })
+    );
+
+    expect(normalized?.output).toBe('Rendered preview [inline image omitted]; saved successfully');
+    expect(normalized?.output).not.toContain(inlineImage);
+  });
 });
 
 describe('normalizeToolGroup telemetry boundaries', () => {
@@ -193,6 +213,30 @@ describe('normalizeToolGroup telemetry boundaries', () => {
     };
 
     expect(normalizeToolMessages([message])).toEqual([]);
+  });
+
+  it('omits inline image payloads from string results regardless of size', () => {
+    const inlineImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
+    const message: IMessageToolGroup = {
+      type: 'tool_group',
+      content: [
+        {
+          call_id: 'group-image-result',
+          name: 'Image generation',
+          description: 'Generate an image',
+          render_output_as_markdown: false,
+          status: 'Success',
+          result_display: inlineImage,
+        },
+      ],
+    };
+
+    expect(normalizeToolMessages([message])).toMatchObject([
+      {
+        output: '[inline image omitted]',
+      },
+    ]);
+    expect(normalizeToolMessages([message])[0].output).not.toContain(inlineImage);
   });
 });
 
@@ -231,11 +275,37 @@ describe('normalizeToolCall detail preservation', () => {
 
     expect(normalizeToolCall(toolCall({ description }))?.description).toBe(description);
   });
+
+  it.each([
+    ['input', { input: { image: 'data:image/png;base64,iVBORw0KGgoAAAA==' } }, '"image": "[inline image omitted]"'],
+    ['args', { args: { image: '/9j/AAAA' } }, '"image": "[inline image omitted]"'],
+    ['output', { output: 'data:image/webp;base64,UklGRkZBS0U=' }, '[inline image omitted]'],
+    [
+      'error',
+      { error: 'failed with preview data:image/jpeg;base64,/9j/AAAA; retry available' },
+      'failed with preview [inline image omitted]; retry available',
+    ],
+  ])('omits inline image payloads from plain tool %s', (_source, content, expectedDetail) => {
+    const normalized = normalizeToolCall(toolCall(content));
+    const technicalDetails = `${normalized?.input ?? ''}\n${normalized?.output ?? ''}`;
+
+    expect(technicalDetails).toContain(expectedDetail);
+    expect(technicalDetails).not.toMatch(/data:image\//i);
+    expect(technicalDetails).not.toContain('/9j/AAAA');
+  });
+
+  it('preserves ordinary commands and outputs exactly', () => {
+    const command = 'bun run test tests/unit/chat/normalizeToolCall.test.ts';
+    const output = '29 tests passed';
+    const normalized = normalizeToolCall(toolCall({ input: { command }, output }));
+
+    expect(JSON.parse(normalized?.input ?? '')).toEqual({ command });
+    expect(normalized?.output).toBe(output);
+    expect(normalized?.status).toBe('completed');
+  });
 });
 
-const acpToolCall = (
-  rawOutput: Pick<IMessageAcpToolCall['content']['update'], 'rawOutput' | 'raw_output'>
-): IMessageAcpToolCall => ({
+const acpToolCall = (updateOverrides: Partial<IMessageAcpToolCall['content']['update']>): IMessageAcpToolCall => ({
   id: 'raw-output-message',
   conversation_id: 'conv-1',
   type: 'acp_tool_call',
@@ -247,7 +317,7 @@ const acpToolCall = (
       status: 'completed',
       title: 'Execute',
       kind: 'execute',
-      ...rawOutput,
+      ...updateOverrides,
     },
   },
 });
