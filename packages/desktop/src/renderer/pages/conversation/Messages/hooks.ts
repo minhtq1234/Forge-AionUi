@@ -405,7 +405,14 @@ export const useMergeLiveMessage = () => {
           newList = beforeUpdateMessageListStack.shift()!(newList);
         }
       }
-      return newList;
+      const dedupedList = dedupeAssistantRepliesByTurn(newList);
+      const rebuilt = buildMessageIndex(dedupedList);
+      index.msgIdIndex = rebuilt.msgIdIndex;
+      index.call_idIndex = rebuilt.call_idIndex;
+      index.tool_call_idIndex = rebuilt.tool_call_idIndex;
+      index.permission_call_idIndex = rebuilt.permission_call_idIndex;
+      indexCache.set(dedupedList, index);
+      return dedupedList;
     });
 
     rafRef.current = setTimeout(flush);
@@ -674,22 +681,38 @@ const getMessageMergeKey = (message: TMessage): string => {
 
 const normalizeDedupeTextContent = (content: string): string => content.trim().replace(/\s+/g, ' ');
 
-const isRenderableAssistantText = (message: TMessage): message is IMessageText =>
-  message.type === 'text' && message.position === 'left' && !message.hidden;
+const isDedupeCandidate = (message: TMessage): message is IMessageText =>
+  message.type === 'text' && message.position === 'left' && !message.hidden && !message.content.teammateMessage;
 
-const isDuplicateAssistantAnswer = (first: TMessage, second: TMessage): boolean => {
-  if (!isRenderableAssistantText(first) || !isRenderableAssistantText(second)) {
-    return false;
+const dedupeAssistantRepliesByTurn = (messages: TMessage[]): TMessage[] => {
+  const dedupedMessages: TMessage[] = [];
+  const assistantReplyIndexes = new Map<string, number>();
+
+  for (const message of messages) {
+    if (message.position === 'right' && !message.hidden) {
+      assistantReplyIndexes.clear();
+    }
+
+    if (!isDedupeCandidate(message)) {
+      dedupedMessages.push(message);
+      continue;
+    }
+
+    const normalizedContent = normalizeDedupeTextContent(message.content.content);
+    const existingIndex = assistantReplyIndexes.get(normalizedContent);
+    if (existingIndex === undefined) {
+      assistantReplyIndexes.set(normalizedContent, dedupedMessages.length);
+      dedupedMessages.push(message);
+      continue;
+    }
+
+    const existing = dedupedMessages[existingIndex];
+    if (isDedupeCandidate(existing)) {
+      dedupedMessages[existingIndex] = preferTextMessageVersion(existing, message);
+    }
   }
-  if (first.conversation_id !== second.conversation_id) {
-    return false;
-  }
-  if (normalizeDedupeTextContent(first.content.content) !== normalizeDedupeTextContent(second.content.content)) {
-    return false;
-  }
-  const firstCreatedAt = first.created_at ?? 0;
-  const secondCreatedAt = second.created_at ?? 0;
-  return Math.abs(firstCreatedAt - secondCreatedAt) <= 5 * 60 * 1000;
+
+  return dedupedMessages;
 };
 
 const preferPersistedOrLiveMessage = (persisted: TMessage, live: TMessage): TMessage => {
@@ -700,10 +723,10 @@ const preferPersistedOrLiveMessage = (persisted: TMessage, live: TMessage): TMes
 };
 
 function mergeLoadedPageWithCurrent(conversationId: string, messages: TMessage[], currentList: TMessage[]): TMessage[] {
-  if (!currentList.length) return messages;
+  if (!currentList.length) return dedupeAssistantRepliesByTurn(messages);
 
   const sameConversation = currentList.filter((message) => message.conversation_id === conversationId);
-  if (!sameConversation.length) return messages;
+  if (!sameConversation.length) return dedupeAssistantRepliesByTurn(messages);
 
   const currentById = new Map(sameConversation.map((message) => [message.id, message]));
   const currentByKey = new Map(sameConversation.map((message) => [getMessageMergeKey(message), message]));
@@ -715,13 +738,10 @@ function mergeLoadedPageWithCurrent(conversationId: string, messages: TMessage[]
     return live ? preferPersistedOrLiveMessage(message, live) : message;
   });
   const liveOnly = sameConversation.filter(
-    (message) =>
-      !loadedIds.has(message.id) &&
-      !loadedKeys.has(getMessageMergeKey(message)) &&
-      !messages.some((loadedMessage) => isDuplicateAssistantAnswer(loadedMessage, message))
+    (message) => !loadedIds.has(message.id) && !loadedKeys.has(getMessageMergeKey(message))
   );
 
-  return liveOnly.length ? [...mergedMessages, ...liveOnly] : mergedMessages;
+  return dedupeAssistantRepliesByTurn(liveOnly.length ? [...mergedMessages, ...liveOnly] : mergedMessages);
 }
 
 export function prependHistoryMessages(currentList: TMessage[], messages: TMessage[]): TMessage[] {
@@ -732,7 +752,7 @@ export function prependHistoryMessages(currentList: TMessage[], messages: TMessa
   const uniqueHistory = messages.filter(
     (message) => !currentIds.has(message.id) && !currentKeys.has(getMessageMergeKey(message))
   );
-  return uniqueHistory.length ? [...uniqueHistory, ...currentList] : currentList;
+  return dedupeAssistantRepliesByTurn(uniqueHistory.length ? [...uniqueHistory, ...currentList] : currentList);
 }
 
 export const usePrependHistoryPage = () => {

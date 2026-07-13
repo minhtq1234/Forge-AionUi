@@ -12,6 +12,7 @@ import {
   MessageListProvider,
   useAddOrUpdateMessage,
   useMessageList,
+  usePrependHistoryPage,
   useReplaceWithAnchorWindow,
 } from '@/renderer/pages/conversation/Messages/hooks';
 
@@ -32,7 +33,13 @@ vi.mock('@/common', () => ({
 
 const CONVERSATION_ID = 'conv-1';
 
-const textMessage = (id: string, msg_id: string, content: string, created_at: number): IMessageText => ({
+const textMessage = (
+  id: string,
+  msg_id: string,
+  content: string,
+  created_at: number,
+  contentMetadata: Omit<IMessageText['content'], 'content'> = {}
+): IMessageText => ({
   id,
   msg_id,
   conversation_id: CONVERSATION_ID,
@@ -41,6 +48,7 @@ const textMessage = (id: string, msg_id: string, content: string, created_at: nu
   created_at,
   content: {
     content,
+    ...contentMetadata,
   },
 });
 
@@ -56,6 +64,7 @@ function TestWrapper({ children }: PropsWithChildren): JSX.Element {
 function useMessageHarness() {
   return {
     addOrUpdateMessage: useAddOrUpdateMessage(),
+    prependHistoryPage: usePrependHistoryPage(),
     replaceWithAnchorWindow: useReplaceWithAnchorWindow(),
     messages: useMessageList(),
   };
@@ -95,5 +104,118 @@ describe('message dedupe', () => {
     });
 
     expect(result.current.messages.map((message) => message.id)).toEqual(['persisted-user', 'persisted-answer']);
+  });
+
+  it('keeps one exact assistant reply when different live message ids arrive in the same user turn', async () => {
+    const { result } = renderHook(() => useMessageHarness(), {
+      wrapper: TestWrapper,
+    });
+    const preferredAnswer = textMessage('live-answer-2', 'live-msg-2', 'same final answer', 102, { replace: true });
+
+    act(() => {
+      result.current.addOrUpdateMessage(userMessage('user-1', 'user-msg-1', 'question', 100));
+      result.current.addOrUpdateMessage(textMessage('live-answer-1', 'live-msg-1', 'same final answer', 101));
+      result.current.addOrUpdateMessage(preferredAnswer, true);
+    });
+    await flushMessageQueue();
+
+    expect(result.current.messages).toHaveLength(2);
+    expect(result.current.messages[1]).toEqual(preferredAnswer);
+  });
+
+  it('keeps near-matching assistant replies in the same user turn', async () => {
+    const { result } = renderHook(() => useMessageHarness(), {
+      wrapper: TestWrapper,
+    });
+
+    act(() => {
+      result.current.addOrUpdateMessage(userMessage('user-1', 'user-msg-1', 'question', 100));
+      result.current.addOrUpdateMessage(textMessage('answer-1', 'answer-msg-1', 'Done.', 101));
+      result.current.addOrUpdateMessage(textMessage('answer-2', 'answer-msg-2', 'Done with details.', 102));
+    });
+    await flushMessageQueue();
+
+    expect(result.current.messages.map((message) => message.id)).toEqual(['user-1', 'answer-1', 'answer-2']);
+  });
+
+  it('keeps identical assistant replies in different user turns', async () => {
+    const { result } = renderHook(() => useMessageHarness(), {
+      wrapper: TestWrapper,
+    });
+
+    act(() => {
+      result.current.addOrUpdateMessage(userMessage('user-1', 'user-msg-1', 'first question', 100));
+      result.current.addOrUpdateMessage(textMessage('answer-1', 'answer-msg-1', 'Done.', 101));
+      result.current.addOrUpdateMessage(userMessage('user-2', 'user-msg-2', 'second question', 200));
+      result.current.addOrUpdateMessage(textMessage('answer-2', 'answer-msg-2', 'Done.', 201));
+    });
+    await flushMessageQueue();
+
+    expect(result.current.messages.map((message) => message.id)).toEqual(['user-1', 'answer-1', 'user-2', 'answer-2']);
+  });
+
+  it('keeps teammate replies even when their text matches', async () => {
+    const { result } = renderHook(() => useMessageHarness(), {
+      wrapper: TestWrapper,
+    });
+
+    act(() => {
+      result.current.addOrUpdateMessage(userMessage('user-1', 'user-msg-1', 'question', 100));
+      result.current.addOrUpdateMessage(
+        textMessage('teammate-1', 'teammate-msg-1', 'Done.', 101, { teammateMessage: true })
+      );
+      result.current.addOrUpdateMessage(
+        textMessage('teammate-2', 'teammate-msg-2', 'Done.', 102, { teammateMessage: true })
+      );
+    });
+    await flushMessageQueue();
+
+    expect(result.current.messages.map((message) => message.id)).toEqual(['user-1', 'teammate-1', 'teammate-2']);
+  });
+
+  it('dedupes exact assistant replies in an initial persisted window', () => {
+    const { result } = renderHook(() => useMessageHarness(), {
+      wrapper: TestWrapper,
+    });
+    const preferredAnswer = textMessage('persisted-answer-2', 'persisted-msg-2', 'same final answer', 102, {
+      replace: true,
+    });
+
+    act(() => {
+      result.current.replaceWithAnchorWindow(CONVERSATION_ID, [
+        userMessage('persisted-user', 'persisted-user-msg', 'question', 100),
+        textMessage('persisted-answer-1', 'persisted-msg-1', 'same final answer', 101),
+        preferredAnswer,
+      ]);
+    });
+
+    expect(result.current.messages).toEqual([
+      userMessage('persisted-user', 'persisted-user-msg', 'question', 100),
+      preferredAnswer,
+    ]);
+  });
+
+  it('dedupes exact assistant replies when older history is prepended', () => {
+    const { result } = renderHook(() => useMessageHarness(), {
+      wrapper: TestWrapper,
+    });
+    const preferredAnswer = textMessage('persisted-answer', 'persisted-msg', 'same final answer', 101, {
+      replace: true,
+    });
+
+    act(() => {
+      result.current.replaceWithAnchorWindow(CONVERSATION_ID, [
+        textMessage('live-answer', 'live-msg', 'same final answer', 102),
+      ]);
+      result.current.prependHistoryPage([
+        userMessage('persisted-user', 'persisted-user-msg', 'question', 100),
+        preferredAnswer,
+      ]);
+    });
+
+    expect(result.current.messages).toEqual([
+      userMessage('persisted-user', 'persisted-user-msg', 'question', 100),
+      preferredAnswer,
+    ]);
   });
 });
