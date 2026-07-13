@@ -322,14 +322,14 @@ const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
           <Button
             type='text'
             size='mini'
-            className='tool-item-disclosure'
+            className='!flex flex-1 items-center justify-between gap-12px !min-w-0 !w-auto !h-auto !p-0 !text-left !text-t-secondary !whitespace-normal hover:!text-t-primary'
             aria-label={accessibleName}
             aria-expanded={expanded}
             aria-controls={detailPanelId}
             onClick={toggleExpanded}
           >
             {toolLabel}
-            <span className='tool-item-disclosure__arrow'>
+            <span className='inline-flex items-center shrink-0'>
               {expanded ? <IconDown style={{ fontSize: 12 }} /> : <IconRight style={{ fontSize: 12 }} />}
             </span>
           </Button>
