@@ -6,7 +6,7 @@
 
 import type { IConversationArtifact } from '@/common/adapter/ipcBridge';
 import type { TMessage } from '@/common/chat/chatLib';
-import { isDiagnosticToolMessage, type ToolMessage } from '@/common/chat/normalizeToolCall';
+import { isDiagnosticToolMessage } from '@/common/chat/normalizeToolCall';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useConversationRuntimeView } from '@/renderer/pages/conversation/runtime/useConversationRuntimeView';
 import { getChatSurfaceWidthClass } from '@/renderer/pages/conversation/utils/chatSurfaceWidth';
@@ -87,9 +87,6 @@ const matchesTargetMessage = (item: IProcessedItem, targetMessageId?: string): b
   }
   return getProcessedItemSourceMessageIds(item).includes(targetMessageId);
 };
-
-const isToolMessage = (message: WorkJournalSourceMessage): message is ToolMessage =>
-  message.type === 'tool_group' || message.type === 'acp_tool_call' || message.type === 'tool_call';
 
 const getProcessedItemAnchorId = (item: IProcessedItem): string => {
   const sourceIds = getProcessedItemSourceMessageIds(item);
@@ -654,7 +651,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
           style={highlighted ? highlightStyle : undefined}
         >
           {item.type === 'file_summary' && <MessageFileChanges diffsChanges={item.diffs} />}
-          {item.type === 'work_summary' && <MessageToolGroupSummary messages={item.messages.filter(isToolMessage)} />}
+          {item.type === 'work_summary' && <MessageToolGroupSummary messages={item.messages} />}
         </div>
       );
     }

@@ -23,6 +23,33 @@ vi.mock('@/common', () => ({
 }));
 
 describe('MessageToolGroupSummary', () => {
+  it('uses existing i18n keys for raw input and output labels', () => {
+    render(
+      <MessageToolGroupSummary
+        messages={[
+          {
+            id: 'message-1',
+            conversation_id: 'conversation-1',
+            type: 'tool_call',
+            content: {
+              call_id: 'tool-1',
+              name: 'Shell Command',
+              args: { command: 'pwd' },
+              output: '/workspace',
+              status: 'completed',
+            },
+          } as ToolMessage,
+        ]}
+      />
+    );
+
+    fireEvent.click(screen.getByText('common.technical_details'));
+    fireEvent.click(screen.getByText('Shell Command'));
+
+    expect(screen.getByText('tools.labels.arguments')).toBeInTheDocument();
+    expect(screen.getByText('tools.labels.result')).toBeInTheDocument();
+  });
+
   it('lazy-loads full tool content when expanding a truncated item under Technical details', async () => {
     const invoke = vi.mocked(ipcBridge.database.getConversationMessage.invoke);
     invoke.mockResolvedValue({

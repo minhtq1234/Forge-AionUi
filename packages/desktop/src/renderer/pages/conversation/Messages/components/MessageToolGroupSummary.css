@@ -19,16 +19,19 @@
 .tool-group-summary__header {
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
   gap: 6px;
+  width: fit-content;
+  height: auto;
+  padding: 0;
   font-size: 13px;
-  color: var(--aou-6);
-  cursor: pointer;
+  color: var(--color-text-3);
   user-select: none;
   line-height: 1;
 }
 
 .tool-group-summary__header:hover {
-  color: var(--aou-7);
+  color: var(--color-text-2);
 }
 
 .tool-group-summary__icon {
@@ -38,11 +41,11 @@
   flex-shrink: 0;
   width: 14px;
   height: 14px;
-  color: var(--aou-5);
+  color: var(--color-text-4);
 }
 
 .tool-group-summary__header:hover .tool-group-summary__icon {
-  color: var(--aou-6);
+  color: var(--color-text-3);
 }
 
 .tool-group-summary__label {
@@ -53,7 +56,7 @@
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  color: var(--aou-4);
+  color: var(--color-text-4);
   transition: transform 0.2s ease;
 }
 
@@ -68,16 +71,12 @@
   padding: 10px 14px;
   margin-top: 6px;
   margin-left: 20px;
-  background: color-mix(in srgb, var(--aou-1) 50%, #fff);
+  background: var(--color-fill-1);
   border-radius: 8px;
 }
 
-[data-theme='dark'] .tool-group-summary__body {
-  background: var(--aou-1);
-}
-
 .tool-detail-panel {
-  border-left: 2px solid var(--color-border-2, #e5e6eb);
+  border-left: 2px solid var(--color-border-2);
   padding-left: 10px;
   margin-bottom: 4px;
 }
@@ -88,7 +87,7 @@
 
 .tool-detail-label {
   font-size: 11px;
-  color: var(--color-text-3, #86909c);
+  color: var(--color-text-3);
   font-weight: 500;
   margin-bottom: 2px;
 }
@@ -96,8 +95,8 @@
 .tool-detail-content {
   font-size: 12px;
   line-height: 1.5;
-  color: var(--color-text-2, #4e5969);
-  background: var(--color-fill-1, #f7f8fa);
+  color: var(--color-text-2);
+  background: var(--color-fill-1);
   border-radius: 4px;
   padding: 6px 8px;
   margin: 0;
@@ -105,4 +104,15 @@
   word-break: break-all;
   max-height: 200px;
   overflow-y: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge-breathing .arco-badge-status-dot,
+  .tool-group-summary .loading {
+    animation: none;
+  }
+
+  .tool-group-summary__arrow {
+    transition: none;
+  }
 }

@@ -8,13 +8,13 @@ import React, { type PropsWithChildren } from 'react';
 import { render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageAcpToolCall, IMessageText, TMessage } from '@/common/chat/chatLib';
-import type { ToolMessage } from '@/common/chat/normalizeToolCall';
 import {
   MessageListLoadingProvider,
   MessageListProvider,
   MessagePaginationProvider,
 } from '@/renderer/pages/conversation/Messages/hooks';
 import MessageList from '@/renderer/pages/conversation/Messages/MessageList';
+import type { WorkJournalSourceMessage } from '@/renderer/pages/conversation/Messages/types';
 import { CHAT_MESSAGE_JUMP_EVENT } from '@/renderer/utils/chat/chatMinimapEvents';
 
 const { scrollElementIntoViewMock, useTeamPermissionMock } = vi.hoisted(() => ({
@@ -129,7 +129,7 @@ vi.mock('@/renderer/pages/conversation/Messages/components/MessageSkillSuggest',
 }));
 
 vi.mock('@/renderer/pages/conversation/Messages/components/MessageToolGroupSummary', () => ({
-  default: ({ messages }: { messages: ToolMessage[] }) => (
+  default: ({ messages }: { messages: WorkJournalSourceMessage[] }) => (
     <div data-testid='work-summary'>{messages.map((message) => message.type).join(',')}</div>
   ),
 }));
@@ -354,7 +354,7 @@ describe('MessageList', () => {
       wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
     });
 
-    expect(screen.getByTestId('work-summary')).toHaveTextContent(/^tool_call,acp_tool_call$/);
+    expect(screen.getByTestId('work-summary')).toHaveTextContent(/^plan,thinking,tool_call,acp_tool_call$/);
     expect(screen.queryByText(/^plan$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^thinking$/)).not.toBeInTheDocument();
     expect(screen.getByText('Finished')).toBeInTheDocument();

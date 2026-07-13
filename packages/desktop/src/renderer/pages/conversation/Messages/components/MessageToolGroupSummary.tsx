@@ -10,8 +10,9 @@ import { getAcpImageFileName } from '@/common/chat/acpToolCallOutput';
 import { coalesceToolCalls } from '@/common/chat/toolActivity/coalesceToolCalls';
 import type { CoalescedStep } from '@/common/chat/toolActivity/types';
 import type { NormalizedToolCall, NormalizedToolStatus, ToolMessage } from '@/common/chat/normalizeToolCall';
-import { normalizeToolMessages } from '@/common/chat/normalizeToolCall';
+import { isDiagnosticTelemetryText, normalizeToolMessages } from '@/common/chat/normalizeToolCall';
 import LocalImageView from '@/renderer/components/media/LocalImageView';
+import type { WorkJournalSourceMessage } from '@/renderer/pages/conversation/Messages/types';
 import { iconColors } from '@/renderer/styles/colors';
 import { downloadFileFromPath } from '@/renderer/utils/file/download';
 import ToolActivityError from './toolActivity/ToolActivityError';
@@ -32,6 +33,73 @@ const statusToBadge = (status: NormalizedToolStatus): BadgeProps['status'] => {
     default:
       return 'default';
   }
+};
+
+type JournalRow =
+  | { key: string; kind: 'narration'; label: string; status: NormalizedToolStatus }
+  | { key: string; kind: 'tool'; step: CoalescedStep; status: NormalizedToolStatus };
+
+const planStatus: Record<'pending' | 'in_progress' | 'completed', NormalizedToolStatus> = {
+  pending: 'pending',
+  in_progress: 'running',
+  completed: 'completed',
+};
+
+const THINKING_SUBJECT_MAX_LENGTH = 180;
+
+const isToolMessage = (message: WorkJournalSourceMessage): message is ToolMessage =>
+  message.type === 'tool_group' || message.type === 'acp_tool_call' || message.type === 'tool_call';
+
+const getThinkingSubject = (message: Extract<WorkJournalSourceMessage, { type: 'thinking' }>): string | undefined => {
+  const subject = message.content.subject?.trim();
+  if (!subject || isDiagnosticTelemetryText(subject)) return undefined;
+  if (subject.length <= THINKING_SUBJECT_MAX_LENGTH) return subject;
+  return `${subject.slice(0, THINKING_SUBJECT_MAX_LENGTH - 1)}…`;
+};
+
+const buildJournalRows = (messages: WorkJournalSourceMessage[]): JournalRow[] => {
+  const rows: JournalRow[] = [];
+  let bufferedTools: ToolMessage[] = [];
+
+  const flushTools = () => {
+    for (const step of coalesceToolCalls(normalizeToolMessages(bufferedTools))) {
+      rows.push({ key: `tool-${step.key}`, kind: 'tool', step, status: step.status });
+    }
+    bufferedTools = [];
+  };
+
+  for (const message of messages) {
+    if (isToolMessage(message)) {
+      bufferedTools.push(message);
+      continue;
+    }
+
+    flushTools();
+    if (message.type === 'plan') {
+      message.content.entries.forEach((entry, index) => {
+        rows.push({
+          key: `plan-${message.id}-${index}`,
+          kind: 'narration',
+          label: entry.content,
+          status: planStatus[entry.status],
+        });
+      });
+      continue;
+    }
+
+    const subject = getThinkingSubject(message);
+    if (subject) {
+      rows.push({
+        key: `thinking-${message.id}`,
+        kind: 'narration',
+        label: subject,
+        status: message.content.status === 'done' ? 'completed' : 'running',
+      });
+    }
+  }
+
+  flushTools();
+  return rows;
 };
 
 const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
@@ -83,13 +151,13 @@ const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
   return (
     <div className='flex flex-col'>
       {messageContext}
-      <div className='flex flex-row color-#86909C gap-12px items-center'>
+      <div className='flex flex-row text-t-secondary gap-12px items-center'>
         <Badge status={statusToBadge(item.status)} className={item.status === 'running' ? 'badge-breathing' : ''} />
         <span
           className={
             'flex-1 min-w-0' +
             (expanded ? ' break-all' : ' truncate') +
-            (hasDetail ? ' cursor-pointer hover:color-#4E5969' : '')
+            (hasDetail ? ' cursor-pointer hover:text-t-primary' : '')
           }
           onClick={hasDetail ? toggleExpanded : undefined}
         >
@@ -99,24 +167,27 @@ const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
           )}
         </span>
         {hasDetail && (
-          <span className='flex-shrink-0 cursor-pointer hover:color-#4E5969 transition-colors' onClick={toggleExpanded}>
+          <span
+            className='flex-shrink-0 cursor-pointer hover:text-t-primary transition-colors'
+            onClick={toggleExpanded}
+          >
             {expanded ? <IconDown style={{ fontSize: 12 }} /> : <IconRight style={{ fontSize: 12 }} />}
           </span>
         )}
       </div>
       {expanded && hasDetail && (
         <div className='tool-detail-panel m-l-20px m-t-4px'>
-          {loadingFull && <div className='tool-detail-label'>Loading...</div>}
-          {loadError && <div className='tool-detail-label'>Failed to load full output</div>}
+          {loadingFull && <div className='tool-detail-label'>{t('common.loading')}</div>}
+          {loadError && <div className='tool-detail-label'>{t('common.failed')}</div>}
           {displayItem.input && (
             <div className='tool-detail-section'>
-              <div className='tool-detail-label'>Input</div>
+              <div className='tool-detail-label'>{t('tools.labels.arguments')}</div>
               <pre className='tool-detail-content'>{displayItem.input}</pre>
             </div>
           )}
           {displayItem.output && (
             <div className='tool-detail-section'>
-              <div className='tool-detail-label'>Output</div>
+              <div className='tool-detail-label'>{t('tools.labels.result')}</div>
               <pre className='tool-detail-content'>{displayItem.output}</pre>
             </div>
           )}
@@ -146,61 +217,78 @@ const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
   );
 };
 
-const StepRow: React.FC<{ label: string; status: NormalizedToolStatus }> = ({ label, status }) => {
-  const icon =
-    status === 'canceled' ? (
-      <Attention theme='filled' size='14' strokeLinejoin='bevel' fill={theme.Color.FunctionalColor.warn} />
-    ) : (
-      <CheckOne theme='filled' size='14' fill={theme.Color.FunctionalColor.success} />
-    );
+const StepRow: React.FC<{ label: string; status: Exclude<NormalizedToolStatus, 'error'> }> = ({ label, status }) => {
+  const icon = (() => {
+    switch (status) {
+      case 'running':
+        return (
+          <span role='status' aria-live='polite' data-status-icon='running'>
+            <LoadingOne theme='outline' size='14' fill={iconColors.primary} className='loading' />
+          </span>
+        );
+      case 'completed':
+        return (
+          <CheckOne theme='filled' size='14' fill={theme.Color.FunctionalColor.success} data-status-icon='completed' />
+        );
+      case 'canceled':
+        return (
+          <Attention
+            theme='filled'
+            size='14'
+            strokeLinejoin='bevel'
+            fill={theme.Color.FunctionalColor.warn}
+            data-status-icon='canceled'
+          />
+        );
+      case 'pending':
+        return <Badge status='default' data-status-icon='pending' />;
+    }
+  })();
+
   return (
-    <div className='flex flex-row items-center gap-8px color-#86909C'>
+    <div className='flex flex-row items-center gap-8px text-t-secondary' data-status={status}>
       <span className='flex-shrink-0 flex items-center'>{icon}</span>
       <span className='text-13px'>{label}</span>
     </div>
   );
 };
 
-const MessageToolGroupSummary: React.FC<{ messages: ToolMessage[] }> = ({ messages }) => {
+const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[] }> = ({ messages }) => {
   const { t } = useTranslation();
   const action = useToolActionText();
-  const tools = useMemo(() => normalizeToolMessages(messages), [messages]);
-  const steps = useMemo(() => coalesceToolCalls(tools), [tools]);
-  const hasRunning = useMemo(() => steps.some((s) => s.status === 'running' || s.status === 'pending'), [steps]);
+  const toolMessages = useMemo(() => messages.filter(isToolMessage), [messages]);
+  const tools = useMemo(() => normalizeToolMessages(toolMessages), [toolMessages]);
+  const rows = useMemo(() => buildJournalRows(messages), [messages]);
   const [showDetails, setShowDetails] = useState(false);
 
-  if (steps.length === 0) return null;
+  if (rows.length === 0 && tools.length === 0) return null;
 
-  // While working: one evolving live line (the current running step).
-  if (hasRunning) {
-    const current =
-      [...steps].toReversed().find((s) => s.status === 'running' || s.status === 'pending') ?? steps[steps.length - 1];
-    return (
-      <div className='tool-group-summary'>
-        <div className='flex flex-row items-center gap-8px color-#86909C'>
-          <LoadingOne theme='outline' size='14' fill={iconColors.primary} className='loading' />
-          <span className='text-13px'>{action.label(current)}</span>
-        </div>
-      </div>
-    );
-  }
-
-  // Settled: a compact step list + one block-level Technical details toggle.
   return (
     <div className='tool-group-summary flex flex-col gap-6px'>
-      {steps.map((step) =>
-        step.status === 'error' ? (
-          <ToolActivityError key={step.key} step={step} />
-        ) : (
-          <StepRow key={step.key} label={action.label(step)} status={step.status} />
-        )
+      {rows.map((row) => {
+        if (row.status === 'error') {
+          return row.kind === 'tool' ? <ToolActivityError key={row.key} step={row.step} /> : null;
+        }
+        return (
+          <StepRow key={row.key} label={row.kind === 'tool' ? action.label(row.step) : row.label} status={row.status} />
+        );
+      })}
+      {tools.length > 0 && (
+        <Button
+          type='text'
+          size='mini'
+          className='tool-group-summary__header'
+          aria-expanded={showDetails}
+          onClick={() => setShowDetails((value) => !value)}
+        >
+          <span className='tool-group-summary__label'>{t('common.technical_details')}</span>
+          <Right
+            theme='outline'
+            size='12'
+            className={`tool-group-summary__arrow${showDetails ? ' tool-group-summary__arrow--open' : ''}`}
+          />
+        </Button>
       )}
-      <div className='tool-group-summary__header' onClick={() => setShowDetails(!showDetails)}>
-        <span className='tool-group-summary__label'>{t('common.technical_details')}</span>
-        <span className={`tool-group-summary__arrow${showDetails ? ' tool-group-summary__arrow--open' : ''}`}>
-          <Right theme='outline' size='12' />
-        </span>
-      </div>
       {showDetails && (
         <div className='tool-group-summary__body'>
           {tools.map((item) => (

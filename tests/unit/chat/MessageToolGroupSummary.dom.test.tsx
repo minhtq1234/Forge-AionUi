@@ -7,8 +7,9 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { IMessageAcpToolCall, IMessageToolCall } from '@/common/chat/chatLib';
+import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup } from '@/common/chat/chatLib';
 import MessageToolGroupSummary from '@/renderer/pages/conversation/Messages/components/MessageToolGroupSummary';
+import type { WorkJournalSourceMessage } from '@/renderer/pages/conversation/Messages/types';
 
 const mockDownloadFileFromPath = vi.fn().mockResolvedValue(undefined);
 const mockMessageSuccess = vi.fn();
@@ -246,16 +247,226 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     expect(screen.queryByText(/Token watermark override/)).not.toBeInTheDocument();
   });
 
-  it('shows a single live line with the running label while working', () => {
-    render(<MessageToolGroupSummary messages={[acpStep('in_progress', 't1')]} />);
-    expect(screen.getByText('messages.toolActivity.tools.render_report.running')).toBeInTheDocument();
-    expect(screen.queryByText('common.technical_details')).not.toBeInTheDocument();
+  const commandStep = (status: string, toolCallId: string, command: string): IMessageAcpToolCall =>
+    ({
+      id: toolCallId,
+      conversation_id: 'conv-1',
+      type: 'acp_tool_call',
+      content: {
+        sessionId: 'sess-1',
+        update: {
+          sessionUpdate: 'tool_call_update',
+          tool_call_id: toolCallId,
+          status,
+          title: 'exec_command',
+          kind: 'execute',
+          rawInput: { command },
+        },
+      },
+    }) as unknown as IMessageAcpToolCall;
+
+  it('keeps completed phases visible while the latest phase is running', () => {
+    render(
+      <MessageToolGroupSummary
+        messages={[
+          commandStep('completed', 'search-1', 'rg -n needle .'),
+          commandStep('in_progress', 'verify-1', 'bun run test tests/unit/chat'),
+        ]}
+      />
+    );
+
+    expect(screen.getByText('messages.toolActivity.categories.search.done')).toBeInTheDocument();
+    expect(screen.getByText('messages.toolActivity.categories.verify.running')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
   });
 
   it('shows the done label and a technical-details toggle when settled', () => {
     render(<MessageToolGroupSummary messages={[acpStep('completed', 't1')]} />);
     expect(screen.getByText('messages.toolActivity.tools.render_report.done')).toBeInTheDocument();
-    expect(screen.getByText('common.technical_details')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'common.technical_details' })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('offers one Technical Details disclosure while work is running', () => {
+    render(<MessageToolGroupSummary messages={[commandStep('in_progress', 'verify-1', 'bun run test')]} />);
+
+    const disclosure = screen.getByRole('button', { name: 'common.technical_details' });
+    expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(disclosure);
+    expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getAllByText('common.technical_details')).toHaveLength(1);
+  });
+
+  it('groups repetitive search commands into one journal row', () => {
+    render(
+      <MessageToolGroupSummary
+        messages={[
+          commandStep('completed', 'search-1', 'rg -n needle .'),
+          commandStep('completed', 'search-2', 'find . -name needle'),
+        ]}
+      />
+    );
+
+    expect(screen.getAllByText('messages.toolActivity.categories.search.done')).toHaveLength(1);
+  });
+
+  it('shows a safe thinking subject but not raw thinking content', () => {
+    render(
+      <MessageToolGroupSummary
+        messages={
+          [
+            {
+              id: 'thinking-1',
+              conversation_id: 'conv-1',
+              type: 'thinking',
+              position: 'left',
+              content: {
+                subject: 'Reviewing the conversation activity',
+                content: 'raw private reasoning must stay hidden',
+                status: 'thinking',
+              },
+            },
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    expect(screen.getByText('Reviewing the conversation activity')).toBeInTheDocument();
+    expect(screen.queryByText(/raw private reasoning/)).not.toBeInTheDocument();
+  });
+
+  it('rejects diagnostic thinking subjects', () => {
+    render(
+      <MessageToolGroupSummary
+        messages={
+          [
+            {
+              id: 'thinking-1',
+              conversation_id: 'conv-1',
+              type: 'thinking',
+              position: 'left',
+              content: {
+                subject: 'Microcompact: internal activity telemetry',
+                content: 'private detail',
+                status: 'done',
+              },
+            },
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    expect(screen.queryByText(/Microcompact/)).not.toBeInTheDocument();
+  });
+
+  it('truncates long thinking subjects to 180 characters with an ellipsis', () => {
+    const subject = `Reviewing ${'a'.repeat(220)}`;
+    render(
+      <MessageToolGroupSummary
+        messages={
+          [
+            {
+              id: 'thinking-1',
+              conversation_id: 'conv-1',
+              type: 'thinking',
+              position: 'left',
+              content: { subject, content: 'private detail', status: 'done' },
+            },
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    const visibleSubject = screen.getByText((text) => text.startsWith('Reviewing'));
+    expect(visibleSubject.textContent).toHaveLength(180);
+    expect(visibleSubject.textContent).toMatch(/…$/);
+  });
+
+  it('renders plan, thinking, and tool rows in source order', () => {
+    render(
+      <MessageToolGroupSummary
+        messages={
+          [
+            {
+              id: 'plan-1',
+              conversation_id: 'conv-1',
+              type: 'plan',
+              position: 'left',
+              content: {
+                session_id: 'sess-1',
+                entries: [{ content: 'Review the activity flow', status: 'completed' }],
+              },
+            },
+            {
+              id: 'thinking-1',
+              conversation_id: 'conv-1',
+              type: 'thinking',
+              position: 'left',
+              content: { subject: 'Choosing a safe approach', content: 'private detail', status: 'done' },
+            },
+            commandStep('completed', 'search-1', 'rg -n needle .'),
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    const plan = screen.getByText('Review the activity flow');
+    const thinking = screen.getByText('Choosing a safe approach');
+    const tool = screen.getByText('messages.toolActivity.categories.search.done');
+    expect(plan.compareDocumentPosition(thinking)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(thinking.compareDocumentPosition(tool)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('maps plan entry statuses to pending, running, and completed rows', () => {
+    render(
+      <MessageToolGroupSummary
+        messages={
+          [
+            {
+              id: 'plan-1',
+              conversation_id: 'conv-1',
+              type: 'plan',
+              position: 'left',
+              content: {
+                session_id: 'sess-1',
+                entries: [
+                  { content: 'Queued work', status: 'pending' },
+                  { content: 'Active work', status: 'in_progress' },
+                  { content: 'Finished work', status: 'completed' },
+                ],
+              },
+            },
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    expect(screen.getByText('Queued work').closest('[data-status]')).toHaveAttribute('data-status', 'pending');
+    expect(screen.getByText('Active work').closest('[data-status]')).toHaveAttribute('data-status', 'running');
+    expect(screen.getByText('Finished work').closest('[data-status]')).toHaveAttribute('data-status', 'completed');
+  });
+
+  it('renders canceled work as a warning and never as success', () => {
+    const canceled: IMessageToolGroup = {
+      id: 'canceled-1',
+      conversation_id: 'conv-1',
+      type: 'tool_group',
+      position: 'left',
+      content: [
+        {
+          call_id: 'canceled-1',
+          description: 'Canceled command',
+          name: 'Shell Command',
+          render_output_as_markdown: false,
+          status: 'Canceled',
+        },
+      ],
+    };
+
+    render(<MessageToolGroupSummary messages={[canceled]} />);
+
+    const row = screen.getByText('messages.toolActivity.status.stopped').closest('[data-status]');
+    expect(row).toHaveAttribute('data-status', 'canceled');
+    expect(row?.querySelector('[data-status-icon="completed"]')).not.toBeInTheDocument();
   });
 
   it('coalesces consecutive retries into one live line with an attempt count', () => {
