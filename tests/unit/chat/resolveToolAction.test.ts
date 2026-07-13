@@ -177,9 +177,11 @@ describe('resolveToolAction', () => {
     'env CI=1 bun run lint',
     'sudo bunx tsc --noEmit',
     'env -i bun test tests/unit/chat',
+    'env -u CI bun test tests/unit/chat',
     'sudo -E bun run lint',
     '/usr/bin/env CI=1 bun test tests/unit/chat',
     'bash -lc "bun run test"',
+    "bash -l -c 'bun test'",
     "sh -c 'npm run lint'",
   ])('classifies validation detail hidden by a generic Skill wrapper: %s', (detail) => {
     expect(resolveToolAction('Skill', 'execute', detail)).toEqual({

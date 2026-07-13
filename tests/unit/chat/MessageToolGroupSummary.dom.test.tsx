@@ -483,6 +483,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       'Completed command: git status',
       'Running the command: echo CUSTOMER_SECRET',
       'The command finished: git status',
+      "I'm checking progress with git status",
       'src/App.tsx',
       'request_id=abc',
       'trace id: abc',

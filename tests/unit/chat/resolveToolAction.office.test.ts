@@ -51,6 +51,10 @@ describe('resolveToolAction — office-file detection from call detail', () => {
       category: 'office',
       purpose: 'delivering',
     });
+    expect(resolveToolAction('exec', 'execute', 'sudo -u root officecli edit report.xlsx && bun test')).toEqual({
+      category: 'office',
+      purpose: 'delivering',
+    });
   });
 
   it('falls back to the kind category when the detail is not office-related', () => {

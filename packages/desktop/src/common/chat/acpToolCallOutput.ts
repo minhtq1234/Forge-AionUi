@@ -8,10 +8,10 @@ import type { AcpRawOutput, ToolCallUpdate } from '@/common/types/platform/acpTy
 
 const IMAGE_PATH_EXTENSION_RE = /\.(?:png|jpe?g|webp|gif)$/i;
 const INLINE_IMAGE_DATA_URL_START_RE = /data:image\/[a-z0-9.+-]+(?:;[a-z0-9.+-]+(?:=[^;,\s]*)?)*;base64,/gi;
+const RAW_RASTER_BASE64_PREFIX_RE = /(?:iVBORw0KGgo|\/9j\/|UklGR|R0lGOD)/g;
 const BASE64_CHARACTER_RE = /^[a-z0-9+/=]$/i;
-const BASE64_TOKEN_RE = /^[a-z0-9+/=]+$/i;
 const RASTER_BASE64_PREFIX_RE = /^(?:iVBORw0KGgo|\/9j\/|UklGR|R0lGOD)/;
-const PURE_RASTER_BASE64_RE = /^(?:iVBORw0KGgo|\/9j\/|UklGR|R0lGOD)[A-Za-z0-9+/]*={0,2}$/;
+const COMMON_STATUS_WORD_RE = /^(?:complete|completed|done|error|failed|ready|saved|success|successful)$/i;
 
 export const INLINE_IMAGE_OMISSION_MARKER = '[inline image omitted]';
 
@@ -48,16 +48,10 @@ const readLineBreakEnd = (value: string, start: number): number => {
 };
 
 const isStrongInlineContinuation = (token: string): boolean =>
-  token.length >= 12 || /[0-9+/=]/.test(token) || token === token.toUpperCase();
+  token.length >= 12 || /[0-9+/=]/.test(token) || (token === token.toUpperCase() && !COMMON_STATUS_WORD_RE.test(token));
 
-const isPureRasterPayload = (value: string): boolean => {
-  const tokens = value.trim().split(/[ \t\r\n]+/);
-  if (tokens.length === 1) return PURE_RASTER_BASE64_RE.test(tokens[0]);
-  if (!RASTER_BASE64_PREFIX_RE.test(tokens[0])) return false;
-  if (!tokens.every((token) => BASE64_TOKEN_RE.test(token))) return false;
-  if (!tokens.slice(1).every(isStrongInlineContinuation)) return false;
-  return PURE_RASTER_BASE64_RE.test(tokens.join(''));
-};
+const isPayloadWhitespace = (value: string | undefined): boolean =>
+  value === ' ' || value === '\t' || value === '\r' || value === '\n';
 
 // Extend a data-URL replacement through payload-shaped chunks, but stop before
 // sentence-like text on the same or following line.
@@ -104,14 +98,15 @@ const consumeRasterContinuations = (value: string, initialEnd: number): number =
   return end;
 };
 
-const sanitizeInlineImageDataUrls = (value: string): { value: string; omittedCharacters: number } => {
+const sanitizeInlineImageStrings = (value: string): { value: string; omittedCharacters: number } => {
   const matcher = new RegExp(INLINE_IMAGE_DATA_URL_START_RE.source, INLINE_IMAGE_DATA_URL_START_RE.flags);
   const ranges: Array<{ start: number; end: number }> = [];
   let match: RegExpExecArray | null;
 
   while ((match = matcher.exec(value))) {
     const start = match.index;
-    const payloadStart = matcher.lastIndex;
+    let payloadStart = matcher.lastIndex;
+    while (payloadStart < value.length && isPayloadWhitespace(value[payloadStart])) payloadStart += 1;
     const initialEnd = readBase64TokenEnd(value, payloadStart);
     const initialToken = value.slice(payloadStart, initialEnd);
     const end = RASTER_BASE64_PREFIX_RE.test(initialToken) ? consumeRasterContinuations(value, initialEnd) : initialEnd;
@@ -119,7 +114,20 @@ const sanitizeInlineImageDataUrls = (value: string): { value: string; omittedCha
     matcher.lastIndex = Math.max(matcher.lastIndex, end);
   }
 
+  const rawMatcher = new RegExp(RAW_RASTER_BASE64_PREFIX_RE.source, RAW_RASTER_BASE64_PREFIX_RE.flags);
+  while ((match = rawMatcher.exec(value))) {
+    const start = match.index;
+    if (start > 0 && BASE64_CHARACTER_RE.test(value[start - 1])) continue;
+
+    const initialEnd = readBase64TokenEnd(value, start);
+    const end = consumeRasterContinuations(value, initialEnd);
+    const hasPayloadData = initialEnd > start + match[0].length || end > initialEnd;
+    if (hasPayloadData) ranges.push({ start, end });
+    rawMatcher.lastIndex = Math.max(rawMatcher.lastIndex, end);
+  }
+
   if (ranges.length === 0) return { value, omittedCharacters: 0 };
+  ranges.sort((left, right) => left.start - right.start || right.end - left.end);
 
   let cursor = 0;
   let omittedCharacters = 0;
@@ -135,16 +143,7 @@ const sanitizeInlineImageDataUrls = (value: string): { value: string; omittedCha
 };
 
 const sanitizeInlineImageString = (value: string): InlineImagePayloadSanitization => {
-  if (isPureRasterPayload(value)) {
-    return {
-      value: INLINE_IMAGE_OMISSION_MARKER,
-      omitted: true,
-      omittedCharacters: value.length,
-      wholeValueOmitted: true,
-    };
-  }
-
-  const { value: sanitized, omittedCharacters } = sanitizeInlineImageDataUrls(value);
+  const { value: sanitized, omittedCharacters } = sanitizeInlineImageStrings(value);
   if (omittedCharacters === 0) return unchangedSanitization(value);
 
   return {

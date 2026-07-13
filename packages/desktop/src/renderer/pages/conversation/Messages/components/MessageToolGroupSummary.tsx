@@ -55,6 +55,9 @@ const planStatus: Record<'pending' | 'in_progress' | 'completed', NormalizedTool
 const PROVIDER_NARRATION_MAX_LENGTH = 180;
 const SHELL_COMMAND =
   '(?:aws|az|bash|bunx?|cat|cargo|cmake|cmd|cp|curl|deno|docker|dotnet|echo|env|fd|find|fish|gcloud|gh|git|go|gradle|grep|helm|java|jq|just|kubectl|make|mkdir|mv|mvn|node|npm|npx|perl|pip3?|pnpm|podman|powershell|pwd|pwsh|pytest|python(?:3(?:\\.\\d+)?)?|rg|rm|ruby|sed|sh|sudo|swift|terraform|test|vitest|wget|xcodebuild|yarn|yq|zsh)';
+const SHELL_COMMAND_WORD = new RegExp(`^${SHELL_COMMAND}$`, 'i');
+const NATURAL_COMMAND_VERBS = new Set(['echo', 'find', 'test']);
+const NATURAL_COMMAND_DETERMINERS = new Set(['a', 'an', 'our', 'the', 'these', 'this', 'those', 'your']);
 const LABELED_SHELL_COMMAND = new RegExp(
   `^(?:(?:first|next|then|now|finally)\\s*[:,]?\\s+)?(?:(?:i(?:'m| am)?|we(?:'re| are)?)\\s+)?(?:check(?:ed|ing)?|command|complet(?:ed|ing)?|execute|executed|executing|finish(?:ed|ing)?|run|running|test(?:ed|ing)?)(?:\\s+(?:(?:the\\s+)?command|execute|executing|run|running|test|testing))?\\s*:?\\s+(?:(?:sudo|env)\\s+)?${SHELL_COMMAND}(?:\\s|$)`,
   'i'
@@ -90,6 +93,16 @@ const UNSAFE_PROVIDER_NARRATION = [
   NESTED_PATH,
 ];
 
+const containsShellCommandPhrase = (narration: string): boolean => {
+  const words: string[] = narration.match(/[a-z][a-z0-9.+-]*/gi) ?? [];
+  return words.some((word, index) => {
+    const command = word.toLowerCase();
+    if (!SHELL_COMMAND_WORD.test(command)) return false;
+    const nextWord = words[index + 1]?.toLowerCase();
+    return !(NATURAL_COMMAND_VERBS.has(command) && nextWord && NATURAL_COMMAND_DETERMINERS.has(nextWord));
+  });
+};
+
 const isSentenceLikeNarration = (narration: string): boolean => {
   const firstLetter = narration.match(/\p{L}/u)?.[0];
   if (!firstLetter) return false;
@@ -113,6 +126,7 @@ const getSafeProviderNarration = (value: string | undefined): string | undefined
     !narration ||
     isDiagnosticTelemetryText(narration) ||
     DIAGNOSTIC_NARRATION.test(narration) ||
+    containsShellCommandPhrase(narration) ||
     UNSAFE_PROVIDER_NARRATION.some((pattern) => pattern.test(narration)) ||
     /[\\/]/.test(narrationWithoutNaturalSlashPhrases ?? '') ||
     !isSentenceLikeNarration(narration)

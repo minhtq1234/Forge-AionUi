@@ -154,14 +154,51 @@ const splitShellSegments = (detail: string): string[] => {
   return segments;
 };
 
+const stripEnvWrapper = (command: string): string => {
+  const wrapper = command.match(/^(?:\/usr\/bin\/)?env\b\s*/i);
+  if (!wrapper) return command;
+
+  let rest = command.slice(wrapper[0].length);
+  while (rest.startsWith('-')) {
+    const optionWithArgument = rest.match(/^(?:-u|--unset)\s+\S+\s+/i);
+    if (optionWithArgument) {
+      rest = rest.slice(optionWithArgument[0].length);
+      continue;
+    }
+    const option = rest.match(/^--?\S+\s+/);
+    if (!option) break;
+    rest = rest.slice(option[0].length);
+  }
+  return rest;
+};
+
+const stripSudoWrapper = (command: string): string => {
+  const wrapper = command.match(/^sudo\b\s*/i);
+  if (!wrapper) return command;
+
+  let rest = command.slice(wrapper[0].length);
+  while (rest.startsWith('-')) {
+    const optionWithArgument = rest.match(
+      /^(?:-[CghpRttu]|--(?:chdir|chroot|command-timeout|group|host|prompt|type|user))\s+\S+\s+/i
+    );
+    if (optionWithArgument) {
+      rest = rest.slice(optionWithArgument[0].length);
+      continue;
+    }
+    const option = rest.match(/^--?\S+\s+/);
+    if (!option) break;
+    rest = rest.slice(option[0].length);
+  }
+  return rest;
+};
+
 const stripExecutionPrefixes = (segment: string): string => {
   let command = segment.trim();
   let previous = '';
   while (command && command !== previous) {
     previous = command;
-    command = command
-      .replace(/^(?:(?:\/usr\/bin\/)?env|sudo)(?:\s+--?[a-z][\w-]*(?:=\S+)?)*\s+/i, '')
-      .replace(/^[a-z_][a-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+/i, '');
+    command = command.replace(/^\s+/, '');
+    command = stripSudoWrapper(stripEnvWrapper(command)).replace(/^[a-z_][a-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+/i, '');
   }
   return command;
 };
@@ -170,7 +207,7 @@ const unwrapShellSegments = (segment: string, depth = 0): string[] => {
   const command = stripExecutionPrefixes(segment);
   if (depth >= 3) return command ? [command] : [];
 
-  const wrapped = command.match(/^(?:bash|sh|zsh|fish)\s+-[a-z]*c[a-z]*\s+(["'])([\s\S]*)\1$/i);
+  const wrapped = command.match(/^(?:bash|sh|zsh|fish)(?:\s+-[a-z]+)*\s+-[a-z]*c[a-z]*\s+(["'])([\s\S]*)\1$/i);
   if (!wrapped) return command ? [command] : [];
   return splitShellSegments(wrapped[2]).flatMap((inner) => unwrapShellSegments(inner, depth + 1));
 };

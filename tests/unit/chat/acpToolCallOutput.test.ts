@@ -69,6 +69,13 @@ describe('ACP tool call image output', () => {
     expect(sanitized.update.rawOutput?.result_omitted).toBeUndefined();
   });
 
+  it('sanitizes an embedded raw raster payload while preserving surrounding text', () => {
+    const result = 'Preview iVBORw0KGgoAAAA==; ready';
+    const sanitized = sanitizeAcpToolCallContent(createAcpToolCall({ result }).content);
+
+    expect(sanitized.update.rawOutput?.result).toBe('Preview [inline image omitted]; ready');
+  });
+
   it('preserves oversized non-image results even when saved_path is present', () => {
     const content = createAcpToolCall({
       saved_path: '/tmp/result.txt',
@@ -319,6 +326,9 @@ describe('ACP tool call image output', () => {
     ],
     ['Preview data:image/png;base64,iVBORw0KGgo\nAAAA\nSaved', 'Preview [inline image omitted]\nSaved'],
     ['Preview data:image/png;base64,iVBORw0KGgo AAAA; ready', 'Preview [inline image omitted]; ready'],
+    ['Preview data:image/png;base64, iVBORw0KGgo AAAA==; ready', 'Preview [inline image omitted]; ready'],
+    ['Preview data:image/jpeg;base64,\n/9j/AAAA; ready', 'Preview [inline image omitted]; ready'],
+    ['Preview data:image/png;base64,iVBORw0KGgoAAAA DONE.', 'Preview [inline image omitted] DONE.'],
   ])('sanitizes ambiguous wrapped boundaries without swallowing prose: %s', (text, expected) => {
     const message = createAcpToolCall(undefined);
     message.content.update.content = [{ type: 'content', content: { type: 'text', text } }];
