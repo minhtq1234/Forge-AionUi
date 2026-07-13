@@ -3,7 +3,7 @@ import { Badge, Button, Message, Tooltip } from '@arco-design/web-react';
 import { IconDown, IconRight } from '@arco-design/web-react/icon';
 import { Attention, CheckOne, Download, LoadingOne, Right } from '@icon-park/react';
 import { theme } from '@office-ai/platform';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ipcBridge } from '@/common';
 import { getAcpImageFileName } from '@/common/chat/acpToolCallOutput';
@@ -231,6 +231,7 @@ const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
   const [fullItem, setFullItem] = useState<LoadedToolItem | null>(null);
   const [loadingVersion, setLoadingVersion] = useState<string | null>(null);
   const [loadErrorVersion, setLoadErrorVersion] = useState<string | null>(null);
+  const detailPanelId = useId();
   const { conversationId, key, messageId, truncated } = item;
   const itemVersion = getToolItemVersion(item);
   const latestItemVersionRef = useRef(itemVersion);
@@ -241,6 +242,10 @@ const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
   const loadingFull = loadingVersion === itemVersion;
   const loadError = loadErrorVersion === itemVersion;
   const hasDetail = displayItem.input || displayItem.output || item.truncated || imagePath;
+  const accessibleName =
+    displayItem.description && displayItem.description !== displayItem.name
+      ? `${displayItem.name} ${displayItem.description}`
+      : displayItem.name;
   const [messageApi, messageContext] = Message.useMessage();
   const handleDownloadImage = useCallback(
     async (path: string) => {
@@ -299,35 +304,41 @@ const ToolItemDetail: React.FC<{ item: NormalizedToolCall }> = ({ item }) => {
     setExpanded((value) => !value);
   };
 
+  const toolLabel = (
+    <span className={'flex-1 min-w-0' + (expanded ? ' break-all' : ' truncate')}>
+      <span className='font-medium text-13px'>{displayItem.name}</span>
+      {displayItem.description && displayItem.description !== displayItem.name && (
+        <span className='m-l-4px opacity-80 text-13px'>{displayItem.description}</span>
+      )}
+    </span>
+  );
+
   return (
     <div className='flex flex-col'>
       {messageContext}
       <div className='flex flex-row text-t-secondary gap-12px items-center'>
         <Badge status={statusToBadge(item.status)} className={item.status === 'running' ? 'badge-breathing' : ''} />
-        <span
-          className={
-            'flex-1 min-w-0' +
-            (expanded ? ' break-all' : ' truncate') +
-            (hasDetail ? ' cursor-pointer hover:text-t-primary' : '')
-          }
-          onClick={hasDetail ? toggleExpanded : undefined}
-        >
-          <span className='font-medium text-13px'>{displayItem.name}</span>
-          {displayItem.description && displayItem.description !== displayItem.name && (
-            <span className='m-l-4px opacity-80 text-13px'>{displayItem.description}</span>
-          )}
-        </span>
-        {hasDetail && (
-          <span
-            className='flex-shrink-0 cursor-pointer hover:text-t-primary transition-colors'
+        {hasDetail ? (
+          <Button
+            type='text'
+            size='mini'
+            className='tool-item-disclosure'
+            aria-label={accessibleName}
+            aria-expanded={expanded}
+            aria-controls={detailPanelId}
             onClick={toggleExpanded}
           >
-            {expanded ? <IconDown style={{ fontSize: 12 }} /> : <IconRight style={{ fontSize: 12 }} />}
-          </span>
+            {toolLabel}
+            <span className='tool-item-disclosure__arrow'>
+              {expanded ? <IconDown style={{ fontSize: 12 }} /> : <IconRight style={{ fontSize: 12 }} />}
+            </span>
+          </Button>
+        ) : (
+          toolLabel
         )}
       </div>
       {expanded && hasDetail && (
-        <div className='tool-detail-panel m-l-20px m-t-4px'>
+        <div id={detailPanelId} className='tool-detail-panel m-l-20px m-t-4px'>
           {loadingFull && <div className='tool-detail-label'>{t('common.loading')}</div>}
           {loadError && <div className='tool-detail-label'>{t('common.failed')}</div>}
           {displayItem.input && (

@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup } from '@/common/chat/chatLib';
 import MessageToolGroupSummary from '@/renderer/pages/conversation/Messages/components/MessageToolGroupSummary';
@@ -318,6 +319,58 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     fireEvent.click(disclosure);
     expect(disclosure).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getAllByText('common.technical_details')).toHaveLength(1);
+  });
+
+  it('toggles expandable tool details from the keyboard while leaving detail-less rows static', async () => {
+    const user = userEvent.setup();
+    const expandableTool: IMessageToolCall = {
+      id: 'tool-expandable',
+      conversation_id: 'conv-1',
+      type: 'tool_call',
+      content: {
+        call_id: 'tool-expandable',
+        name: 'Shell Command',
+        description: 'Check current folder',
+        args: { command: 'pwd' },
+        output: '/workspace',
+        status: 'completed',
+      },
+    };
+    const staticTool: IMessageToolCall = {
+      id: 'tool-static',
+      conversation_id: 'conv-1',
+      type: 'tool_call',
+      content: {
+        call_id: 'tool-static',
+        name: 'Status Marker',
+        description: 'No details available',
+        args: {},
+        status: 'completed',
+      },
+    };
+
+    render(<MessageToolGroupSummary messages={[expandableTool, staticTool]} />);
+
+    await user.click(screen.getByRole('button', { name: 'common.technical_details' }));
+    const toolDisclosure = screen.getByRole('button', { name: 'Shell Command Check current folder' });
+    expect(screen.queryByRole('button', { name: 'Status Marker No details available' })).not.toBeInTheDocument();
+
+    await user.tab();
+    expect(toolDisclosure).toHaveFocus();
+    expect(toolDisclosure).toHaveAttribute('aria-expanded', 'false');
+    const detailPanelId = toolDisclosure.getAttribute('aria-controls');
+    expect(detailPanelId).toBeTruthy();
+
+    await user.keyboard('{Enter}');
+    const detailPanel = document.getElementById(detailPanelId!);
+    expect(toolDisclosure).toHaveAttribute('aria-expanded', 'true');
+    expect(detailPanel).toBeVisible();
+    expect(within(detailPanel!).getByText('/workspace')).toBeVisible();
+
+    await user.keyboard(' ');
+    expect(toolDisclosure).toHaveAttribute('aria-expanded', 'false');
+    expect(document.getElementById(detailPanelId!)).not.toBeInTheDocument();
+    expect(screen.getByText('Status Marker')).toBeVisible();
   });
 
   it('groups repetitive search commands into one journal row', () => {
