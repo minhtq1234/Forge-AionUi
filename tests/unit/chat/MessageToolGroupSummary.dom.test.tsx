@@ -419,6 +419,54 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     unsafeEntries.forEach((entry) => expect(screen.queryByText(entry)).not.toBeInTheDocument());
   });
 
+  it('replaces technical provider narration shapes with one localized fallback row', () => {
+    const unsafeEntries = [
+      'bash -lc pwd',
+      'docker compose up',
+      'Run bun test',
+      'src/App.tsx',
+      'request_id=abc',
+      'trace id: abc',
+      'sh -c pwd',
+      'zsh -lc pwd',
+      'fish -c pwd',
+      'podman compose up',
+      'deno test',
+      'python3 script.py',
+      'pip install package',
+      'Reviewing changes && git status',
+      'https://example.com/status',
+      'MODE=debug',
+      '{"request_id":"abc"}',
+      'session_id: abc',
+      'provider=openai',
+      'token id: abc',
+      '```sh\npwd\n```',
+    ];
+    render(
+      <MessageToolGroupSummary
+        isActive
+        messages={
+          [
+            {
+              id: 'plan-technical',
+              conversation_id: 'conv-1',
+              type: 'plan',
+              position: 'left',
+              content: {
+                session_id: 'sess-1',
+                entries: unsafeEntries.map((content) => ({ content, status: 'in_progress' as const })),
+              },
+            },
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    expect(screen.getAllByText('messages.toolActivity.generic.running')).toHaveLength(1);
+    unsafeEntries.forEach((entry) => expect(screen.queryByText(entry)).not.toBeInTheDocument());
+  });
+
   it('rejects command and path shaped thinking subjects without exposing raw content', () => {
     render(
       <MessageToolGroupSummary
@@ -612,6 +660,33 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
+  it('switches an unsafe plan fallback to done narration when the summary settles', () => {
+    render(
+      <MessageToolGroupSummary
+        isActive={false}
+        messages={
+          [
+            {
+              id: 'plan-1',
+              conversation_id: 'conv-1',
+              type: 'plan',
+              position: 'left',
+              content: {
+                session_id: 'sess-1',
+                entries: [{ content: 'bun run test', status: 'in_progress' }],
+              },
+            },
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    const row = screen.getByText('messages.toolActivity.generic.done').closest('[data-status]');
+    expect(row).toHaveAttribute('data-status', 'completed');
+    expect(row?.querySelector('[data-status-icon="completed"]')).toBeInTheDocument();
+    expect(screen.queryByText('messages.toolActivity.generic.running')).not.toBeInTheDocument();
+  });
+
   it('renders plan, thinking, and tool rows in source order', () => {
     render(
       <MessageToolGroupSummary
@@ -719,6 +794,13 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       screen.getByText('messages.toolActivity.tools.render_report.done messages.toolActivity.status.recovered')
     ).toBeInTheDocument();
     expect(screen.queryByText('messages.toolActivity.tools.render_report.failedTitle')).not.toBeInTheDocument();
+  });
+
+  it('does not claim recovery when an in-progress retry is only synthetically settled', () => {
+    render(<MessageToolGroupSummary messages={[acpStep('failed', 't1'), acpStep('in_progress', 't2')]} />);
+
+    expect(screen.getByText('messages.toolActivity.tools.render_report.done')).toBeInTheDocument();
+    expect(screen.queryByText(/messages\.toolActivity\.status\.recovered/)).not.toBeInTheDocument();
   });
 
   it('renders a friendly error card for a final give-up', () => {

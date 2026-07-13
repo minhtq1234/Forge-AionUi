@@ -36,7 +36,14 @@ const statusToBadge = (status: NormalizedToolStatus): BadgeProps['status'] => {
 };
 
 type JournalRow =
-  | { key: string; kind: 'narration'; label: string; status: NormalizedToolStatus; isFallback?: boolean }
+  | {
+      key: string;
+      kind: 'narration';
+      label: string;
+      status: NormalizedToolStatus;
+      isFallback?: boolean;
+      fallbackDoneLabel?: string;
+    }
   | { key: string; kind: 'tool'; step: CoalescedStep; status: NormalizedToolStatus };
 
 const planStatus: Record<'pending' | 'in_progress' | 'completed', NormalizedToolStatus> = {
@@ -47,13 +54,28 @@ const planStatus: Record<'pending' | 'in_progress' | 'completed', NormalizedTool
 
 const PROVIDER_NARRATION_MAX_LENGTH = 180;
 const SHELL_COMMAND =
-  '(?:bun|npm|pnpm|yarn|git|rg|grep|find|cat|sed|node|python|cargo|go|mvn|gradle|just|make|curl|wget|rm|mv|cp|mkdir)';
-const SHELL_COMMAND_START = new RegExp(`^${SHELL_COMMAND}(?:\\s|$)`, 'i');
-const LABELED_SHELL_COMMAND = new RegExp(`^(?:command|execute|run):\\s*${SHELL_COMMAND}(?:\\s|$)`, 'i');
+  '(?:bash|sh|zsh|fish|docker|podman|deno|python(?:3(?:\\.\\d+)?)?|pip3?|bunx?|npx|npm|pnpm|yarn|git|rg|grep|find|cat|sed|node|cargo|go|mvn|gradle|just|make|curl|wget|rm|mv|cp|mkdir|powershell|pwsh|cmd|perl|ruby|java|dotnet)';
+const SHELL_COMMAND_START = new RegExp(`^(?:(?:sudo|env)\\s+)?${SHELL_COMMAND}(?:\\s|$)`, 'i');
+const LABELED_SHELL_COMMAND = /^(?:command|execute|run)\b(?:\s|[^\w])/i;
 const DIAGNOSTIC_NARRATION = /\b(?:local_estimate|token\s+watermark|microcompact)\b/i;
-const ABSOLUTE_UNIX_PATH = /(?:^|\s)\/(?:[^/\s]+\/)*[^/\s]+/;
-const ABSOLUTE_WINDOWS_PATH = /(?:^|\s)(?:[a-z]:[\\/]|\\\\)[^\s]+/i;
-const REPOSITORY_PATH = /(?:^|\s)(?:\.{1,2}[\\/])?(?:[\w@.-]+[\\/]){2,}[\w@.-]+/;
+const TELEMETRY_IDENTIFIER =
+  /\b(?:request|trace|session|provider|token)[\s_-]*(?:id|identifier)\b|\b(?:request|trace|session|provider|token)\s*[:=]/i;
+const FILE_PATH_TOKEN =
+  /\b[\w@.-]+\.(?:tsx?|jsx?|mjs|cjs|json|ya?ml|toml|md|css|scss|less|html?|py|rs|go|java|kt|swift|sh|bash|zsh|fish|sql|lock)\b/i;
+const UNSAFE_PROVIDER_NARRATION = [
+  SHELL_COMMAND_START,
+  LABELED_SHELL_COMMAND,
+  /[\r\n`]|~~~|&&|\|\||[|;<>]|(?:^|\s)&(?:\s|$)|\$\(|\$\{/,
+  /[\\/]/,
+  /\b(?:https?|file|ftp):|(?:^|\s)www\./i,
+  /\b[a-z_][\w.-]*\s*=\s*(?:"[^"]*"|'[^']*'|\S+)/i,
+  /^\s*[\w.-]+\s*:\s*\S+/,
+  /(?:[{}]|\[|\])|=>/,
+  /(?:^|\s)--?[a-z][\w-]*(?:\s|=|$)/i,
+  /^\s*[$#>%]\s*\S+/,
+  TELEMETRY_IDENTIFIER,
+  FILE_PATH_TOKEN,
+];
 
 const getSafeProviderNarration = (value: string | undefined): string | undefined => {
   const narration = value?.trim();
@@ -61,12 +83,7 @@ const getSafeProviderNarration = (value: string | undefined): string | undefined
     !narration ||
     isDiagnosticTelemetryText(narration) ||
     DIAGNOSTIC_NARRATION.test(narration) ||
-    /`/.test(narration) ||
-    SHELL_COMMAND_START.test(narration) ||
-    LABELED_SHELL_COMMAND.test(narration) ||
-    ABSOLUTE_UNIX_PATH.test(narration) ||
-    ABSOLUTE_WINDOWS_PATH.test(narration) ||
-    REPOSITORY_PATH.test(narration)
+    UNSAFE_PROVIDER_NARRATION.some((pattern) => pattern.test(narration))
   ) {
     return undefined;
   }
@@ -122,6 +139,7 @@ const buildJournalRows = (
           label: narration ?? (status === 'completed' ? planFallback.done : planFallback.running),
           status,
           isFallback: narration === undefined,
+          fallbackDoneLabel: narration === undefined ? planFallback.done : undefined,
         });
       });
       continue;
@@ -156,9 +174,9 @@ const settleJournalRows = (rows: JournalRow[], isActive: boolean): JournalRow[] 
   return rows.map((row, index) => {
     if (row.status !== 'running' || index === activeRowIndex) return row;
     if (row.kind === 'tool') {
-      return { ...row, status: 'completed', step: { ...row.step, status: 'completed' } };
+      return { ...row, status: 'completed', step: { ...row.step, status: 'completed', hadError: false } };
     }
-    return { ...row, status: 'completed' };
+    return { ...row, label: row.fallbackDoneLabel ?? row.label, status: 'completed' };
   });
 };
 
