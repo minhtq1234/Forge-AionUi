@@ -68,6 +68,42 @@
     "no": "否 (esc)"
   },
   "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "工作進行中",
+        "completed": "工作已完成",
+        "recovered": "重試後已完成工作",
+        "partial": "工作部分完成",
+        "failed": "無法完成工作",
+        "canceled": "工作已停止"
+      },
+      "activity": "本輪涵蓋了{{categories}}。",
+      "subject": "重點：{{subject}}。",
+      "connector": { "pair": "{{first}}和{{second}}", "series": "{{first}}、{{rest}}" },
+      "category": {
+        "web": "{{count}} 次網頁搜尋",
+        "search": "{{count}} 次專案搜尋",
+        "fileRead": "{{count}} 次檔案檢閱",
+        "fileWrite": "{{count}} 次實作更新",
+        "data": "{{count}} 次資料檢閱",
+        "report": "{{count}} 項報告工作",
+        "export": "{{count}} 次匯出",
+        "memory": "{{count}} 次記憶更新",
+        "code": "{{count}} 個專案步驟",
+        "verify": "{{count}} 次驗證",
+        "office": "{{count}} 項文件工作",
+        "generic": "{{count}} 個專案步驟"
+      },
+      "outcome": {
+        "active": "已完成 {{completed}} 個步驟，共 {{total}} 個，尚餘 {{pending}} 個。",
+        "completedOne": "已完成 1 個步驟。",
+        "completedMany": "已完成全部 {{total}} 個步驟。",
+        "recovered": "完成了 {{total}} 個步驟，經過 {{retries}} 次重試。",
+        "partial": "已完成 {{completed}} 個步驟，共 {{total}} 個；{{failed}} 個未完成。",
+        "failed": "{{failed}} 個步驟未完成，共 {{total}} 個。",
+        "canceled": "完成 {{completed}} 個步驟後，工作已停止（共 {{total}} 個）。"
+      }
+    },
     "attempt": "（第 {{n}} 次嘗試）",
     "generic": {
       "running": "我正在處理下一個步驟。",

@@ -68,6 +68,42 @@
     "no": "No (esc)"
   },
   "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "Work in progress",
+        "completed": "Work completed",
+        "recovered": "Work completed after a retry",
+        "partial": "Work partly completed",
+        "failed": "Work could not be completed",
+        "canceled": "Work stopped"
+      },
+      "activity": "This turn covered {{categories}}.",
+      "subject": "Focus: {{subject}}.",
+      "connector": { "pair": "{{first}} and {{second}}", "series": "{{first}}, {{rest}}" },
+      "category": {
+        "web": "{{count}} web search",
+        "search": "{{count}} project search",
+        "fileRead": "{{count}} file review",
+        "fileWrite": "{{count}} implementation update",
+        "data": "{{count}} data review",
+        "report": "{{count}} report task",
+        "export": "{{count}} export",
+        "memory": "{{count}} memory update",
+        "code": "{{count}} project step",
+        "verify": "{{count}} verification",
+        "office": "{{count}} document task",
+        "generic": "{{count}} project step"
+      },
+      "outcome": {
+        "active": "{{completed}} of {{total}} steps are complete, with {{pending}} remaining.",
+        "completedOne": "Completed 1 step.",
+        "completedMany": "Completed all {{total}} steps.",
+        "recovered": "Completed {{total}} steps after {{retries}} retries.",
+        "partial": "Completed {{completed}} of {{total}} steps; {{failed}} did not finish.",
+        "failed": "{{failed}} of {{total}} steps did not finish.",
+        "canceled": "Work stopped after {{completed}} of {{total}} steps."
+      }
+    },
     "attempt": "(attempt {{n}})",
     "generic": {
       "running": "I'm working through the next step.",

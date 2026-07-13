@@ -15,6 +15,7 @@ import LocalImageView from '@/renderer/components/media/LocalImageView';
 import type { WorkJournalSourceMessage } from '@/renderer/pages/conversation/Messages/types';
 import { iconColors } from '@/renderer/styles/colors';
 import { downloadFileFromPath } from '@/renderer/utils/file/download';
+import { buildTurnWorkRecap } from './toolActivity/buildTurnWorkRecap';
 import ToolActivityError from './toolActivity/ToolActivityError';
 import { useToolActionText } from './toolActivity/useToolActionText';
 import './MessageToolGroupSummary.css';
@@ -442,6 +443,27 @@ const StepRow: React.FC<{ label: string; status: Exclude<NormalizedToolStatus, '
   );
 };
 
+const formatCategorySummary = (
+  categories: Array<{ category: string; count: number }>,
+  t: ReturnType<typeof useTranslation>['t']
+): string => {
+  const clauses = categories.map(({ category, count }) =>
+    t(`messages.toolActivity.recap.category.${category}`, { count })
+  );
+  const joinClauses = (items: string[]): string => {
+    if (items.length === 0) return '';
+    if (items.length === 1) return items[0];
+    if (items.length === 2)
+      return t('messages.toolActivity.recap.connector.pair', { first: items[0], second: items[1] });
+    return t('messages.toolActivity.recap.connector.series', {
+      first: items[0],
+      rest: joinClauses(items.slice(1)),
+    });
+  };
+
+  return joinClauses(clauses);
+};
+
 const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[]; isActive?: boolean }> = ({
   messages,
   isActive = false,
@@ -459,21 +481,62 @@ const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[]; 
     [messages, t]
   );
   const rows = useMemo(() => settleJournalRows(sourceRows, isActive), [isActive, sourceRows]);
+  const recap = useMemo(
+    () =>
+      buildTurnWorkRecap(
+        rows.map((row) =>
+          row.kind === 'tool'
+            ? {
+                category: row.step.action.category,
+                status: row.status,
+                attempts: row.step.attempts,
+                hadError: row.step.hadError,
+              }
+            : {
+                category: 'generic',
+                status: row.status,
+                safeSubject: row.isFallback ? undefined : row.label,
+              }
+        )
+      ),
+    [rows]
+  );
+  const categorySummary = useMemo(() => formatCategorySummary(recap.categories, t), [recap.categories, t]);
+  const outcome = useMemo(() => {
+    switch (recap.status) {
+      case 'active':
+        return t('messages.toolActivity.recap.outcome.active', recap);
+      case 'recovered':
+        return t('messages.toolActivity.recap.outcome.recovered', recap);
+      case 'partial':
+        return t('messages.toolActivity.recap.outcome.partial', recap);
+      case 'failed':
+        return t('messages.toolActivity.recap.outcome.failed', recap);
+      case 'canceled':
+        return t('messages.toolActivity.recap.outcome.canceled', recap);
+      case 'completed':
+        return t(
+          recap.total === 1
+            ? 'messages.toolActivity.recap.outcome.completedOne'
+            : 'messages.toolActivity.recap.outcome.completedMany',
+          recap
+        );
+    }
+  }, [recap, t]);
   const [showDetails, setShowDetails] = useState(false);
 
   if (rows.length === 0 && tools.length === 0) return null;
 
   return (
     <div className='tool-group-summary flex flex-col gap-6px'>
-      {rows.map((row) => {
-        if (row.status === 'error') {
-          return row.kind === 'tool' ? <ToolActivityError key={row.key} step={row.step} /> : null;
-        }
-        return (
-          <StepRow key={row.key} label={row.kind === 'tool' ? action.label(row.step) : row.label} status={row.status} />
-        );
-      })}
-      {tools.length > 0 && (
+      <div className='flex flex-col gap-2px' role={recap.status === 'active' ? 'status' : undefined} aria-live='polite'>
+        <div className='font-500 text-t-primary'>{t(`messages.toolActivity.recap.headline.${recap.status}`)}</div>
+        <div className='text-13px text-t-secondary'>
+          {t('messages.toolActivity.recap.activity', { categories: categorySummary })}
+        </div>
+        <div className='text-13px text-t-secondary'>{outcome}</div>
+      </div>
+      {rows.length > 0 && (
         <Button
           type='text'
           size='mini'
@@ -489,13 +552,21 @@ const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[]; 
           />
         </Button>
       )}
-      {showDetails && (
-        <div className='tool-group-summary__body'>
-          {tools.map((item) => (
-            <ToolItemDetail key={item.key} item={item} />
-          ))}
-        </div>
-      )}
+      <div className='tool-group-summary__body' hidden={!showDetails} aria-hidden={!showDetails}>
+        {rows.map((row) => {
+          if (row.status === 'error') {
+            return row.kind === 'tool' ? <ToolActivityError key={row.key} step={row.step} /> : null;
+          }
+          return (
+            <StepRow
+              key={row.key}
+              label={row.kind === 'tool' ? action.label(row.step) : row.label}
+              status={row.status}
+            />
+          );
+        })}
+        {showDetails && tools.map((item) => <ToolItemDetail key={item.key} item={item} />)}
+      </div>
     </div>
   );
 };

@@ -68,6 +68,42 @@
     "no": "No (esc)"
   },
   "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "Trabajo en curso",
+        "completed": "Trabajo completado",
+        "recovered": "Trabajo completado tras reintentar",
+        "partial": "Trabajo completado parcialmente",
+        "failed": "No se pudo completar el trabajo",
+        "canceled": "Trabajo detenido"
+      },
+      "activity": "Este turno incluyó {{categories}}.",
+      "subject": "Enfoque: {{subject}}.",
+      "connector": { "pair": "{{first}} y {{second}}", "series": "{{first}}; además, {{rest}}" },
+      "category": {
+        "web": "{{count}} búsqueda web",
+        "search": "{{count}} búsqueda de proyecto",
+        "fileRead": "{{count}} revisión de archivo",
+        "fileWrite": "{{count}} actualización de implementación",
+        "data": "{{count}} revisión de datos",
+        "report": "{{count}} tarea de informe",
+        "export": "{{count}} exportación",
+        "memory": "{{count}} actualización de memoria",
+        "code": "{{count}} paso del proyecto",
+        "verify": "{{count}} verificación",
+        "office": "{{count}} tarea de documento",
+        "generic": "{{count}} paso del proyecto"
+      },
+      "outcome": {
+        "active": "Se han completado {{completed}} de {{total}} pasos y quedan {{pending}}.",
+        "completedOne": "Se completó 1 paso.",
+        "completedMany": "Se completaron los {{total}} pasos.",
+        "recovered": "Se completaron {{total}} pasos tras {{retries}} reintentos.",
+        "partial": "Se completaron {{completed}} de {{total}} pasos; {{failed}} no terminaron.",
+        "failed": "{{failed}} de {{total}} pasos no terminaron.",
+        "canceled": "El trabajo se detuvo tras {{completed}} de {{total}} pasos."
+      }
+    },
     "attempt": "(intento {{n}})",
     "generic": {
       "running": "Estoy avanzando con el siguiente paso.",

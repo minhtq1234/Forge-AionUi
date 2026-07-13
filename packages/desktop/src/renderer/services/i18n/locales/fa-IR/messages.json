@@ -68,6 +68,42 @@
     "no": "خیر (esc)"
   },
   "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "کار در حال انجام است",
+        "completed": "کار تکمیل شد",
+        "recovered": "کار پس از تلاش مجدد تکمیل شد",
+        "partial": "کار تا حدی تکمیل شد",
+        "failed": "کار تکمیل نشد",
+        "canceled": "کار متوقف شد"
+      },
+      "activity": "این نوبت شامل {{categories}} بود.",
+      "subject": "تمرکز: {{subject}}.",
+      "connector": { "pair": "{{first}} و {{second}}", "series": "{{first}}، {{rest}}" },
+      "category": {
+        "web": "{{count}} جست‌وجوی وب",
+        "search": "{{count}} جست‌وجوی پروژه",
+        "fileRead": "{{count}} بررسی پرونده",
+        "fileWrite": "{{count}} به‌روزرسانی پیاده‌سازی",
+        "data": "{{count}} بررسی داده",
+        "report": "{{count}} کار گزارش",
+        "export": "{{count}} خروجی",
+        "memory": "{{count}} به‌روزرسانی حافظه",
+        "code": "{{count}} گام پروژه",
+        "verify": "{{count}} اعتبارسنجی",
+        "office": "{{count}} کار سند",
+        "generic": "{{count}} گام پروژه"
+      },
+      "outcome": {
+        "active": "{{completed}} گام از {{total}} گام تکمیل شده و {{pending}} گام مانده است.",
+        "completedOne": "1 گام تکمیل شد.",
+        "completedMany": "همه {{total}} گام تکمیل شدند.",
+        "recovered": "{{total}} گام پس از {{retries}} تلاش مجدد تکمیل شدند.",
+        "partial": "{{completed}} گام از {{total}} گام تکمیل شد؛ {{failed}} گام پایان نیافت.",
+        "failed": "{{failed}} گام از {{total}} گام پایان نیافت.",
+        "canceled": "کار پس از {{completed}} گام از {{total}} گام متوقف شد."
+      }
+    },
     "attempt": "(تلاش {{n}})",
     "generic": {
       "running": "در حال انجام مرحله بعدی هستم.",

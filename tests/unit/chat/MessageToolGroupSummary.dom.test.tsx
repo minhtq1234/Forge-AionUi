@@ -30,7 +30,8 @@ vi.mock('@/renderer/utils/file/download', () => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, values?: Record<string, unknown>) =>
+      key.startsWith('messages.toolActivity.recap') && values ? `${key} ${JSON.stringify(values)}` : key,
   }),
 }));
 
@@ -294,15 +295,15 @@ describe('MessageToolGroupSummary plain-language activity', () => {
 
     expect(screen.getByText('messages.toolActivity.categories.search.done')).toBeInTheDocument();
     expect(screen.getByText('messages.toolActivity.categories.verify.running')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite');
+    expect(screen.getByRole('status')).toHaveTextContent('messages.toolActivity.recap.headline.active');
   });
 
-  it('announces the running action label inside the live region without duplicating it', () => {
-    const label = 'messages.toolActivity.categories.verify.running';
+  it('announces active recap copy inside the live region', () => {
     render(<MessageToolGroupSummary isActive messages={[commandStep('in_progress', 'verify-1', 'bun run test')]} />);
 
-    expect(within(screen.getByRole('status')).getByText(label)).toBeInTheDocument();
-    expect(screen.getAllByText(label)).toHaveLength(1);
+    expect(
+      within(screen.getByRole('status')).getByText('messages.toolActivity.recap.headline.active')
+    ).toBeInTheDocument();
   });
 
   it('shows the done label and a technical-details toggle when settled', () => {
@@ -787,7 +788,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     expect(screen.getByText('Queued work').closest('[data-status]')).toHaveAttribute('data-status', 'pending');
     expect(screen.getByText('Active work').closest('[data-status]')).toHaveAttribute('data-status', 'completed');
     expect(screen.getByText('messages.toolActivity.categories.verify.done')).toBeInTheDocument();
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('messages.toolActivity.recap.headline.active');
   });
 
   it('switches an unsafe plan fallback to done narration when the summary settles', () => {
@@ -940,5 +941,154 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     render(<MessageToolGroupSummary messages={[acpStep('failed', 't1')]} />);
     expect(screen.getByText('messages.toolActivity.tools.render_report.failedTitle')).toBeInTheDocument();
     expect(screen.getByText('messages.toolActivity.error.suggestion')).toBeInTheDocument();
+  });
+
+  describe('turn recap', () => {
+    const activityStep = (
+      status: string,
+      toolCallId: string,
+      title: string,
+      kind: string,
+      rawInput?: Record<string, string>
+    ): IMessageAcpToolCall =>
+      ({
+        id: toolCallId,
+        conversation_id: 'conv-1',
+        type: 'acp_tool_call',
+        content: {
+          sessionId: 'sess-1',
+          update: {
+            sessionUpdate: 'tool_call_update',
+            tool_call_id: toolCallId,
+            status,
+            title,
+            kind,
+            rawInput,
+          },
+        },
+      }) as unknown as IMessageAcpToolCall;
+
+    it('summarizes repeated completed generic steps as one recap', () => {
+      render(
+        <MessageToolGroupSummary
+          messages={[
+            activityStep('completed', 'generic-1', 'Task', 'info'),
+            activityStep('completed', 'generic-2', 'Task', 'info'),
+            activityStep('completed', 'generic-3', 'Task', 'info'),
+          ]}
+        />
+      );
+
+      expect(screen.getByText('messages.toolActivity.recap.headline.completed')).toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.activity/)).toHaveTextContent(
+        'messages.toolActivity.recap.category.generic'
+      );
+      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.completedOne/)).toHaveTextContent('"total":1');
+      expect(screen.getByText('messages.toolActivity.categories.generic.done')).not.toBeVisible();
+    });
+
+    it('lists mixed work categories in first-appearance order', () => {
+      render(
+        <MessageToolGroupSummary
+          messages={[
+            commandStep('completed', 'search-1', 'rg -n needle .'),
+            commandStep('completed', 'read-1', 'sed -n 1,10p file.txt'),
+            activityStep('completed', 'write-1', 'write_file', 'edit'),
+            commandStep('completed', 'verify-1', 'bun run test'),
+          ]}
+        />
+      );
+
+      const activity = screen.getByText(/messages\.toolActivity\.recap\.activity/).textContent ?? '';
+      expect(activity.indexOf('recap.category.search')).toBeLessThan(activity.indexOf('recap.category.fileRead'));
+      expect(activity.indexOf('recap.category.fileRead')).toBeLessThan(activity.indexOf('recap.category.fileWrite'));
+      expect(activity.indexOf('recap.category.fileWrite')).toBeLessThan(activity.indexOf('recap.category.verify'));
+    });
+
+    it('uses active recap copy for completed and remaining work', () => {
+      render(
+        <MessageToolGroupSummary
+          isActive
+          messages={[
+            commandStep('completed', 'search-1', 'rg -n needle .'),
+            commandStep('in_progress', 'verify-1', 'bun run test'),
+          ]}
+        />
+      );
+
+      expect(screen.getByText('messages.toolActivity.recap.headline.active')).toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.active .*"completed":1/)).toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.active .*"pending":1/)).toBeInTheDocument();
+    });
+
+    it('reports recovery after a successful retry', () => {
+      render(<MessageToolGroupSummary messages={[acpStep('failed', 'retry-1'), acpStep('completed', 'retry-2')]} />);
+
+      expect(screen.getByText('messages.toolActivity.recap.headline.recovered')).toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.recovered .*"retries":1/)).toBeInTheDocument();
+    });
+
+    it('reports partial completion while keeping the failed step in technical details', () => {
+      render(
+        <MessageToolGroupSummary
+          messages={[
+            commandStep('completed', 'search-1', 'rg -n needle .'),
+            activityStep('failed', 'report-1', 'forge-reports_render_report', 'execute'),
+          ]}
+        />
+      );
+
+      expect(screen.getByText('messages.toolActivity.recap.headline.partial')).toBeInTheDocument();
+      expect(screen.getByText('messages.toolActivity.tools.render_report.failedTitle')).not.toBeVisible();
+      fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
+      expect(screen.getByText('messages.toolActivity.tools.render_report.failedTitle')).toBeInTheDocument();
+    });
+
+    it('reports canceled work as stopped', () => {
+      const canceled: IMessageToolGroup = {
+        id: 'canceled-1',
+        conversation_id: 'conv-1',
+        type: 'tool_group',
+        position: 'left',
+        content: [
+          {
+            call_id: 'canceled-1',
+            description: 'Canceled command',
+            name: 'Shell Command',
+            render_output_as_markdown: false,
+            status: 'Canceled',
+          },
+        ],
+      };
+
+      render(<MessageToolGroupSummary messages={[canceled]} />);
+
+      expect(screen.getByText('messages.toolActivity.recap.headline.canceled')).toBeInTheDocument();
+    });
+
+    it('keeps raw command, path, output, telemetry, and provider narration out of the recap', () => {
+      const unsafePlan = 'Run: bun test packages/desktop/src/renderer/App.tsx request_id=secret';
+      render(
+        <MessageToolGroupSummary
+          messages={
+            [
+              {
+                id: 'unsafe-plan',
+                conversation_id: 'conv-1',
+                type: 'plan',
+                position: 'left',
+                content: { session_id: 'sess-1', entries: [{ content: unsafePlan, status: 'completed' }] },
+              },
+              commandStep('completed', 'command-1', 'rg -n secret /private/project'),
+            ] as WorkJournalSourceMessage[]
+          }
+        />
+      );
+
+      expect(screen.queryByText(/rg -n secret/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/packages\/desktop\/src/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/request_id=secret/)).not.toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'common.technical_details' })).toHaveLength(1);
+    });
   });
 });

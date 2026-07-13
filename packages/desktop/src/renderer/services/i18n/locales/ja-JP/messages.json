@@ -68,6 +68,42 @@
     "no": "いいえ (esc)"
   },
   "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "作業中",
+        "completed": "作業が完了しました",
+        "recovered": "再試行後に作業が完了しました",
+        "partial": "作業は一部完了しました",
+        "failed": "作業を完了できませんでした",
+        "canceled": "作業を停止しました"
+      },
+      "activity": "このターンでは{{categories}}を行いました。",
+      "subject": "焦点: {{subject}}。",
+      "connector": { "pair": "{{first}}と{{second}}", "series": "{{first}}、{{rest}}" },
+      "category": {
+        "web": "{{count}} 件のWeb検索",
+        "search": "{{count}} 件のプロジェクト検索",
+        "fileRead": "{{count}} 件のファイル確認",
+        "fileWrite": "{{count}} 件の実装更新",
+        "data": "{{count}} 件のデータ確認",
+        "report": "{{count}} 件のレポート作業",
+        "export": "{{count}} 件のエクスポート",
+        "memory": "{{count}} 件の記憶更新",
+        "code": "{{count}} 件のプロジェクト手順",
+        "verify": "{{count}} 件の検証",
+        "office": "{{count}} 件の文書作業",
+        "generic": "{{count}} 件のプロジェクト手順"
+      },
+      "outcome": {
+        "active": "{{completed}} 件を完了し、全 {{total}} 件中 {{pending}} 件が残っています。",
+        "completedOne": "1 件の手順を完了しました。",
+        "completedMany": "{{total}} 件すべての手順を完了しました。",
+        "recovered": "{{total}} 件の手順を {{retries}} 回の再試行後に完了しました。",
+        "partial": "{{completed}} 件を完了し、全 {{total}} 件中 {{failed}} 件は終了しませんでした。",
+        "failed": "{{failed}} 件を全 {{total}} 件中で終了できませんでした。",
+        "canceled": "{{completed}} 件を完了した後、全 {{total}} 件の作業を停止しました。"
+      }
+    },
     "attempt": "（{{n}} 回目の試行）",
     "generic": {
       "running": "次の手順を進めています。",

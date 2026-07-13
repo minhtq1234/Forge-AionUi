@@ -68,6 +68,42 @@
   "atFile.menuLabel": "Упоминания файлов",
   "atFile.loading": "Загрузка...",
   "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "Работа выполняется",
+        "completed": "Работа завершена",
+        "recovered": "Работа завершена после повтора",
+        "partial": "Работа завершена частично",
+        "failed": "Не удалось завершить работу",
+        "canceled": "Работа остановлена"
+      },
+      "activity": "В этом ходе выполнено: {{categories}}.",
+      "subject": "Фокус: {{subject}}.",
+      "connector": { "pair": "{{first}} и {{second}}", "series": "{{first}}; затем {{rest}}" },
+      "category": {
+        "web": "{{count}} поиск в интернете",
+        "search": "{{count}} поиск по проекту",
+        "fileRead": "{{count}} проверка файла",
+        "fileWrite": "{{count}} обновление реализации",
+        "data": "{{count}} проверка данных",
+        "report": "{{count}} задача отчёта",
+        "export": "{{count}} экспорт",
+        "memory": "{{count}} обновление памяти",
+        "code": "{{count}} шаг проекта",
+        "verify": "{{count}} проверка",
+        "office": "{{count}} задача документа",
+        "generic": "{{count}} шаг проекта"
+      },
+      "outcome": {
+        "active": "Завершено {{completed}} из {{total}} шагов, осталось {{pending}}.",
+        "completedOne": "Завершён 1 шаг.",
+        "completedMany": "Завершены все {{total}} шагов.",
+        "recovered": "Завершено {{total}} шагов после {{retries}} повторов.",
+        "partial": "Завершено {{completed}} из {{total}} шагов; {{failed}} не завершены.",
+        "failed": "{{failed}} из {{total}} шагов не завершены.",
+        "canceled": "Работа остановлена после {{completed}} из {{total}} шагов."
+      }
+    },
     "attempt": "(попытка {{n}})",
     "generic": {
       "running": "Выполняю следующий шаг.",

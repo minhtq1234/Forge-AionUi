@@ -70,6 +70,42 @@
     "empty": "No response to copy yet"
   },
   "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "Робота триває",
+        "completed": "Роботу завершено",
+        "recovered": "Роботу завершено після повтору",
+        "partial": "Роботу завершено частково",
+        "failed": "Не вдалося завершити роботу",
+        "canceled": "Роботу зупинено"
+      },
+      "activity": "У цьому ході виконано: {{categories}}.",
+      "subject": "Фокус: {{subject}}.",
+      "connector": { "pair": "{{first}} і {{second}}", "series": "{{first}}; далі {{rest}}" },
+      "category": {
+        "web": "{{count}} пошук в інтернеті",
+        "search": "{{count}} пошук у проєкті",
+        "fileRead": "{{count}} перевірка файлу",
+        "fileWrite": "{{count}} оновлення реалізації",
+        "data": "{{count}} перевірка даних",
+        "report": "{{count}} завдання звіту",
+        "export": "{{count}} експорт",
+        "memory": "{{count}} оновлення пам'яті",
+        "code": "{{count}} крок проєкту",
+        "verify": "{{count}} перевірка",
+        "office": "{{count}} завдання документа",
+        "generic": "{{count}} крок проєкту"
+      },
+      "outcome": {
+        "active": "Завершено {{completed}} з {{total}} кроків, залишилося {{pending}}.",
+        "completedOne": "Завершено 1 крок.",
+        "completedMany": "Завершено всі {{total}} кроків.",
+        "recovered": "Завершено {{total}} кроків після {{retries}} повторів.",
+        "partial": "Завершено {{completed}} з {{total}} кроків; {{failed}} не завершено.",
+        "failed": "{{failed}} з {{total}} кроків не завершено.",
+        "canceled": "Роботу зупинено після {{completed}} з {{total}} кроків."
+      }
+    },
     "attempt": "(спроба {{n}})",
     "generic": {
       "running": "Виконую наступний крок.",

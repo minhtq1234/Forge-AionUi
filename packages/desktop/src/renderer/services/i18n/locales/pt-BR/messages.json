@@ -68,6 +68,42 @@
     "no": "Não (esc)"
   },
   "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "Trabalho em andamento",
+        "completed": "Trabalho concluído",
+        "recovered": "Trabalho concluído após nova tentativa",
+        "partial": "Trabalho parcialmente concluído",
+        "failed": "Não foi possível concluir o trabalho",
+        "canceled": "Trabalho interrompido"
+      },
+      "activity": "Este turno incluiu {{categories}}.",
+      "subject": "Foco: {{subject}}.",
+      "connector": { "pair": "{{first}} e {{second}}", "series": "{{first}}; depois, {{rest}}" },
+      "category": {
+        "web": "{{count}} busca na web",
+        "search": "{{count}} busca no projeto",
+        "fileRead": "{{count}} revisão de arquivo",
+        "fileWrite": "{{count}} atualização da implementação",
+        "data": "{{count}} revisão de dados",
+        "report": "{{count}} tarefa de relatório",
+        "export": "{{count}} exportação",
+        "memory": "{{count}} atualização de memória",
+        "code": "{{count}} etapa do projeto",
+        "verify": "{{count}} verificação",
+        "office": "{{count}} tarefa de documento",
+        "generic": "{{count}} etapa do projeto"
+      },
+      "outcome": {
+        "active": "{{completed}} de {{total}} etapas foram concluídas, com {{pending}} restantes.",
+        "completedOne": "1 etapa foi concluída.",
+        "completedMany": "Todas as {{total}} etapas foram concluídas.",
+        "recovered": "{{total}} etapas foram concluídas após {{retries}} novas tentativas.",
+        "partial": "{{completed}} de {{total}} etapas foram concluídas; {{failed}} não terminaram.",
+        "failed": "{{failed}} de {{total}} etapas não terminaram.",
+        "canceled": "O trabalho parou após {{completed}} de {{total}} etapas."
+      }
+    },
     "attempt": "(tentativa {{n}})",
     "generic": {
       "running": "Estou avançando para a próxima etapa.",

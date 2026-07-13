@@ -68,6 +68,42 @@
     "no": "Hayır (esc)"
   },
   "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "Çalışma sürüyor",
+        "completed": "Çalışma tamamlandı",
+        "recovered": "Çalışma yeniden denemeden sonra tamamlandı",
+        "partial": "Çalışma kısmen tamamlandı",
+        "failed": "Çalışma tamamlanamadı",
+        "canceled": "Çalışma durduruldu"
+      },
+      "activity": "Bu turda {{categories}} yapıldı.",
+      "subject": "Odak: {{subject}}.",
+      "connector": { "pair": "{{first}} ve {{second}}", "series": "{{first}}; ardından {{rest}}" },
+      "category": {
+        "web": "{{count}} web araması",
+        "search": "{{count}} proje araması",
+        "fileRead": "{{count}} dosya incelemesi",
+        "fileWrite": "{{count}} uygulama güncellemesi",
+        "data": "{{count}} veri incelemesi",
+        "report": "{{count}} rapor görevi",
+        "export": "{{count}} dışa aktarma",
+        "memory": "{{count}} bellek güncellemesi",
+        "code": "{{count}} proje adımı",
+        "verify": "{{count}} doğrulama",
+        "office": "{{count}} belge görevi",
+        "generic": "{{count}} proje adımı"
+      },
+      "outcome": {
+        "active": "{{completed}} adım tamamlandı; toplam {{total}} adımdan {{pending}} tanesi kaldı.",
+        "completedOne": "1 adım tamamlandı.",
+        "completedMany": "{{total}} adımın tamamı tamamlandı.",
+        "recovered": "{{total}} adım, {{retries}} yeniden denemeden sonra tamamlandı.",
+        "partial": "{{completed}} adım tamamlandı; toplam {{total}} adımdan {{failed}} tanesi bitmedi.",
+        "failed": "{{failed}} adım, toplam {{total}} adımdan bitmedi.",
+        "canceled": "{{completed}} adımdan sonra, toplam {{total}} adımlı çalışma durduruldu."
+      }
+    },
     "attempt": "({{n}}. deneme)",
     "generic": {
       "running": "Sıradaki adım üzerinde çalışıyorum.",

@@ -68,6 +68,42 @@
     "no": "Nein (Esc)"
   },
   "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "Arbeit läuft",
+        "completed": "Arbeit abgeschlossen",
+        "recovered": "Arbeit nach Wiederholung abgeschlossen",
+        "partial": "Arbeit teilweise abgeschlossen",
+        "failed": "Arbeit konnte nicht abgeschlossen werden",
+        "canceled": "Arbeit gestoppt"
+      },
+      "activity": "Diese Runde umfasste {{categories}}.",
+      "subject": "Fokus: {{subject}}.",
+      "connector": { "pair": "{{first}} und {{second}}", "series": "{{first}}; anschließend {{rest}}" },
+      "category": {
+        "web": "{{count}} Websuche",
+        "search": "{{count}} Projektsuche",
+        "fileRead": "{{count}} Dateiprüfung",
+        "fileWrite": "{{count}} Implementierungsänderung",
+        "data": "{{count}} Datenprüfung",
+        "report": "{{count}} Berichtsaufgabe",
+        "export": "{{count}} Export",
+        "memory": "{{count}} Speicheraktualisierung",
+        "code": "{{count}} Projektschritt",
+        "verify": "{{count}} Überprüfung",
+        "office": "{{count}} Dokumentaufgabe",
+        "generic": "{{count}} Projektschritt"
+      },
+      "outcome": {
+        "active": "{{completed}} von {{total}} Schritten sind abgeschlossen, {{pending}} stehen noch aus.",
+        "completedOne": "1 Schritt wurde abgeschlossen.",
+        "completedMany": "Alle {{total}} Schritte wurden abgeschlossen.",
+        "recovered": "{{total}} Schritte wurden nach {{retries}} Wiederholungen abgeschlossen.",
+        "partial": "{{completed}} von {{total}} Schritten wurden abgeschlossen; {{failed}} wurden nicht beendet.",
+        "failed": "{{failed}} von {{total}} Schritten wurden nicht beendet.",
+        "canceled": "Die Arbeit wurde nach {{completed}} von {{total}} Schritten gestoppt."
+      }
+    },
     "attempt": "(Versuch {{n}})",
     "generic": {
       "running": "Ich arbeite am nächsten Schritt.",
