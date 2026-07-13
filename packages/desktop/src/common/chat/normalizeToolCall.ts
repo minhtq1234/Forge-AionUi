@@ -32,7 +32,10 @@ export const isDiagnosticTelemetryText = (value?: string): boolean =>
   typeof value === 'string' && DIAGNOSTIC_TELEMETRY_PATTERNS.some((pattern) => pattern.test(value));
 
 const isDiagnosticToolCall = (item: NormalizedToolCall): boolean =>
-  isDiagnosticTelemetryText(item.name) || isDiagnosticTelemetryText(item.description);
+  isDiagnosticTelemetryText(item.name) ||
+  isDiagnosticTelemetryText(item.description) ||
+  isDiagnosticTelemetryText(item.input) ||
+  isDiagnosticTelemetryText(item.output);
 
 // ===== tool_group → NormalizedToolCall[] =====
 
@@ -241,6 +244,10 @@ export function normalizeToolMessages(messages: ToolMessage[]): NormalizedToolCa
       return undefined;
     })
     .filter((item): item is NormalizedToolCall => item !== undefined && !isDiagnosticToolCall(item));
+}
+
+export function isDiagnosticToolMessage(message: ToolMessage): boolean {
+  return normalizeToolMessages([message]).length === 0;
 }
 
 export function hasRunningToolMessages(messages: ToolMessage[]): boolean {

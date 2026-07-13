@@ -6,6 +6,7 @@
 
 import type { IConversationArtifact } from '@/common/adapter/ipcBridge';
 import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup, TMessage } from '@/common/chat/chatLib';
+import { isDiagnosticToolMessage } from '@/common/chat/normalizeToolCall';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useConversationRuntimeView } from '@/renderer/pages/conversation/runtime/useConversationRuntimeView';
 import { getChatSurfaceWidthClass } from '@/renderer/pages/conversation/utils/chatSurfaceWidth';
@@ -329,6 +330,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       if (message.hidden) continue;
       if (message.type === 'available_commands') continue;
       if (message.type === 'tool_group') {
+        if (isDiagnosticToolMessage(message)) continue;
         if (message.content.length === 1) {
           const writeFileResults = message.content
             .filter(
@@ -352,10 +354,12 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         continue;
       }
       if (message.type === 'acp_tool_call') {
+        if (isDiagnosticToolMessage(message)) continue;
         pushToolList(message);
         continue;
       }
       if (message.type === 'tool_call') {
+        if (isDiagnosticToolMessage(message)) continue;
         pushToolList(message);
         continue;
       }
