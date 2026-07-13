@@ -33,6 +33,21 @@ describe('stable macOS release workflow contract', () => {
     expect(build).toBeGreaterThan(forcedSigning);
   });
 
+  it('validates the release channel before either macOS build branch and exits on invalid input', () => {
+    const macBuildStep = reusable.slice(
+      reusable.indexOf('- name: Build with electron-builder (macOS)'),
+      reusable.indexOf('# Linux: Standard build without special error handling')
+    );
+    const validator = macBuildStep.indexOf('resolveReleaseChannel(process.env.FORGE_RELEASE_CHANNEL)');
+    const stableBranch = macBuildStep.indexOf('if [ "${FORGE_RELEASE_CHANNEL}" = "stable" ]; then');
+    const nonStableBranch = macBuildStep.indexOf('else', stableBranch);
+
+    expect(validator).toBeGreaterThan(-1);
+    expect(stableBranch).toBeGreaterThan(validator);
+    expect(nonStableBranch).toBeGreaterThan(validator);
+    expect(macBuildStep.slice(validator, stableBranch)).toContain('exit 1');
+  });
+
   it('checks stable failure before the DMG warning-only exception', () => {
     const stableGuard = reusable.indexOf('if [ "${FORGE_RELEASE_CHANNEL}" = "stable" ]; then');
     const dmgException = reusable.indexOf('if [ "$DMG_EXISTS" = true ]; then');

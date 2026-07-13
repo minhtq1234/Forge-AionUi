@@ -468,6 +468,11 @@ jobs:
             ${{ matrix.command }} "$@"
           }
 
+          if ! node -e "require('./scripts/afterSign.js').resolveReleaseChannel(process.env.FORGE_RELEASE_CHANNEL)"; then
+            echo "::error title=macOS Build Rejected::FORGE_RELEASE_CHANNEL must be stable or non-stable."
+            exit 1
+          fi
+
           if [ "${FORGE_RELEASE_CHANNEL}" = "stable" ]; then
             if ! node -e "require('./scripts/afterSign.js').readStableReleaseConfig(process.env)"; then
               echo "::error title=Stable macOS Build Rejected::Signing configuration preflight failed."

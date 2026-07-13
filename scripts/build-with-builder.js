@@ -392,7 +392,7 @@ function buildWithDmgRetry(cmd, targetArch) {
     execSync(cmd, { stdio: 'inherit', shell: process.platform === 'win32' });
     return;
   } catch (error) {
-    if (process.env.FORGE_RELEASE_CHANNEL === 'stable') throw error;
+    if ((process.env.FORGE_RELEASE_CHANNEL || 'non-stable') !== 'non-stable') throw error;
 
     // On non-macOS or if .app doesn't exist, just throw
     const appDir = isMac ? findAppDir(outDir) : null;

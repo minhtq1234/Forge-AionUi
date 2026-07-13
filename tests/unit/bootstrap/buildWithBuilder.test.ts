@@ -117,7 +117,7 @@ childProcess.execSync = function mockedExecSync(command) {
     }
   });
 
-  it('does not retry a failed stable macOS build with --prepackaged', () => {
+  it.each(['stable', 'production'] as const)('does not retry a failed %s macOS build with --prepackaged', (channel) => {
     const tempDir = mkdtempSync(join(tmpdir(), 'aionui-stable-build-test-'));
     const hookPath = join(tempDir, 'hook.cjs');
     const callsPath = join(tempDir, 'exec-calls.json');
@@ -165,6 +165,7 @@ childProcess.execSync = function mockedExecSync(command) {
     ensurePlaceholder('out/mac/Forge.app/Contents/Info.plist');
     throw new Error('stable signing failed');
   }
+  if (commandText.includes('sleep 30')) return Buffer.from('');
   return Buffer.from('');
 };
 childProcess.spawnSync = function mockedSpawnSync() {
@@ -181,7 +182,7 @@ childProcess.spawnSync = function mockedSpawnSync() {
         env: {
           ...process.env,
           AIONUI_EXEC_CALLS_FILE: callsPath,
-          FORGE_RELEASE_CHANNEL: 'stable',
+          FORGE_RELEASE_CHANNEL: channel,
           NODE_OPTIONS: [process.env.NODE_OPTIONS, `--require=${hookPath}`].filter(Boolean).join(' '),
         },
       });
