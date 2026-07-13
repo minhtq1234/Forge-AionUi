@@ -66,5 +66,14 @@
     "yesAlwaysAllowTool": "Ja, Tool \"{{toolName}}\" vom Server \"{{serverName}}\" immer erlauben",
     "yesAlwaysAllowServer": "Ja, alle Tools vom Server \"{{serverName}}\" immer erlauben",
     "no": "Nein (Esc)"
+  },
+  "toolActivity": {
+    "categories": {
+      "verify": {
+        "running": "Ich prüfe die Änderungen, damit weiterhin alles funktioniert.",
+        "done": "Ich habe die Änderungen auf Probleme geprüft.",
+        "failedTitle": "Ich konnte die Prüfung der Änderungen nicht abschließen"
+      }
+    }
   }
 }

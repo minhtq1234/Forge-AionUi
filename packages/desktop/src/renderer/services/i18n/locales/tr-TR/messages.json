@@ -66,5 +66,14 @@
     "yesAlwaysAllowTool": "Evet, \"{{serverName}}\" sunucusundan \"{{toolName}}\" aracına her zaman izin ver",
     "yesAlwaysAllowServer": "Evet, \"{{serverName}}\" sunucusundaki tüm araçlara her zaman izin ver",
     "no": "Hayır (esc)"
+  },
+  "toolActivity": {
+    "categories": {
+      "verify": {
+        "running": "Her şeyin çalışmaya devam ettiğinden emin olmak için değişiklikleri kontrol ediyorum.",
+        "done": "Değişiklikleri olası sorunlara karşı kontrol ettim.",
+        "failedTitle": "Değişiklikleri kontrol etmeyi tamamlayamadım"
+      }
+    }
   }
 }

@@ -66,5 +66,14 @@
     "yesAlwaysAllowTool": "Sim, sempre permitir a ferramenta \"{{toolName}}\" do servidor \"{{serverName}}\"",
     "yesAlwaysAllowServer": "Sim, sempre permitir todas as ferramentas do servidor \"{{serverName}}\"",
     "no": "Não (esc)"
+  },
+  "toolActivity": {
+    "categories": {
+      "verify": {
+        "running": "Estou verificando as alterações para garantir que tudo continue funcionando.",
+        "done": "Verifiquei se as alterações causaram regressões.",
+        "failedTitle": "Não consegui concluir a verificação das alterações"
+      }
+    }
   }
 }

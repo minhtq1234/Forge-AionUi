@@ -66,5 +66,14 @@
     "yesAlwaysAllowTool": "はい、サーバー \"{{serverName}}\" のツール \"{{toolName}}\" を常に許可",
     "yesAlwaysAllowServer": "はい、サーバー \"{{serverName}}\" のすべてのツールを常に許可",
     "no": "いいえ (esc)"
+  },
+  "toolActivity": {
+    "categories": {
+      "verify": {
+        "running": "変更後も正常に動作するか確認しています。",
+        "done": "変更による問題がないことを確認しました。",
+        "failedTitle": "変更の確認を完了できませんでした"
+      }
+    }
   }
 }

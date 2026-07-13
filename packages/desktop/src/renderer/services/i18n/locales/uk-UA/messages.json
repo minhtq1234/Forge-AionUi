@@ -68,5 +68,14 @@
   },
   "copyLastOutput": {
     "empty": "No response to copy yet"
+  },
+  "toolActivity": {
+    "categories": {
+      "verify": {
+        "running": "Перевіряю зміни, щоб переконатися, що все й надалі працює.",
+        "done": "Перевірив зміни на наявність проблем.",
+        "failedTitle": "Не вдалося завершити перевірку змін"
+      }
+    }
   }
 }

@@ -66,5 +66,14 @@
     "yesAlwaysAllowTool": "بله، همیشه اجازه ابزار «{{toolName}}» از سرور «{{serverName}}» بده",
     "yesAlwaysAllowServer": "بله، همیشه اجازه تمام ابزارها از سرور «{{serverName}}» بده",
     "no": "خیر (esc)"
+  },
+  "toolActivity": {
+    "categories": {
+      "verify": {
+        "running": "در حال بررسی تغییرات هستم تا مطمئن شوم همه‌چیز همچنان درست کار می‌کند.",
+        "done": "تغییرات را از نظر بروز مشکل بررسی کردم.",
+        "failedTitle": "نتوانستم بررسی تغییرات را کامل کنم"
+      }
+    }
   }
 }

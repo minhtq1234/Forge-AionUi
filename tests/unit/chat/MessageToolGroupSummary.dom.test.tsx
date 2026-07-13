@@ -9,6 +9,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup } from '@/common/chat/chatLib';
 import MessageToolGroupSummary from '@/renderer/pages/conversation/Messages/components/MessageToolGroupSummary';
+import enUsMessages from '@/renderer/services/i18n/locales/en-US/messages.json';
 import type { WorkJournalSourceMessage } from '@/renderer/pages/conversation/Messages/types';
 
 const mockDownloadFileFromPath = vi.fn().mockResolvedValue(undefined);
@@ -264,6 +265,16 @@ describe('MessageToolGroupSummary plain-language activity', () => {
         },
       },
     }) as unknown as IMessageAcpToolCall;
+
+  it('defines verification narration without raw command labels', () => {
+    expect(enUsMessages.toolActivity.categories.verify).toEqual({
+      running: "I'm checking the changes to make sure everything still works.",
+      done: 'Checked the changes for regressions.',
+      failedTitle: "I couldn't finish checking the changes",
+    });
+    expect(JSON.stringify(enUsMessages.toolActivity)).not.toContain('Running a command');
+    expect(JSON.stringify(enUsMessages.toolActivity)).not.toContain('Command finished');
+  });
 
   it('keeps completed phases visible while the latest phase is running', () => {
     render(

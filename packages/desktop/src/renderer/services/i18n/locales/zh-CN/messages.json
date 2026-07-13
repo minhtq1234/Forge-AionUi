@@ -66,5 +66,14 @@
     "yesAlwaysAllowTool": "是，始终允许来自服务器 \"{{serverName}}\" 的工具 \"{{toolName}}\"",
     "yesAlwaysAllowServer": "是，始终允许来自服务器 \"{{serverName}}\" 的所有工具",
     "no": "否 (esc)"
+  },
+  "toolActivity": {
+    "categories": {
+      "verify": {
+        "running": "我正在检查这些更改，确保一切仍正常运行。",
+        "done": "已完成更改检查。",
+        "failedTitle": "我无法完成更改检查"
+      }
+    }
   }
 }
