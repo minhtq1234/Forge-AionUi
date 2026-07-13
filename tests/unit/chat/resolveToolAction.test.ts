@@ -29,12 +29,19 @@ describe('resolveToolAction', () => {
   it.each(['Search', 'search_files'])('classifies generic project search identity %s as project discovery', (name) => {
     expect(resolveToolAction(name, 'search')).toEqual({ category: 'search', purpose: 'discovering' });
   });
-  it.each(['web_search', 'WebSearch', 'WebFetch', 'browse', 'fetch'])(
-    'reserves web discovery for explicit web identity %s',
-    (name) => {
-      expect(resolveToolAction(name, 'search')).toEqual({ category: 'web', purpose: 'discovering' });
-    }
-  );
+  it.each([
+    'web_search',
+    'WebSearch',
+    'Web Search',
+    'web-search',
+    'WebFetch',
+    'browse',
+    'Browse Web',
+    'fetch',
+    'Fetch URL',
+  ])('reserves web discovery for explicit web identity %s', (name) => {
+    expect(resolveToolAction(name, 'search')).toEqual({ category: 'web', purpose: 'discovering' });
+  });
   it('uses the ACP kind when the name has no keyword', () => {
     expect(resolveToolAction('doit', 'read')).toEqual({ category: 'fileRead', purpose: 'reviewing' });
   });

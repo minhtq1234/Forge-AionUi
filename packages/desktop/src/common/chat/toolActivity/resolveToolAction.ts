@@ -182,7 +182,7 @@ function categoryForKey(toolKey: string): ToolCategory {
 function normalizeId(rawName: string): string {
   return rawName
     .toLowerCase()
-    .replace(/[:./]+/g, '_')
+    .replace(/[\s:./-]+/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '');
 }

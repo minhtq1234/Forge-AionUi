@@ -169,6 +169,33 @@ describe('normalizeAcpToolCall', () => {
   });
 });
 
+describe('normalizeToolGroup telemetry boundaries', () => {
+  it.each([
+    'Token watermark override: provider=0, local_estimate=19756, using=19756',
+    'Microcompact: cleared 6 tool results (~108 tokens freed)',
+  ])('drops grouped info telemetry from its original title: %s', (title) => {
+    const message: IMessageToolGroup = {
+      type: 'tool_group',
+      content: [
+        {
+          call_id: 'group-info-telemetry',
+          name: 'Info',
+          description: 'Internal status',
+          render_output_as_markdown: false,
+          status: 'Success',
+          confirmationDetails: {
+            type: 'info',
+            title,
+            prompt: '',
+          },
+        },
+      ],
+    };
+
+    expect(normalizeToolMessages([message])).toEqual([]);
+  });
+});
+
 describe('normalizeToolCall detail preservation', () => {
   it('keeps legitimate diagnostic-like terms in normalized input and output', () => {
     const message = toolCall({
@@ -197,6 +224,12 @@ describe('normalizeToolCall detail preservation', () => {
     const message = toolCall({ output: 'done' });
 
     expect(normalizeToolCall(message)?.status).toBe('completed');
+  });
+
+  it('keeps legitimate diagnostic-like terms in a tool description', () => {
+    const description = 'Compare Microcompact with local_estimate=42 from the project fixture';
+
+    expect(normalizeToolCall(toolCall({ description }))?.description).toBe(description);
   });
 });
 
