@@ -26,7 +26,11 @@ const formatValue = (value: unknown): string => {
   }
 };
 
-const DIAGNOSTIC_TELEMETRY_PATTERNS = [/^\s*Token watermark override\b/i, /\blocal_estimate=\d/i];
+const DIAGNOSTIC_TELEMETRY_PATTERNS = [
+  /^\s*Token watermark override\b/i,
+  /\blocal_estimate=\d/i,
+  /^\s*Microcompact:\s*/i,
+];
 
 export const isDiagnosticTelemetryText = (value?: string): boolean =>
   typeof value === 'string' && DIAGNOSTIC_TELEMETRY_PATTERNS.some((pattern) => pattern.test(value));

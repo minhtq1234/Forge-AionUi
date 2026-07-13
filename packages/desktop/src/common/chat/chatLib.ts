@@ -632,7 +632,11 @@ const isChatMessageStatus = (value: unknown): value is NonNullable<TMessage['sta
 // between consecutive tool calls they also fragment retry coalescing. Drop them
 // at ingestion — the same treatment as the `info`/`request_trace`/`thought`
 // stream types handled below.
-const DIAGNOSTIC_TIP_PATTERNS = [/^\s*Token watermark override\b/i, /\blocal_estimate=\d/i];
+const DIAGNOSTIC_TELEMETRY_PATTERNS = [
+  /^\s*Token watermark override\b/i,
+  /\blocal_estimate=\d/i,
+  /^\s*Microcompact:\s*/i,
+];
 
 const parsePositiveInteger = (value: string | undefined): number | null => {
   if (!value) return null;
@@ -652,7 +656,7 @@ export const extractDiagnosticTokenEstimate = (content: unknown): number | null 
 const isDiagnosticTelemetryTip = (content: unknown): boolean =>
   typeof content === 'string' &&
   (extractDiagnosticTokenEstimate(content) !== null ||
-    DIAGNOSTIC_TIP_PATTERNS.some((pattern) => pattern.test(content)));
+    DIAGNOSTIC_TELEMETRY_PATTERNS.some((pattern) => pattern.test(content)));
 
 export const transformMessage = (message: IResponseMessage): TMessage | undefined => {
   const created_at = message.created_at ?? Date.now();

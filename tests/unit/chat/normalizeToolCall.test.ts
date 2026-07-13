@@ -5,10 +5,30 @@
  */
 
 import type { IMessageAcpToolCall } from '@/common/chat/chatLib';
-import { normalizeAcpToolCall } from '@/common/chat/normalizeToolCall';
+import { normalizeAcpToolCall, normalizeToolMessages } from '@/common/chat/normalizeToolCall';
 import { describe, expect, it } from 'vitest';
 
 describe('normalizeAcpToolCall', () => {
+  it('drops Microcompact telemetry tool calls', () => {
+    const message: IMessageAcpToolCall = {
+      id: 'microcompact-1',
+      conversation_id: 'conv-1',
+      type: 'acp_tool_call',
+      content: {
+        sessionId: 'sess-1',
+        update: {
+          sessionUpdate: 'tool_call_update',
+          tool_call_id: 'microcompact-1',
+          status: 'completed',
+          title: 'Microcompact: cleared 6 tool results (~108 tokens freed)',
+          kind: 'info',
+        },
+      },
+    };
+
+    expect(normalizeToolMessages([message])).toEqual([]);
+  });
+
   it('drops token watermark telemetry tool calls', () => {
     const message: IMessageAcpToolCall = {
       id: 'token-watermark-1',
