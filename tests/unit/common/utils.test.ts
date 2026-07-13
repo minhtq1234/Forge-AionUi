@@ -6,6 +6,11 @@
 
 import { describe, it, expect } from 'vitest';
 import { uuid, parseError, resolveLocaleKey } from '@/common/utils/utils';
+import {
+  DIAGNOSTIC_REDACTION_MARKER,
+  redactDiagnosticText,
+  redactDiagnosticValue,
+} from '@/common/utils/diagnosticRedaction';
 
 describe('utils', () => {
   describe('uuid', () => {
@@ -183,6 +188,90 @@ describe('utils', () => {
 
     it('handles empty string', () => {
       expect(resolveLocaleKey('')).toBe('en-US');
+    });
+  });
+
+  describe('diagnostic redaction', () => {
+    it('redacts nested sensitive keys while preserving useful fields', () => {
+      const value = redactDiagnosticValue({
+        provider: 'openai',
+        authorization: 'Bearer auth-secret',
+        nested: {
+          api_key: 'sk-test-secret',
+          accessToken: 'access-secret',
+          status: 401,
+        },
+      });
+
+      expect(value).toEqual({
+        provider: 'openai',
+        authorization: DIAGNOSTIC_REDACTION_MARKER,
+        nested: {
+          api_key: DIAGNOSTIC_REDACTION_MARKER,
+          accessToken: DIAGNOSTIC_REDACTION_MARKER,
+          status: 401,
+        },
+      });
+    });
+
+    it('redacts authorization, URL credentials, and key-value secrets in text', () => {
+      const text = [
+        'Authorization: Bearer bearer-secret',
+        'https://user:password-secret@example.com/path',
+        'api_key=sk-inline-secret',
+      ].join('\n');
+
+      const result = redactDiagnosticText(text);
+
+      expect(result).not.toContain('bearer-secret');
+      expect(result).not.toContain('password-secret');
+      expect(result).not.toContain('sk-inline-secret');
+      expect(result).toContain(DIAGNOSTIC_REDACTION_MARKER);
+    });
+
+    it('normalizes errors without preserving secrets', () => {
+      const error = new Error('request failed token=error-secret');
+      error.stack = 'Error: request failed\nAuthorization: Bearer stack-secret';
+
+      const serialized = JSON.stringify(redactDiagnosticValue(error));
+
+      expect(serialized).toContain('request failed');
+      expect(serialized).not.toContain('error-secret');
+      expect(serialized).not.toContain('stack-secret');
+    });
+
+    it('replaces circular references with a stable marker', () => {
+      const value: Record<string, unknown> = { status: 'failed' };
+      value.self = value;
+
+      expect(redactDiagnosticValue(value)).toEqual({
+        status: 'failed',
+        self: '[CIRCULAR]',
+      });
+    });
+
+    it('bounds depth, entries, and string length deterministically', () => {
+      const result = redactDiagnosticValue(
+        {
+          long: 'abcdefgh',
+          list: [1, 2, 3],
+          nested: { child: { value: 'hidden-by-depth' } },
+        },
+        { maxArrayItems: 2, maxDepth: 2, maxObjectEntries: 3, maxStringLength: 4 }
+      );
+
+      expect(result).toEqual({
+        long: 'abcd[TRUNCATED]',
+        list: [1, 2, '[TRUNCATED]'],
+        nested: { child: '[TRUNCATED]' },
+      });
+    });
+
+    it('uses safe placeholders for unsupported values', () => {
+      expect(redactDiagnosticValue({ value: 1n, callback: () => 'secret' })).toEqual({
+        value: '[UNSUPPORTED]',
+        callback: '[UNSUPPORTED]',
+      });
     });
   });
 });
