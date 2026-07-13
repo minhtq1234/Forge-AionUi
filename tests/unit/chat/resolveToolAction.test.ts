@@ -176,6 +176,9 @@ describe('resolveToolAction', () => {
     'CI=1 bun test tests/unit/chat',
     'env CI=1 bun run lint',
     'sudo bunx tsc --noEmit',
+    'env -i bun test tests/unit/chat',
+    'sudo -E bun run lint',
+    '/usr/bin/env CI=1 bun test tests/unit/chat',
     'bash -lc "bun run test"',
     "sh -c 'npm run lint'",
   ])('classifies validation detail hidden by a generic Skill wrapper: %s', (detail) => {

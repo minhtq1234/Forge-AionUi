@@ -21,6 +21,7 @@ const KEYWORD_CATEGORIES: Array<[readonly string[], ToolCategory]> = [
 // "Skill", so the meaningful signal is the officecli invocation or an Office
 // file extension in the command/arguments.
 const OFFICE_DETAIL_PATTERN = /\bofficecli\b|\.(xlsx|xlsm|xls|csv|docx|doc|pptx|ppt)\b/i;
+const OFFICECLI_COMMAND_PATTERN = /^officecli(?:\s|$)/i;
 const PURPOSE_BY_CATEGORY: Record<ToolCategory, ToolActivityPurpose> = {
   web: 'discovering',
   search: 'discovering',
@@ -158,7 +159,9 @@ const stripExecutionPrefixes = (segment: string): string => {
   let previous = '';
   while (command && command !== previous) {
     previous = command;
-    command = command.replace(/^(?:env|sudo)\s+/i, '').replace(/^[a-z_][a-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+/i, '');
+    command = command
+      .replace(/^(?:(?:\/usr\/bin\/)?env|sudo)(?:\s+--?[a-z][\w-]*(?:=\S+)?)*\s+/i, '')
+      .replace(/^[a-z_][a-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+/i, '');
   }
   return command;
 };
@@ -232,6 +235,7 @@ export function resolveToolAction(rawName: string | undefined, kind?: string, de
   const inspectExecutionDetail = isExplicitExecutionWrapper || kind === 'execute';
   if (inspectExecutionDetail) {
     const shellSegments = detail ? splitShellSegments(detail).flatMap((segment) => unwrapShellSegments(segment)) : [];
+    if (shellSegments.some((segment) => OFFICECLI_COMMAND_PATTERN.test(segment))) return actionFor('office');
     if (shellSegments.some((segment) => VERIFY_COMMAND_PATTERN.test(segment))) return actionFor('verify');
     const searchCommandPattern = isExplicitExecutionWrapper ? SEARCH_COMMAND_PATTERN : GENERIC_SEARCH_COMMAND_PATTERN;
     if (shellSegments.some((segment) => searchCommandPattern.test(segment))) return actionFor('search');

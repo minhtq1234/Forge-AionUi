@@ -61,6 +61,14 @@ describe('ACP tool call image output', () => {
     expect(sanitized.update.rawOutput?.image).toBeUndefined();
   });
 
+  it('preserves ordinary text that only mentions a raster Base64 signature', () => {
+    const result = 'iVBORw0KGgo is an image signature';
+    const sanitized = sanitizeAcpToolCallContent(createAcpToolCall({ result }).content);
+
+    expect(sanitized.update.rawOutput?.result).toBe(result);
+    expect(sanitized.update.rawOutput?.result_omitted).toBeUndefined();
+  });
+
   it('preserves oversized non-image results even when saved_path is present', () => {
     const content = createAcpToolCall({
       saved_path: '/tmp/result.txt',
@@ -301,6 +309,23 @@ describe('ACP tool call image output', () => {
     const sanitized = sanitizeAcpToolCallContent(message.content);
 
     expect(sanitized.update.content?.[0].content?.text).toBe('Preview [inline image omitted]; ready');
+  });
+
+  it.each([
+    ['Preview data:image/png;base64,iVBORw0KGgo\nAAAA\nDone.', 'Preview [inline image omitted]\nDone.'],
+    [
+      'Preview data:image/png;base64,iVBORw0KGgo\nAAAA\nSaved successfully',
+      'Preview [inline image omitted]\nSaved successfully',
+    ],
+    ['Preview data:image/png;base64,iVBORw0KGgo\nAAAA\nSaved', 'Preview [inline image omitted]\nSaved'],
+    ['Preview data:image/png;base64,iVBORw0KGgo AAAA; ready', 'Preview [inline image omitted]; ready'],
+  ])('sanitizes ambiguous wrapped boundaries without swallowing prose: %s', (text, expected) => {
+    const message = createAcpToolCall(undefined);
+    message.content.update.content = [{ type: 'content', content: { type: 'text', text } }];
+
+    const sanitized = sanitizeAcpToolCallContent(message.content);
+
+    expect(sanitized.update.content?.[0].content?.text).toBe(expected);
   });
 
   it('sanitizes ACP tool call messages appended to a non-empty compose list', () => {

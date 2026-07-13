@@ -56,7 +56,11 @@ const PROVIDER_NARRATION_MAX_LENGTH = 180;
 const SHELL_COMMAND =
   '(?:aws|az|bash|bunx?|cat|cargo|cmake|cmd|cp|curl|deno|docker|dotnet|echo|env|fd|find|fish|gcloud|gh|git|go|gradle|grep|helm|java|jq|just|kubectl|make|mkdir|mv|mvn|node|npm|npx|perl|pip3?|pnpm|podman|powershell|pwd|pwsh|pytest|python(?:3(?:\\.\\d+)?)?|rg|rm|ruby|sed|sh|sudo|swift|terraform|test|vitest|wget|xcodebuild|yarn|yq|zsh)';
 const LABELED_SHELL_COMMAND = new RegExp(
-  `^(?:(?:first|next|then|now|finally)\\s*[:,]?\\s+)?(?:(?:i(?:'m| am)?|we(?:'re| are)?)\\s+)?(?:check(?:ed|ing)?|command|complet(?:ed|ing)?|execute|executed|executing|finish(?:ed|ing)?|run|running|test(?:ed|ing)?)(?:\\s+(?:execute|executing|run|running|test|testing))?\\s*:?\\s+(?:(?:sudo|env)\\s+)?${SHELL_COMMAND}(?:\\s|$)`,
+  `^(?:(?:first|next|then|now|finally)\\s*[:,]?\\s+)?(?:(?:i(?:'m| am)?|we(?:'re| are)?)\\s+)?(?:check(?:ed|ing)?|command|complet(?:ed|ing)?|execute|executed|executing|finish(?:ed|ing)?|run|running|test(?:ed|ing)?)(?:\\s+(?:(?:the\\s+)?command|execute|executing|run|running|test|testing))?\\s*:?\\s+(?:(?:sudo|env)\\s+)?${SHELL_COMMAND}(?:\\s|$)`,
+  'i'
+);
+const COMMAND_LABEL_SHELL_COMMAND = new RegExp(
+  `\\bcommand\\b[^:\\r\\n]{0,30}:\\s*(?:(?:sudo|env)\\s+)?${SHELL_COMMAND}(?:\\s|$)`,
   'i'
 );
 const DIAGNOSTIC_NARRATION = /\b(?:local_estimate|token\s+watermark|microcompact)\b/i;
@@ -73,6 +77,7 @@ const AMBIGUOUS_COMMAND_NARRATION_START = /^(?:build|echo|find|run|test)\b/i;
 const NATURAL_SENTENCE_CONNECTOR = /\b(?:a|an|and|after|before|for|the|to|while|with|without)\b/i;
 const UNSAFE_PROVIDER_NARRATION = [
   LABELED_SHELL_COMMAND,
+  COMMAND_LABEL_SHELL_COMMAND,
   /[\r\n`]|~~~|&&|\|\||[|;<>]|(?:^|\s)&(?:\s|$)|\$\(|\$\{/,
   /\b(?:https?|file|ftp):|(?:^|\s)www\./i,
   /\b[a-z_][\w.-]*\s*=\s*(?:"[^"]*"|'[^']*'|\S+)/i,
