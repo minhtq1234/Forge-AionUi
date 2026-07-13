@@ -6,6 +6,53 @@
 
 import { describe, it, expect } from 'vitest';
 import { normalizeLanguageCode, DEFAULT_LANGUAGE } from '@/common/config/i18n';
+import i18nConfig from '@/common/config/i18n-config.json';
+import deDEMessages from '@renderer/services/i18n/locales/de-DE/messages.json';
+import enUSMessages from '@renderer/services/i18n/locales/en-US/messages.json';
+import esESMessages from '@renderer/services/i18n/locales/es-ES/messages.json';
+import faIRMessages from '@renderer/services/i18n/locales/fa-IR/messages.json';
+import jaJPMessages from '@renderer/services/i18n/locales/ja-JP/messages.json';
+import koKRMessages from '@renderer/services/i18n/locales/ko-KR/messages.json';
+import ptBRMessages from '@renderer/services/i18n/locales/pt-BR/messages.json';
+import ruRUMessages from '@renderer/services/i18n/locales/ru-RU/messages.json';
+import trTRMessages from '@renderer/services/i18n/locales/tr-TR/messages.json';
+import ukUAMessages from '@renderer/services/i18n/locales/uk-UA/messages.json';
+import zhCNMessages from '@renderer/services/i18n/locales/zh-CN/messages.json';
+import zhTWMessages from '@renderer/services/i18n/locales/zh-TW/messages.json';
+
+const MESSAGE_LOCALES = {
+  'de-DE': deDEMessages,
+  'en-US': enUSMessages,
+  'es-ES': esESMessages,
+  'fa-IR': faIRMessages,
+  'ja-JP': jaJPMessages,
+  'ko-KR': koKRMessages,
+  'pt-BR': ptBRMessages,
+  'ru-RU': ruRUMessages,
+  'tr-TR': trTRMessages,
+  'uk-UA': ukUAMessages,
+  'zh-CN': zhCNMessages,
+  'zh-TW': zhTWMessages,
+} satisfies Record<string, { toolActivity: unknown }>;
+
+const flattenStringLeaves = (value: unknown, prefix = ''): Record<string, string> => {
+  if (typeof value === 'string') {
+    return { [prefix]: value };
+  }
+
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError(`Expected an object or string at ${prefix || '<root>'}`);
+  }
+
+  const leaves: Record<string, string> = {};
+  for (const [key, child] of Object.entries(value)) {
+    const childPrefix = prefix ? `${prefix}.${key}` : key;
+    Object.assign(leaves, flattenStringLeaves(child, childPrefix));
+  }
+  return leaves;
+};
+
+const getPlaceholders = (value: string): string[] => value.match(/{{[^{}]+}}/g) ?? [];
 
 describe('i18n', () => {
   describe('normalizeLanguageCode', () => {
@@ -44,6 +91,59 @@ describe('i18n', () => {
       expect(normalizeLanguageCode('fr')).toBe(DEFAULT_LANGUAGE);
       expect(normalizeLanguageCode('it')).toBe(DEFAULT_LANGUAGE);
       expect(normalizeLanguageCode('')).toBe(DEFAULT_LANGUAGE);
+    });
+  });
+
+  describe('messages.toolActivity locale parity', () => {
+    it('keeps every configured locale complete with matching placeholders', () => {
+      const issues: string[] = [];
+      const configuredLocales = i18nConfig.supportedLanguages.toSorted();
+      const importedLocales = Object.keys(MESSAGE_LOCALES).toSorted();
+      const referenceLeaves = flattenStringLeaves(enUSMessages.toolActivity);
+      const referenceKeys = Object.keys(referenceLeaves).toSorted();
+
+      if (configuredLocales.join('\n') !== importedLocales.join('\n')) {
+        issues.push(`Configured locales do not match imported message locales: ${importedLocales.join(', ')}`);
+      }
+
+      for (const locale of configuredLocales) {
+        const messages = MESSAGE_LOCALES[locale as keyof typeof MESSAGE_LOCALES];
+        if (!messages) {
+          continue;
+        }
+
+        const localeLeaves = flattenStringLeaves(messages.toolActivity);
+        const localeKeys = Object.keys(localeLeaves).toSorted();
+        const missingKeys = referenceKeys.filter((key) => !(key in localeLeaves));
+        const extraKeys = localeKeys.filter((key) => !(key in referenceLeaves));
+
+        if (missingKeys.length > 0) {
+          issues.push(`${locale} is missing: ${missingKeys.join(', ')}`);
+        }
+        if (extraKeys.length > 0) {
+          issues.push(`${locale} has extra keys: ${extraKeys.join(', ')}`);
+        }
+
+        for (const key of referenceKeys) {
+          const localeValue = localeLeaves[key];
+          if (localeValue === undefined) {
+            continue;
+          }
+          if (localeValue.trim().length === 0) {
+            issues.push(`${locale}.${key} is empty`);
+          }
+
+          const expectedPlaceholders = getPlaceholders(referenceLeaves[key]);
+          const actualPlaceholders = getPlaceholders(localeValue);
+          if (expectedPlaceholders.join('\n') !== actualPlaceholders.join('\n')) {
+            issues.push(
+              `${locale}.${key} placeholders ${actualPlaceholders.join(', ')} do not match ${expectedPlaceholders.join(', ')}`
+            );
+          }
+        }
+      }
+
+      expect(issues).toEqual([]);
     });
   });
 });

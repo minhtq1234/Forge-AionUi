@@ -68,12 +68,101 @@
     "no": "Hayır (esc)"
   },
   "toolActivity": {
-    "status": { "recovered": "Yeniden denemenin ardından kurtarıldı." },
+    "attempt": "({{n}}. deneme)",
+    "generic": {
+      "running": "Sıradaki adım üzerinde çalışıyorum.",
+      "done": "Sıradaki adımı tamamladım.",
+      "failedTitle": "Bu adımı tamamlayamadım"
+    },
+    "status": {
+      "stopped": "Durduruldu",
+      "recovered": "Yeniden denemenin ardından kurtarıldı."
+    },
+    "error": {
+      "suggestion": "Hata ayrıntıları aşağıda yer alıyor. Hazır olduğunuzda bu adımı yeniden deneyebilirsiniz."
+    },
     "categories": {
+      "web": {
+        "running": "İlgili bilgileri buluyorum.",
+        "done": "İlgili bilgileri buldum.",
+        "failedTitle": "Bilgi aramasını tamamlayamadım"
+      },
+      "search": {
+        "running": "İlgili proje dosyalarını buluyorum.",
+        "done": "İlgili proje dosyalarını buldum.",
+        "failedTitle": "Proje dosyası aramasını tamamlayamadım"
+      },
+      "fileRead": {
+        "running": "Mevcut davranışı anlamak için ilgili dosyaları inceliyorum.",
+        "done": "İlgili dosyaları inceledim.",
+        "failedTitle": "İlgili dosyaları inceleyemedim"
+      },
+      "fileWrite": {
+        "running": "Uygulama kodunu güncelliyorum.",
+        "done": "Uygulama kodunu güncelledim.",
+        "failedTitle": "Uygulama kodunu güncelleyemedim"
+      },
+      "data": {
+        "running": "Mevcut davranışı anlamak için ilgili verileri inceliyorum.",
+        "done": "İlgili verileri inceledim.",
+        "failedTitle": "İlgili verileri inceleyemedim"
+      },
+      "report": {
+        "running": "Tamamlanmış dosyayı hazırlıyorum.",
+        "done": "Tamamlanmış dosyayı hazırladım.",
+        "failedTitle": "Tamamlanmış dosyayı hazırlayamadım"
+      },
+      "export": {
+        "running": "Tamamlanmış dosyayı hazırlıyorum.",
+        "done": "Tamamlanmış dosyayı hazırladım.",
+        "failedTitle": "Tamamlanmış dosyayı hazırlayamadım"
+      },
+      "memory": {
+        "running": "Kaydedilmiş bağlamı güncelliyorum.",
+        "done": "Kaydedilmiş bağlamı güncelledim.",
+        "failedTitle": "Kaydedilmiş bağlamı güncelleyemedim"
+      },
+      "code": {
+        "running": "Sıradaki proje adımını çalıştırıyorum.",
+        "done": "Proje adımını tamamladım.",
+        "failedTitle": "Proje adımını tamamlayamadım"
+      },
       "verify": {
         "running": "Her şeyin çalışmaya devam ettiğinden emin olmak için değişiklikleri kontrol ediyorum.",
         "done": "Değişiklikleri olası sorunlara karşı kontrol ettim.",
         "failedTitle": "Değişiklikleri kontrol etmeyi tamamlayamadım"
+      },
+      "office": {
+        "running": "Tamamlanmış dosyayı hazırlıyorum.",
+        "done": "Tamamlanmış dosyayı hazırladım.",
+        "failedTitle": "Tamamlanmış dosyayı hazırlayamadım"
+      }
+    },
+    "tools": {
+      "data_open": {
+        "running": "Mevcut davranışı anlamak için ilgili verileri inceliyorum.",
+        "done": "İlgili verileri inceledim.",
+        "failedTitle": "İlgili verileri inceleyemedim"
+      },
+      "data_get_schema": {
+        "running": "Mevcut davranışı anlamak için ilgili verileri inceliyorum.",
+        "done": "İlgili verileri inceledim.",
+        "failedTitle": "İlgili verileri inceleyemedim"
+      },
+      "data_run_sql": {
+        "running": "Mevcut davranışı anlamak için ilgili verileri inceliyorum.",
+        "done": "İlgili verileri inceledim.",
+        "failedTitle": "İlgili verileri inceleyemedim"
+      },
+      "render_report": {
+        "running": "Tamamlanmış dosyayı hazırlıyorum.",
+        "done": "Tamamlanmış dosyayı hazırladım.",
+        "failedTitle": "Tamamlanmış dosyayı hazırlayamadım"
+      },
+      "export_pdf": {
+        "running": "Tamamlanmış dosyayı hazırlıyorum.",
+        "done": "Tamamlanmış dosyayı hazırladım.",
+        "failedTitle": "Tamamlanmış dosyayı hazırlayamadım"
       }
     }
   }

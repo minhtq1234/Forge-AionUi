@@ -68,12 +68,101 @@
     "no": "Não (esc)"
   },
   "toolActivity": {
-    "status": { "recovered": "Recuperado após nova tentativa." },
+    "attempt": "(tentativa {{n}})",
+    "generic": {
+      "running": "Estou avançando para a próxima etapa.",
+      "done": "Concluí a próxima etapa.",
+      "failedTitle": "Não consegui concluir esta etapa"
+    },
+    "status": {
+      "stopped": "Interrompido",
+      "recovered": "Recuperado após nova tentativa."
+    },
+    "error": {
+      "suggestion": "Os detalhes do erro estão disponíveis abaixo. Quando quiser, você pode tentar esta etapa novamente."
+    },
     "categories": {
+      "web": {
+        "running": "Estou localizando as informações relevantes.",
+        "done": "Localizei as informações relevantes.",
+        "failedTitle": "Não consegui concluir a busca por informações"
+      },
+      "search": {
+        "running": "Estou localizando os arquivos relevantes do projeto.",
+        "done": "Localizei os arquivos relevantes do projeto.",
+        "failedTitle": "Não consegui concluir a busca nos arquivos do projeto"
+      },
+      "fileRead": {
+        "running": "Estou revisando os arquivos relevantes para entender o comportamento atual.",
+        "done": "Revisei os arquivos relevantes.",
+        "failedTitle": "Não consegui revisar os arquivos relevantes"
+      },
+      "fileWrite": {
+        "running": "Estou atualizando a implementação.",
+        "done": "Atualizei a implementação.",
+        "failedTitle": "Não consegui atualizar a implementação"
+      },
+      "data": {
+        "running": "Estou revisando os dados relevantes para entender o comportamento atual.",
+        "done": "Revisei os dados relevantes.",
+        "failedTitle": "Não consegui revisar os dados relevantes"
+      },
+      "report": {
+        "running": "Estou preparando o arquivo final.",
+        "done": "Preparei o arquivo final.",
+        "failedTitle": "Não consegui preparar o arquivo final"
+      },
+      "export": {
+        "running": "Estou preparando o arquivo final.",
+        "done": "Preparei o arquivo final.",
+        "failedTitle": "Não consegui preparar o arquivo final"
+      },
+      "memory": {
+        "running": "Estou atualizando o contexto salvo.",
+        "done": "Atualizei o contexto salvo.",
+        "failedTitle": "Não consegui atualizar o contexto salvo"
+      },
+      "code": {
+        "running": "Estou executando a próxima etapa do projeto.",
+        "done": "Concluí a etapa do projeto.",
+        "failedTitle": "Não consegui concluir a etapa do projeto"
+      },
       "verify": {
         "running": "Estou verificando as alterações para garantir que tudo continue funcionando.",
         "done": "Verifiquei se as alterações causaram regressões.",
         "failedTitle": "Não consegui concluir a verificação das alterações"
+      },
+      "office": {
+        "running": "Estou preparando o arquivo final.",
+        "done": "Preparei o arquivo final.",
+        "failedTitle": "Não consegui preparar o arquivo final"
+      }
+    },
+    "tools": {
+      "data_open": {
+        "running": "Estou revisando os dados relevantes para entender o comportamento atual.",
+        "done": "Revisei os dados relevantes.",
+        "failedTitle": "Não consegui revisar os dados relevantes"
+      },
+      "data_get_schema": {
+        "running": "Estou revisando os dados relevantes para entender o comportamento atual.",
+        "done": "Revisei os dados relevantes.",
+        "failedTitle": "Não consegui revisar os dados relevantes"
+      },
+      "data_run_sql": {
+        "running": "Estou revisando os dados relevantes para entender o comportamento atual.",
+        "done": "Revisei os dados relevantes.",
+        "failedTitle": "Não consegui revisar os dados relevantes"
+      },
+      "render_report": {
+        "running": "Estou preparando o arquivo final.",
+        "done": "Preparei o arquivo final.",
+        "failedTitle": "Não consegui preparar o arquivo final"
+      },
+      "export_pdf": {
+        "running": "Estou preparando o arquivo final.",
+        "done": "Preparei o arquivo final.",
+        "failedTitle": "Não consegui preparar o arquivo final"
       }
     }
   }

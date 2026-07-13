@@ -68,12 +68,101 @@
     "no": "否 (esc)"
   },
   "toolActivity": {
-    "status": { "recovered": "重試後已恢復。" },
+    "attempt": "（第 {{n}} 次嘗試）",
+    "generic": {
+      "running": "我正在處理下一個步驟。",
+      "done": "已完成下一個步驟。",
+      "failedTitle": "我無法完成此步驟"
+    },
+    "status": {
+      "stopped": "已停止",
+      "recovered": "重試後已恢復。"
+    },
+    "error": {
+      "suggestion": "下方提供了錯誤詳細資料。準備好後，您可以重試此步驟。"
+    },
     "categories": {
+      "web": {
+        "running": "我正在尋找相關資訊。",
+        "done": "已找到相關資訊。",
+        "failedTitle": "我無法完成資訊搜尋"
+      },
+      "search": {
+        "running": "我正在尋找相關的專案檔案。",
+        "done": "已找到相關的專案檔案。",
+        "failedTitle": "我無法完成專案檔案搜尋"
+      },
+      "fileRead": {
+        "running": "我正在檢閱相關檔案，以瞭解目前的運作方式。",
+        "done": "已檢閱相關檔案。",
+        "failedTitle": "我無法檢閱相關檔案"
+      },
+      "fileWrite": {
+        "running": "我正在更新實作。",
+        "done": "已更新實作。",
+        "failedTitle": "我無法更新實作"
+      },
+      "data": {
+        "running": "我正在檢閱相關資料，以瞭解目前的運作方式。",
+        "done": "已檢閱相關資料。",
+        "failedTitle": "我無法檢閱相關資料"
+      },
+      "report": {
+        "running": "我正在準備最終檔案。",
+        "done": "已準備好最終檔案。",
+        "failedTitle": "我無法準備最終檔案"
+      },
+      "export": {
+        "running": "我正在準備最終檔案。",
+        "done": "已準備好最終檔案。",
+        "failedTitle": "我無法準備最終檔案"
+      },
+      "memory": {
+        "running": "我正在更新已儲存的內容。",
+        "done": "已更新儲存的內容。",
+        "failedTitle": "我無法更新儲存的內容"
+      },
+      "code": {
+        "running": "我正在執行下一個專案步驟。",
+        "done": "已完成該專案步驟。",
+        "failedTitle": "我無法完成該專案步驟"
+      },
       "verify": {
         "running": "我正在檢查這些變更，確保一切仍正常運作。",
         "done": "已完成變更檢查。",
         "failedTitle": "我無法完成變更檢查"
+      },
+      "office": {
+        "running": "我正在準備最終檔案。",
+        "done": "已準備好最終檔案。",
+        "failedTitle": "我無法準備最終檔案"
+      }
+    },
+    "tools": {
+      "data_open": {
+        "running": "我正在檢閱相關資料，以瞭解目前的運作方式。",
+        "done": "已檢閱相關資料。",
+        "failedTitle": "我無法檢閱相關資料"
+      },
+      "data_get_schema": {
+        "running": "我正在檢閱相關資料，以瞭解目前的運作方式。",
+        "done": "已檢閱相關資料。",
+        "failedTitle": "我無法檢閱相關資料"
+      },
+      "data_run_sql": {
+        "running": "我正在檢閱相關資料，以瞭解目前的運作方式。",
+        "done": "已檢閱相關資料。",
+        "failedTitle": "我無法檢閱相關資料"
+      },
+      "render_report": {
+        "running": "我正在準備最終檔案。",
+        "done": "已準備好最終檔案。",
+        "failedTitle": "我無法準備最終檔案"
+      },
+      "export_pdf": {
+        "running": "我正在準備最終檔案。",
+        "done": "已準備好最終檔案。",
+        "failedTitle": "我無法準備最終檔案"
       }
     }
   }

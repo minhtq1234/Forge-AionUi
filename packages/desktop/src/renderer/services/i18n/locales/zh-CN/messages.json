@@ -68,12 +68,101 @@
     "no": "否 (esc)"
   },
   "toolActivity": {
-    "status": { "recovered": "重试后已恢复。" },
+    "attempt": "（第 {{n}} 次尝试）",
+    "generic": {
+      "running": "我正在处理下一步。",
+      "done": "已完成下一步。",
+      "failedTitle": "我无法完成此步骤"
+    },
+    "status": {
+      "stopped": "已停止",
+      "recovered": "重试后已恢复。"
+    },
+    "error": {
+      "suggestion": "下方提供了错误详情。准备好后，您可以重试此步骤。"
+    },
     "categories": {
+      "web": {
+        "running": "我正在查找相关信息。",
+        "done": "已找到相关信息。",
+        "failedTitle": "我无法完成信息查找"
+      },
+      "search": {
+        "running": "我正在查找相关项目文件。",
+        "done": "已找到相关项目文件。",
+        "failedTitle": "我无法完成项目文件查找"
+      },
+      "fileRead": {
+        "running": "我正在查看相关文件，以了解当前行为。",
+        "done": "已查看相关文件。",
+        "failedTitle": "我无法查看相关文件"
+      },
+      "fileWrite": {
+        "running": "我正在更新实现。",
+        "done": "已更新实现。",
+        "failedTitle": "我无法更新实现"
+      },
+      "data": {
+        "running": "我正在查看相关数据，以了解当前行为。",
+        "done": "已查看相关数据。",
+        "failedTitle": "我无法查看相关数据"
+      },
+      "report": {
+        "running": "我正在准备最终文件。",
+        "done": "已准备好最终文件。",
+        "failedTitle": "我无法准备最终文件"
+      },
+      "export": {
+        "running": "我正在准备最终文件。",
+        "done": "已准备好最终文件。",
+        "failedTitle": "我无法准备最终文件"
+      },
+      "memory": {
+        "running": "我正在更新已保存的上下文。",
+        "done": "已更新保存的上下文。",
+        "failedTitle": "我无法更新保存的上下文"
+      },
+      "code": {
+        "running": "我正在运行下一个项目步骤。",
+        "done": "已完成该项目步骤。",
+        "failedTitle": "我无法完成该项目步骤"
+      },
       "verify": {
         "running": "我正在检查这些更改，确保一切仍正常运行。",
         "done": "已完成更改检查。",
         "failedTitle": "我无法完成更改检查"
+      },
+      "office": {
+        "running": "我正在准备最终文件。",
+        "done": "已准备好最终文件。",
+        "failedTitle": "我无法准备最终文件"
+      }
+    },
+    "tools": {
+      "data_open": {
+        "running": "我正在查看相关数据，以了解当前行为。",
+        "done": "已查看相关数据。",
+        "failedTitle": "我无法查看相关数据"
+      },
+      "data_get_schema": {
+        "running": "我正在查看相关数据，以了解当前行为。",
+        "done": "已查看相关数据。",
+        "failedTitle": "我无法查看相关数据"
+      },
+      "data_run_sql": {
+        "running": "我正在查看相关数据，以了解当前行为。",
+        "done": "已查看相关数据。",
+        "failedTitle": "我无法查看相关数据"
+      },
+      "render_report": {
+        "running": "我正在准备最终文件。",
+        "done": "已准备好最终文件。",
+        "failedTitle": "我无法准备最终文件"
+      },
+      "export_pdf": {
+        "running": "我正在准备最终文件。",
+        "done": "已准备好最终文件。",
+        "failedTitle": "我无法准备最终文件"
       }
     }
   }
