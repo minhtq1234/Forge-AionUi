@@ -14,7 +14,7 @@ import * as path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { app } from 'electron';
 import { DIAGNOSTIC_TRUNCATION_MARKER } from '@/common/utils/diagnosticRedaction';
-import { collectFeedbackLogAttachment } from '@/process/feedback/logs';
+import { collectFeedbackLogAttachment, readBoundedLogTail } from '@/process/feedback/logs';
 
 const { handlers, eventHandlers, exposedMainWorld, ipcRenderer } = vi.hoisted(() => ({
   eventHandlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
@@ -334,6 +334,103 @@ describe('feedback logs', () => {
     } finally {
       rmSync(logsDir, { recursive: true, force: true });
     }
+  });
+
+  it('redacts secrets before compressing recent logs', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-redaction-'));
+    try {
+      writeFileSync(
+        path.join(logsDir, '2026-07-14.log'),
+        'provider=openai api_key=log-secret Authorization: Bearer bearer-secret status=401\n'
+      );
+
+      const attachment = collectFeedbackLogAttachment(logsDir);
+      const content = gunzipSync(attachment!.data).toString('utf8');
+
+      expect(content).toContain('provider=openai');
+      expect(content).toContain('status=401');
+      expect(content).not.toContain('log-secret');
+      expect(content).not.toContain('bearer-secret');
+      expect(content).toContain('[REDACTED]');
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('limits attachments to deterministic recent candidate paths', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-candidates-'));
+    const limits = { maxAggregateBytes: 120, maxCandidateFiles: 2, maxFileBytes: 32 };
+    try {
+      writeFileSync(path.join(logsDir, '2026-07-14.log'), 'frontend\n');
+      writeFileSync(path.join(logsDir, '2026-07-14.aioncore.log'), 'backend\n');
+      writeFileSync(path.join(logsDir, '2026-07-13.log'), 'older\n');
+
+      const attachment = collectFeedbackLogAttachment(logsDir, limits);
+      const content = gunzipSync(attachment!.data).toString('utf8');
+
+      expect(content).toContain('=== 2026-07-14.aioncore.log ===');
+      expect(content).toContain('=== 2026-07-14.log ===');
+      expect(content).not.toContain('2026-07-13.log');
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('retains only the recent tail of an oversized log', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-tail-'));
+    const limits = { maxAggregateBytes: 120, maxCandidateFiles: 2, maxFileBytes: 32 };
+    try {
+      writeFileSync(path.join(logsDir, '2026-07-14.log'), `old-prefix-${'x'.repeat(24)}recent-tail-marker`);
+
+      const attachment = collectFeedbackLogAttachment(logsDir, limits);
+      const content = gunzipSync(attachment!.data).toString('utf8');
+
+      expect(content).not.toContain('old-prefix');
+      expect(content).toContain('recent-tail-marker');
+      expect(content).toContain('[TRUNCATED: recent tail retained]');
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('bounds the decompressed attachment to the aggregate limit', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-aggregate-'));
+    const limits = { maxAggregateBytes: 120, maxCandidateFiles: 2, maxFileBytes: 32 };
+    try {
+      writeFileSync(path.join(logsDir, '2026-07-14.aioncore.log'), 'a'.repeat(64));
+      writeFileSync(path.join(logsDir, '2026-07-14.log'), 'b'.repeat(64));
+
+      const attachment = collectFeedbackLogAttachment(logsDir, limits);
+      const content = gunzipSync(attachment!.data);
+
+      expect(content.byteLength).toBeLessThanOrEqual(limits.maxAggregateBytes);
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('reads oversized logs from a bounded file-descriptor offset', () => {
+    const fileSystem = {
+      closeSync: vi.fn((_fd: number) => {}),
+      fstatSync: vi.fn((_fd: number) => ({ size: 96 })),
+      openSync: vi.fn((_filePath: string, _flags: string) => 7),
+      readSync: vi.fn((fd: number, buffer: Buffer, offset: number, length: number, position: number) => {
+        expect(fd).toBe(7);
+        expect(offset).toBe(0);
+        expect(length).toBe(32);
+        expect(position).toBe(64);
+        Buffer.from('recent-tail').copy(buffer);
+        return 'recent-tail'.length;
+      }),
+    };
+
+    const result = readBoundedLogTail('/logs/2026-07-14.log', 32, fileSystem);
+
+    expect(fileSystem.openSync).toHaveBeenCalledWith('/logs/2026-07-14.log', 'r');
+    expect(fileSystem.fstatSync).toHaveBeenCalledWith(7);
+    expect(fileSystem.readSync).toHaveBeenCalledOnce();
+    expect(fileSystem.closeSync).toHaveBeenCalledWith(7);
+    expect(result).toEqual({ text: 'recent-tail', truncated: true });
   });
 });
 

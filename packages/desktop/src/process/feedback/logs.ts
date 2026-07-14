@@ -7,12 +7,20 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
+import { redactDiagnosticText } from '@/common/utils/diagnosticRedaction';
 
 const LOG_SUFFIXES = ['.log', '.aioncore.log', '.aionrs.log'];
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}/;
 const YEAR_DIR_PATTERN = /^\d{4}$/;
 const MONTH_OR_DAY_DIR_PATTERN = /^\d{2}$/;
 const DEFAULT_LOG_DAYS = 3;
+const AGGREGATE_TRUNCATION_MARKER = '\n[TRUNCATED: aggregate feedback log limit]\n';
+
+const DEFAULT_LOG_LIMITS: FeedbackLogCollectionLimits = {
+  maxAggregateBytes: 4 * 1024 * 1024,
+  maxCandidateFiles: 12,
+  maxFileBytes: 1024 * 1024,
+};
 
 export type FeedbackLogAttachment = {
   filename: string;
@@ -20,9 +28,27 @@ export type FeedbackLogAttachment = {
   contentType: 'application/gzip';
 };
 
+export type FeedbackLogCollectionLimits = {
+  maxAggregateBytes: number;
+  maxCandidateFiles: number;
+  maxFileBytes: number;
+};
+
 type FeedbackLogCandidate = {
   date: string;
   path: string;
+};
+
+type BoundedFileSystem = {
+  closeSync: (fd: number) => void;
+  fstatSync: (fd: number) => { size: number };
+  openSync: (filePath: string, flags: string) => number;
+  readSync: (fd: number, buffer: Buffer, offset: number, length: number, position: number) => number;
+};
+
+type BoundedLogText = {
+  text: string;
+  truncated: boolean;
 };
 
 function isFeedbackLogFileForDate(file: string, date: string): boolean {
@@ -163,12 +189,67 @@ function getLogHeaderName(logPath: string, rootDir: string, showRelativePath: bo
   return relativePath.split(path.sep).join('/');
 }
 
+export function readBoundedLogTail(
+  filePath: string,
+  maxBytes: number,
+  fileSystem: BoundedFileSystem = fs
+): BoundedLogText {
+  const fd = fileSystem.openSync(filePath, 'r');
+  try {
+    const size = fileSystem.fstatSync(fd).size;
+    const bytesToRead = Math.min(size, maxBytes);
+    const position = Math.max(0, size - bytesToRead);
+    const buffer = Buffer.alloc(bytesToRead);
+    const bytesRead = fileSystem.readSync(fd, buffer, 0, bytesToRead, position);
+    return {
+      text: buffer.subarray(0, bytesRead).toString('utf8'),
+      truncated: position > 0,
+    };
+  } finally {
+    fileSystem.closeSync(fd);
+  }
+}
+
+function fitUtf8Section(text: string, maxBytes: number): string {
+  const encoded = Buffer.from(text, 'utf8');
+  if (encoded.length <= maxBytes) {
+    return text;
+  }
+
+  const marker = Buffer.from(AGGREGATE_TRUNCATION_MARKER, 'utf8');
+  if (maxBytes <= marker.length) {
+    return marker
+      .subarray(0, maxBytes)
+      .toString('utf8')
+      .replace(/\uFFFD$/u, '');
+  }
+
+  return (
+    encoded
+      .subarray(0, maxBytes - marker.length)
+      .toString('utf8')
+      .replace(/\uFFFD$/u, '') + AGGREGATE_TRUNCATION_MARKER
+  );
+}
+
+function redactLogText(text: string, maxBytes: number): string {
+  const withSeparatedStatus = text.replace(
+    /(\b(?:proxy[_-]?authorization|authorization)\s*[=:]\s*[^\r\n]*?)(\s+status\s*[=:])/gi,
+    '$1\n$2'
+  );
+  return redactDiagnosticText(withSeparatedStatus, maxBytes);
+}
+
 export function getRecentFeedbackLogPaths(logsDir: string, days = DEFAULT_LOG_DAYS): string[] {
   const normalizedDir = normalizeLogDirs(logsDir)[0];
   return getRecentFeedbackLogPathsFromDirs([normalizedDir], days);
 }
 
-export function collectFeedbackLogAttachment(logsDirs: string | string[]): FeedbackLogAttachment | null {
+export function collectFeedbackLogAttachment(
+  logsDirs: string | string[],
+  limits: Partial<FeedbackLogCollectionLimits> = {}
+): FeedbackLogAttachment | null {
+  const resolvedLimits = { ...DEFAULT_LOG_LIMITS, ...limits };
   const normalizedDirs = normalizeLogDirs(logsDirs);
   const logPaths =
     normalizedDirs.length === 1
@@ -179,15 +260,30 @@ export function collectFeedbackLogAttachment(logsDirs: string | string[]): Feedb
   }
 
   const parts: string[] = [];
-  for (const logPath of logPaths) {
+  let aggregateBytes = 0;
+  for (const logPath of logPaths.slice(0, resolvedLimits.maxCandidateFiles)) {
     const basename = getLogHeaderName(logPath, normalizedDirs[0], true);
-    const content = fs.readFileSync(logPath, 'utf8');
-    parts.push(`=== ${basename} ===\n${content}\n`);
+    const logTail = readBoundedLogTail(logPath, resolvedLimits.maxFileBytes);
+    const truncationNotice = logTail.truncated ? '[TRUNCATED: recent tail retained]\n' : '';
+    const separator = parts.length > 0 ? '\n' : '';
+    const section = `${separator}=== ${basename} ===\n${truncationNotice}${redactLogText(logTail.text, resolvedLimits.maxFileBytes)}\n`;
+    const sectionBytes = Buffer.byteLength(section, 'utf8');
+
+    if (aggregateBytes + sectionBytes > resolvedLimits.maxAggregateBytes) {
+      const availableBytes = resolvedLimits.maxAggregateBytes - aggregateBytes;
+      if (availableBytes > 0) {
+        parts.push(fitUtf8Section(section, availableBytes));
+      }
+      break;
+    }
+
+    parts.push(section);
+    aggregateBytes += sectionBytes;
   }
 
   return {
     filename: 'logs.gz',
-    data: zlib.gzipSync(Buffer.from(parts.join('\n'), 'utf8')),
+    data: zlib.gzipSync(Buffer.from(parts.join(''), 'utf8')),
     contentType: 'application/gzip',
   };
 }
