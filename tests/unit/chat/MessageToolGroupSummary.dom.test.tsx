@@ -300,9 +300,10 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    expect(screen.getByRole('status')).toHaveTextContent('messages.toolActivity.recap.headline.active');
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(screen.getByText('messages.toolActivity.categories.search.done')).toBeInTheDocument();
     expect(screen.getByText('messages.toolActivity.categories.verify.running')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('messages.toolActivity.recap.headline.active');
   });
 
   it('announces active recap copy inside the live region', () => {
@@ -315,8 +316,23 @@ describe('MessageToolGroupSummary plain-language activity', () => {
 
   it('shows the done label and a technical-details toggle when settled', () => {
     render(<MessageToolGroupSummary messages={[acpStep('completed', 't1')]} />);
+    const disclosure = screen.getByRole('button', { name: 'common.technical_details' });
+    expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(disclosure);
     expect(screen.getByText('messages.toolActivity.tools.render_report.done')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'common.technical_details' })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('keeps completed step details out of the DOM until Technical Details opens', () => {
+    render(<MessageToolGroupSummary messages={[commandStep('completed', 'read-1', 'sed -n 1,10p file.txt')]} />);
+
+    const disclosure = screen.getByRole('button', { name: 'common.technical_details' });
+    expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('messages.toolActivity.categories.fileRead.done')).not.toBeInTheDocument();
+
+    fireEvent.click(disclosure);
+
+    expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('messages.toolActivity.categories.fileRead.done')).toBeInTheDocument();
   });
 
   it('offers one Technical Details disclosure while work is running', () => {
@@ -391,6 +407,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(screen.getAllByText('messages.toolActivity.categories.search.done')).toHaveLength(1);
   });
 
@@ -415,6 +432,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(screen.getByText('Reviewing the conversation activity')).toBeInTheDocument();
     expect(screen.queryByText(/raw private reasoning/)).not.toBeInTheDocument();
   });
@@ -439,6 +457,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(screen.getByText('Reviewing the activity flow')).toBeInTheDocument();
   });
 
@@ -475,6 +494,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(screen.getAllByText('messages.toolActivity.generic.done')).toHaveLength(1);
     expect(screen.getAllByText('messages.toolActivity.generic.running')).toHaveLength(1);
     unsafeEntries.forEach((entry) => expect(screen.queryByText(entry)).not.toBeInTheDocument());
@@ -531,6 +551,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(screen.getAllByText('messages.toolActivity.generic.running')).toHaveLength(1);
     unsafeEntries.forEach((entry) => expect(screen.queryByText(entry)).not.toBeInTheDocument());
   });
@@ -565,6 +586,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(screen.getAllByText('messages.toolActivity.generic.running')).toHaveLength(1);
     unsafeEntries.forEach((entry) => expect(screen.queryByText(entry)).not.toBeInTheDocument());
   });
@@ -601,6 +623,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     safeEntries.forEach((entry) => expect(screen.getByText(entry)).toBeInTheDocument());
     expect(screen.queryByText('messages.toolActivity.generic.running')).not.toBeInTheDocument();
   });
@@ -681,6 +704,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     const visibleSubject = screen.getByText((text) => text.startsWith('Reviewing'));
     expect(visibleSubject.textContent).toHaveLength(180);
     expect(visibleSubject.textContent).toMatch(/…$/);
@@ -704,6 +728,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     const visibleContent = screen.getByText((text) => text.startsWith('Reviewing'));
     expect(visibleContent.textContent).toHaveLength(180);
     expect(visibleContent.textContent).toMatch(/…$/);
@@ -735,12 +760,13 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(screen.getByText('Planning changes').closest('[data-status]')).toHaveAttribute('data-status', 'completed');
     expect(screen.getByText('Reviewing options').closest('[data-status]')).toHaveAttribute('data-status', 'completed');
     expect(
       screen.getByText('messages.toolActivity.categories.verify.running').closest('[data-status]')
     ).toHaveAttribute('data-status', 'running');
-    expect(screen.getAllByRole('status')).toHaveLength(1);
   });
 
   it('settles an earlier tool step and uses its done narration when thinking follows it', () => {
@@ -762,9 +788,10 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(screen.getByText('messages.toolActivity.categories.search.done')).toBeInTheDocument();
     expect(screen.queryByText('messages.toolActivity.categories.search.running')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('status')).toHaveLength(1);
   });
 
   it('settles every running row in an inactive summary while preserving pending plans', () => {
@@ -792,6 +819,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(screen.getByText('Queued work').closest('[data-status]')).toHaveAttribute('data-status', 'pending');
     expect(screen.getByText('Active work').closest('[data-status]')).toHaveAttribute('data-status', 'completed');
     expect(screen.getByText('messages.toolActivity.categories.verify.done')).toBeInTheDocument();
@@ -820,6 +848,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     const row = screen.getByText('messages.toolActivity.generic.done').closest('[data-status]');
     expect(row).toHaveAttribute('data-status', 'completed');
     expect(row?.querySelector('[data-status-icon="completed"]')).toBeInTheDocument();
@@ -854,6 +883,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     const plan = screen.getByText('Review the activity flow');
     const thinking = screen.getByText('Choosing a safe approach');
     const tool = screen.getByText('messages.toolActivity.categories.search.done');
@@ -886,6 +916,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       />
     );
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(screen.getByText('Queued work').closest('[data-status]')).toHaveAttribute('data-status', 'pending');
     expect(screen.getByText('Active work').closest('[data-status]')).toHaveAttribute('data-status', 'running');
     expect(screen.getByText('Finished work').closest('[data-status]')).toHaveAttribute('data-status', 'completed');
@@ -910,6 +941,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
 
     render(<MessageToolGroupSummary messages={[canceled]} />);
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     const row = screen.getByText('messages.toolActivity.status.stopped').closest('[data-status]');
     expect(row).toHaveAttribute('data-status', 'canceled');
     expect(row?.querySelector('[data-status-icon="completed"]')).not.toBeInTheDocument();
@@ -922,6 +954,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
         messages={[acpStep('failed', 't1'), acpStep('failed', 't2'), acpStep('in_progress', 't3')]}
       />
     );
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(screen.getByText(/messages\.toolActivity\.tools\.render_report\.running/)).toBeInTheDocument();
     expect(screen.getByText(/messages\.toolActivity\.attempt/)).toBeInTheDocument();
   });
@@ -929,6 +962,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
   it('renders a merged completed retry with recovery narration', () => {
     render(<MessageToolGroupSummary messages={[acpStep('failed', 't1'), acpStep('completed', 't2')]} />);
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(
       screen.getByText('messages.toolActivity.tools.render_report.done messages.toolActivity.status.recovered')
     ).toBeInTheDocument();
@@ -938,6 +972,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
   it('does not claim recovery when an in-progress retry is only synthetically settled', () => {
     render(<MessageToolGroupSummary messages={[acpStep('failed', 't1'), acpStep('in_progress', 't2')]} />);
 
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     const row = screen.getByText('messages.toolActivity.status.stopped').closest('[data-status]');
     expect(row).toHaveAttribute('data-status', 'canceled');
     expect(row?.querySelector('[data-status-icon="completed"]')).not.toBeInTheDocument();
@@ -947,6 +982,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
 
   it('renders a friendly error card for a final give-up', () => {
     render(<MessageToolGroupSummary messages={[acpStep('failed', 't1')]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(screen.getByText('messages.toolActivity.tools.render_report.failedTitle')).toBeInTheDocument();
     expect(screen.getByText('messages.toolActivity.error.suggestion')).toBeInTheDocument();
   });
@@ -992,7 +1028,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
         'messages.toolActivity.recap.category.generic'
       );
       expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.completed/)).toHaveTextContent('"total":1');
-      expect(screen.getByText('messages.toolActivity.categories.generic.done')).not.toBeVisible();
+      expect(screen.queryByText('messages.toolActivity.categories.generic.done')).not.toBeInTheDocument();
     });
 
     it('lists mixed work categories in first-appearance order', () => {
@@ -1158,7 +1194,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       );
 
       expect(screen.getByText('messages.toolActivity.recap.headline.partial')).toBeInTheDocument();
-      expect(screen.getByText('messages.toolActivity.tools.render_report.failedTitle')).not.toBeVisible();
+      expect(screen.queryByText('messages.toolActivity.tools.render_report.failedTitle')).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
       expect(screen.getByText('messages.toolActivity.tools.render_report.failedTitle')).toBeInTheDocument();
     });

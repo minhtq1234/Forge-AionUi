@@ -563,21 +563,25 @@ const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[]; 
           />
         </Button>
       )}
-      <div className='tool-group-summary__body' hidden={!showDetails} aria-hidden={!showDetails}>
-        {rows.map((row) => {
-          if (row.status === 'error') {
-            return row.kind === 'tool' ? <ToolActivityError key={row.key} step={row.step} /> : null;
-          }
-          return (
-            <StepRow
-              key={row.key}
-              label={row.kind === 'tool' ? action.label(row.step) : row.label}
-              status={row.status}
-            />
-          );
-        })}
-        {showDetails && tools.map((item) => <ToolItemDetail key={item.key} item={item} />)}
-      </div>
+      {showDetails && (
+        <div className='tool-group-summary__body'>
+          {rows.map((row) => {
+            if (row.status === 'error') {
+              return row.kind === 'tool' ? <ToolActivityError key={row.key} step={row.step} /> : null;
+            }
+            return (
+              <StepRow
+                key={row.key}
+                label={row.kind === 'tool' ? action.label(row.step) : row.label}
+                status={row.status}
+              />
+            );
+          })}
+          {tools.map((item) => (
+            <ToolItemDetail key={item.key} item={item} />
+          ))}
+        </div>
+      )}
     </div>
   );
 };
