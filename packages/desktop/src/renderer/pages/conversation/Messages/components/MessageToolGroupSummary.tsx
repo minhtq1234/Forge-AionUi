@@ -513,12 +513,7 @@ const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[]; 
         if (recap.canceled > 0) return t('messages.toolActivity.recap.outcome.activeWithCanceled', recap);
         return t('messages.toolActivity.recap.outcome.active', recap);
       case 'recovered':
-        return t(
-          recap.retries === 1
-            ? 'messages.toolActivity.recap.outcome.recoveredOneRetry'
-            : 'messages.toolActivity.recap.outcome.recoveredManyRetries',
-          recap
-        );
+        return t('messages.toolActivity.recap.outcome.recovered', recap);
       case 'partial':
         return t(
           recap.canceled > 0
