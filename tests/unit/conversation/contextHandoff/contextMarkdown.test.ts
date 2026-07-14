@@ -109,6 +109,31 @@ describe('buildContextMarkdown', () => {
     expect(readSection(markdown, 'Pinned Context')).toContain('- Reporting unit: Use VND millions.');
   });
 
+  it('omits renderer history-gap markers from fallback context', () => {
+    const snapshot = buildFallbackContextSnapshot({
+      conversation,
+      maxRecentMessages: 6,
+      messages: [
+        messages[0],
+        {
+          id: 'renderer-history-gap:conv-1',
+          conversation_id: 'conv-1',
+          type: 'tips',
+          position: 'center',
+          hidden: true,
+          content: {
+            content: '',
+            type: 'info',
+            code: '__aionui_renderer_history_gap__',
+          },
+        },
+      ],
+    });
+
+    expect(snapshot.current_state).toEqual(['User: Build the OPEX dashboard.']);
+    expect(snapshot.current_state).not.toContain('System:');
+  });
+
   it('renders canonical markdown from the structured snapshot and keeps empty model sections empty', () => {
     const markdown = buildContextMarkdown({
       conversation: {

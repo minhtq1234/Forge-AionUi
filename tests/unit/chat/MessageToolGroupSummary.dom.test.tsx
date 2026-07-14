@@ -7,6 +7,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createInstance } from 'i18next';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup } from '@/common/chat/chatLib';
 import MessageToolGroupSummary from '@/renderer/pages/conversation/Messages/components/MessageToolGroupSummary';
@@ -16,9 +17,27 @@ import type { WorkJournalSourceMessage } from '@/renderer/pages/conversation/Mes
 const mockDownloadFileFromPath = vi.fn().mockResolvedValue(undefined);
 const mockMessageSuccess = vi.fn();
 const mockMessageError = vi.fn();
+const translationMockState = vi.hoisted(() => ({
+  language: 'en-US',
+  translate: undefined as undefined | ((key: string, values?: Record<string, unknown>) => string),
+}));
 
-const renderOutcomeTemplate = (template: string, values: Record<string, number>): string =>
-  template.replace(/\{\{(\w+)\}\}/g, (match: string, key: string) => (key in values ? String(values[key]) : match));
+const createMessagesInstance = async (locale: string, messages: Record<string, unknown>) => {
+  const instance = createInstance();
+  await instance.init({
+    lng: locale,
+    fallbackLng: false,
+    resources: { [locale]: { translation: { messages } } },
+    interpolation: { escapeValue: false },
+  });
+  return instance;
+};
+
+const useRealMessages = async (locale: string, messages: Record<string, unknown>): Promise<void> => {
+  const instance = await createMessagesInstance(locale, messages);
+  translationMockState.language = locale;
+  translationMockState.translate = (key, values) => instance.t(key, values);
+};
 
 vi.mock('@/renderer/components/media/LocalImageView', () => ({
   __esModule: true,
@@ -34,13 +53,26 @@ vi.mock('@/renderer/utils/file/download', () => ({
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, values?: Record<string, unknown>) => {
+      if (translationMockState.translate) return translationMockState.translate(key, values);
       if (key.startsWith('messages.toolActivity.recap.category') && typeof values?.count === 'number') {
         return `${key} (${values.count})`;
       }
+      if (key === 'messages.toolActivity.recap.overflow' && typeof values?.count === 'number') {
+        return `${key} [other:${values.count}]`;
+      }
       return key.startsWith('messages.toolActivity.recap') && values ? `${key} ${JSON.stringify(values)}` : key;
+    },
+    i18n: {
+      language: translationMockState.language,
+      resolvedLanguage: translationMockState.language,
     },
   }),
 }));
+
+beforeEach(() => {
+  translationMockState.language = 'en-US';
+  translationMockState.translate = undefined;
+});
 
 vi.mock('@arco-design/web-react', async () => {
   const actual = await vi.importActual<typeof import('@arco-design/web-react')>('@arco-design/web-react');
@@ -309,13 +341,20 @@ describe('MessageToolGroupSummary plain-language activity', () => {
   it('announces active recap copy inside the live region', () => {
     render(<MessageToolGroupSummary isActive messages={[commandStep('in_progress', 'verify-1', 'bun run test')]} />);
 
-    expect(
-      within(screen.getByRole('status')).getByText('messages.toolActivity.recap.headline.active')
-    ).toBeInTheDocument();
+    const liveHeadline = screen.getByRole('status');
+    expect(liveHeadline).toHaveTextContent(/messages\.toolActivity\.recap\.headline\.active .*"total":1/);
+    expect(liveHeadline).toHaveAttribute('aria-live', 'polite');
+    expect(liveHeadline).toHaveAttribute('aria-atomic', 'true');
+    expect(within(liveHeadline).queryByText(/messages\.toolActivity\.recap\.activity/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
+    expect(screen.getAllByRole('status')).toHaveLength(1);
   });
 
   it('shows the done label and a technical-details toggle when settled', () => {
     render(<MessageToolGroupSummary messages={[acpStep('completed', 't1')]} />);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(document.querySelector('[aria-live]')).toBeNull();
     const disclosure = screen.getByRole('button', { name: 'common.technical_details' });
     expect(disclosure).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(disclosure);
@@ -397,7 +436,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     expect(screen.getByText('Status Marker')).toBeVisible();
   });
 
-  it('groups repetitive search commands into one journal row', () => {
+  it('keeps repetitive search commands with distinct call ids as separate journal rows', () => {
     render(
       <MessageToolGroupSummary
         messages={[
@@ -408,7 +447,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
-    expect(screen.getAllByText('messages.toolActivity.categories.search.done')).toHaveLength(1);
+    expect(screen.getAllByText('messages.toolActivity.categories.search.done')).toHaveLength(2);
   });
 
   it('shows a safe thinking subject but not raw thinking content', () => {
@@ -514,6 +553,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       "I'm checking progress with git status",
       'src/App.tsx',
       'request_id=abc',
+      'conversation_id: abc',
       'trace id: abc',
       'sh -c pwd',
       'zsh -lc pwd',
@@ -559,6 +599,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
   it('replaces terse command-shaped narration even when the executable is not labeled', () => {
     const unsafeEntries = [
       'pwd',
+      'ls -la',
       'echo hello',
       'swift test',
       'pytest tests',
@@ -794,7 +835,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     expect(screen.queryByText('messages.toolActivity.categories.search.running')).not.toBeInTheDocument();
   });
 
-  it('settles every running row in an inactive summary while preserving pending plans', () => {
+  it('settles every pending or running row in an inactive summary', () => {
     render(
       <MessageToolGroupSummary
         isActive={false}
@@ -820,11 +861,11 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
-    expect(screen.getByText('Queued work').closest('[data-status]')).toHaveAttribute('data-status', 'pending');
+    expect(screen.getByText('Queued work').closest('[data-status]')).toHaveAttribute('data-status', 'canceled');
     expect(screen.getByText('Active work').closest('[data-status]')).toHaveAttribute('data-status', 'completed');
     expect(screen.getByText('messages.toolActivity.categories.verify.done')).toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    expect(screen.getByText('messages.toolActivity.recap.headline.canceled')).toBeInTheDocument();
+    expect(screen.getByText(/messages\.toolActivity\.recap\.headline\.canceled .*"total":3/)).toBeInTheDocument();
   });
 
   it('switches an unsafe plan fallback to done narration when the summary settles', () => {
@@ -947,44 +988,77 @@ describe('MessageToolGroupSummary plain-language activity', () => {
     expect(row?.querySelector('[data-status-icon="completed"]')).not.toBeInTheDocument();
   });
 
-  it('coalesces consecutive retries into one live line with an attempt count', () => {
+  it('keeps distinct failed and running calls separate without inventing a retry chain', () => {
     render(
       <MessageToolGroupSummary
         isActive
         messages={[acpStep('failed', 't1'), acpStep('failed', 't2'), acpStep('in_progress', 't3')]}
       />
     );
+    expect(screen.queryByText('messages.toolActivity.tools.render_report.failedTitle')).not.toBeInTheDocument();
+    expect(screen.queryByText('messages.toolActivity.error.suggestion')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
     expect(screen.getByText(/messages\.toolActivity\.tools\.render_report\.running/)).toBeInTheDocument();
-    expect(screen.getByText(/messages\.toolActivity\.attempt/)).toBeInTheDocument();
+    expect(screen.getAllByText('forge-reports_render_report')).toHaveLength(3);
+    expect(screen.queryByText(/messages\.toolActivity\.attempt/)).not.toBeInTheDocument();
   });
 
-  it('renders a merged completed retry with recovery narration', () => {
+  it('reports distinct failed and completed calls as partial work rather than recovery', () => {
     render(<MessageToolGroupSummary messages={[acpStep('failed', 't1'), acpStep('completed', 't2')]} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
-    expect(
-      screen.getByText('messages.toolActivity.tools.render_report.done messages.toolActivity.status.recovered')
-    ).toBeInTheDocument();
+    expect(screen.getByText(/messages\.toolActivity\.recap\.headline\.partial .*"total":2/)).toBeInTheDocument();
     expect(screen.queryByText('messages.toolActivity.tools.render_report.failedTitle')).not.toBeInTheDocument();
-  });
-
-  it('does not claim recovery when an in-progress retry is only synthetically settled', () => {
-    render(<MessageToolGroupSummary messages={[acpStep('failed', 't1'), acpStep('in_progress', 't2')]} />);
-
     fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
-    const row = screen.getByText('messages.toolActivity.status.stopped').closest('[data-status]');
-    expect(row).toHaveAttribute('data-status', 'canceled');
-    expect(row?.querySelector('[data-status-icon="completed"]')).not.toBeInTheDocument();
-    expect(screen.queryByText('messages.toolActivity.tools.render_report.done')).not.toBeInTheDocument();
+    expect(screen.getByText('messages.toolActivity.tools.render_report.done')).toBeInTheDocument();
+    expect(screen.getAllByText('forge-reports_render_report')).toHaveLength(2);
     expect(screen.queryByText(/messages\.toolActivity\.status\.recovered/)).not.toBeInTheDocument();
   });
 
-  it('renders a friendly error card for a final give-up', () => {
-    render(<MessageToolGroupSummary messages={[acpStep('failed', 't1')]} />);
+  it('coalesces one stable tool call across intervening plan narration', () => {
+    render(
+      <MessageToolGroupSummary
+        messages={
+          [
+            acpStep('failed', 'retry-1'),
+            {
+              id: 'plan-between-retries',
+              conversation_id: 'conv-1',
+              type: 'plan',
+              position: 'left',
+              content: {
+                session_id: 'sess-1',
+                entries: [{ content: 'Reviewing the retry result', status: 'completed' }],
+              },
+            },
+            acpStep('completed', 'retry-1'),
+          ] as WorkJournalSourceMessage[]
+        }
+      />
+    );
+
+    expect(screen.getByText(/messages\.toolActivity\.recap\.headline\.recovered .*"total":2/)).toBeInTheDocument();
+    expect(screen.queryByText(/messages\.toolActivity\.recap\.headline\.partial/)).not.toBeInTheDocument();
+  });
+
+  it('does not claim recovery when a separate in-progress call is synthetically settled', () => {
+    render(<MessageToolGroupSummary messages={[acpStep('failed', 't1'), acpStep('in_progress', 't2')]} />);
+
+    expect(screen.getByText(/messages\.toolActivity\.recap\.headline\.partial .*"total":2/)).toBeInTheDocument();
+    expect(screen.queryByText('messages.toolActivity.tools.render_report.failedTitle')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
-    expect(screen.getByText('messages.toolActivity.tools.render_report.failedTitle')).toBeInTheDocument();
-    expect(screen.getByText('messages.toolActivity.error.suggestion')).toBeInTheDocument();
+    expect(screen.getByText('messages.toolActivity.tools.render_report.done')).toBeInTheDocument();
+    expect(screen.getAllByText('forge-reports_render_report')).toHaveLength(2);
+    expect(screen.queryByText(/messages\.toolActivity\.status\.recovered/)).not.toBeInTheDocument();
+  });
+
+  it('keeps a failed tool in technical inspection without duplicating its timeline error card', () => {
+    render(<MessageToolGroupSummary messages={[acpStep('failed', 't1')]} />);
+
+    expect(screen.queryByText('messages.toolActivity.tools.render_report.failedTitle')).not.toBeInTheDocument();
+    expect(screen.queryByText('messages.toolActivity.error.suggestion')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
+    expect(screen.getByText('forge-reports_render_report')).toBeInTheDocument();
+    expect(screen.queryByText('messages.toolActivity.error.suggestion')).not.toBeInTheDocument();
   });
 
   describe('turn recap', () => {
@@ -1012,7 +1086,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
         },
       }) as unknown as IMessageAcpToolCall;
 
-    it('summarizes repeated completed generic steps as one recap', () => {
+    it('counts repeated completed generic steps with distinct call ids', () => {
       render(
         <MessageToolGroupSummary
           messages={[
@@ -1023,15 +1097,15 @@ describe('MessageToolGroupSummary plain-language activity', () => {
         />
       );
 
-      expect(screen.getByText('messages.toolActivity.recap.headline.completed')).toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.headline\.completed .*"total":3/)).toBeInTheDocument();
       expect(screen.getByText(/messages\.toolActivity\.recap\.activity/)).toHaveTextContent(
-        'messages.toolActivity.recap.category.generic'
+        'messages.toolActivity.recap.category.generic (3)'
       );
-      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.completed/)).toHaveTextContent('"total":1');
+      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.completed/)).toHaveTextContent('"total":3');
       expect(screen.queryByText('messages.toolActivity.categories.generic.done')).not.toBeInTheDocument();
     });
 
-    it('lists mixed work categories in first-appearance order', () => {
+    it('lists the first three work categories and summarizes the omitted action count', () => {
       render(
         <MessageToolGroupSummary
           messages={[
@@ -1046,7 +1120,54 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       const activity = screen.getByText(/messages\.toolActivity\.recap\.activity/).textContent ?? '';
       expect(activity.indexOf('recap.category.search')).toBeLessThan(activity.indexOf('recap.category.fileRead'));
       expect(activity.indexOf('recap.category.fileRead')).toBeLessThan(activity.indexOf('recap.category.fileWrite'));
-      expect(activity.indexOf('recap.category.fileWrite')).toBeLessThan(activity.indexOf('recap.category.verify'));
+      expect(activity).not.toContain('recap.category.verify');
+      expect(activity).toContain('recap.overflow');
+      expect(activity).toContain('[other:1]');
+    });
+
+    it('renders one, two, and three categories plus count-neutral overflow with locale-aware list grammar', async () => {
+      await useRealMessages('en-US', enUsMessages);
+
+      const renderActivity = (messages: WorkJournalSourceMessage[]): string => {
+        const view = render(<MessageToolGroupSummary messages={messages} />);
+        const activity = screen.getByText(/^This turn covered /).textContent ?? '';
+        view.unmount();
+        return activity;
+      };
+
+      expect(renderActivity([commandStep('completed', 'search-1', 'rg -n needle .')])).toBe(
+        'This turn covered Project search (1).'
+      );
+      expect(
+        renderActivity([
+          commandStep('completed', 'search-1', 'rg -n needle .'),
+          commandStep('completed', 'read-1', 'sed -n 1,10p file.txt'),
+        ])
+      ).toBe('This turn covered Project search (1) and File review (1).');
+      expect(
+        renderActivity([
+          commandStep('completed', 'search-1', 'rg -n needle .'),
+          commandStep('completed', 'read-1', 'sed -n 1,10p file.txt'),
+          activityStep('completed', 'write-1', 'write_file', 'edit'),
+        ])
+      ).toBe('This turn covered Project search (1), File review (1), and Implementation update (1).');
+      expect(
+        renderActivity([
+          commandStep('completed', 'search-1', 'rg -n needle .'),
+          commandStep('completed', 'read-1', 'sed -n 1,10p file.txt'),
+          activityStep('completed', 'write-1', 'write_file', 'edit'),
+          commandStep('completed', 'verify-1', 'bun run test'),
+        ])
+      ).toBe('This turn covered Project search (1), File review (1), Implementation update (1), and 1 more.');
+      expect(
+        renderActivity([
+          commandStep('completed', 'search-1', 'rg -n needle .'),
+          commandStep('completed', 'read-1', 'sed -n 1,10p file.txt'),
+          activityStep('completed', 'write-1', 'write_file', 'edit'),
+          commandStep('completed', 'verify-1', 'bun run test'),
+          commandStep('completed', 'verify-2', 'bun run test:coverage'),
+        ])
+      ).toBe('This turn covered Project search (1), File review (1), Implementation update (1), and 2 more.');
     });
 
     it('uses active recap copy for completed and remaining work', () => {
@@ -1060,12 +1181,12 @@ describe('MessageToolGroupSummary plain-language activity', () => {
         />
       );
 
-      expect(screen.getByText('messages.toolActivity.recap.headline.active')).toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.headline\.active .*"total":2/)).toBeInTheDocument();
       expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.active .*"completed":1/)).toBeInTheDocument();
       expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.active .*"pending":1/)).toBeInTheDocument();
       expect(screen.queryByText(/messages\.toolActivity\.recap\.outcome\.activeWith/)).not.toBeInTheDocument();
       expect(enUsMessages.toolActivity.recap.outcome.active).toBe(
-        "I've completed {{completed}} of {{total}} so far, and the remaining work is still underway."
+        "I'm making steady progress. Completed: {{completed, number}} of {{total, number}}. Actions still underway: {{pending, number}}."
       );
       expect(enUsMessages.toolActivity.recap.outcome.active).not.toMatch(/\b(?:failed|stopped|remaining|unfinished):/);
     });
@@ -1099,8 +1220,8 @@ describe('MessageToolGroupSummary plain-language activity', () => {
         />
       );
 
-      expect(screen.getByText('messages.toolActivity.recap.headline.canceled')).toBeInTheDocument();
-      expect(screen.queryByText('messages.toolActivity.recap.headline.active')).not.toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.headline\.canceled .*"total":1/)).toBeInTheDocument();
+      expect(screen.queryByText(/messages\.toolActivity\.recap\.headline\.active/)).not.toBeInTheDocument();
       expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.canceled .*"unfinished":1/)).toBeInTheDocument();
     });
 
@@ -1122,7 +1243,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
         />
       );
 
-      expect(screen.getByText('messages.toolActivity.recap.headline.active')).toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.headline\.active .*"total":1/)).toBeInTheDocument();
       expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.active .*"unfinished":1/)).toBeInTheDocument();
     });
 
@@ -1137,20 +1258,56 @@ describe('MessageToolGroupSummary plain-language activity', () => {
         />
       );
 
-      expect(enUsMessages.toolActivity.recap.category.search).toBe('Project search ({{count}})');
+      expect(enUsMessages.toolActivity.recap.category.search).toBe('Project search ({{count, number}})');
       expect(screen.getByText(/messages\.toolActivity\.recap\.activity/)).toHaveTextContent(
         'messages.toolActivity.recap.category.search (2)'
       );
     });
 
-    it('reports recovery after a successful retry', () => {
-      render(<MessageToolGroupSummary messages={[acpStep('failed', 'retry-1'), acpStep('completed', 'retry-2')]} />);
-
-      expect(screen.getByText('messages.toolActivity.recap.headline.recovered')).toBeInTheDocument();
-      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.recovered /)).toBeInTheDocument();
+    it('keeps every recap headline count-aware and locale-formatted', () => {
+      expect(
+        Object.values(enUsMessages.toolActivity.recap.headline).every((headline) =>
+          headline.includes('{{total, number}}')
+        )
+      ).toBe(true);
     });
 
-    it('uses the same count-neutral recovery copy after multiple retries', () => {
+    it('shows a safe provider subject as additional recap context', () => {
+      render(
+        <MessageToolGroupSummary
+          messages={
+            [
+              {
+                id: 'safe-plan',
+                conversation_id: 'conv-1',
+                type: 'plan',
+                position: 'left',
+                content: {
+                  session_id: 'sess-1',
+                  entries: [{ content: 'Reviewing the account settings', status: 'completed' }],
+                },
+              },
+            ] as WorkJournalSourceMessage[]
+          }
+        />
+      );
+
+      expect(
+        screen.getByText(/messages\.toolActivity\.recap\.subject .*Reviewing the account settings/)
+      ).toBeInTheDocument();
+    });
+
+    it('does not claim recovery for distinct failed and successful calls', () => {
+      render(<MessageToolGroupSummary messages={[acpStep('failed', 'retry-1'), acpStep('completed', 'retry-2')]} />);
+
+      expect(screen.getByText(/messages\.toolActivity\.recap\.headline\.partial .*"total":2/)).toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.partial .*"failed":1/)).toBeInTheDocument();
+      expect(
+        screen.queryByText(/messages\.toolActivity\.recap\.(?:headline|outcome)\.recovered/)
+      ).not.toBeInTheDocument();
+    });
+
+    it('keeps multiple distinct failures visible instead of treating them as retries', () => {
       render(
         <MessageToolGroupSummary
           messages={[
@@ -1162,28 +1319,62 @@ describe('MessageToolGroupSummary plain-language activity', () => {
         />
       );
 
-      expect(enUsMessages.toolActivity.recap.headline.recovered).toBe('Work recovered');
-      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.recovered .*"retries":3/)).toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.headline\.partial .*"total":4/)).toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.partial .*"failed":3/)).toBeInTheDocument();
+      expect(screen.queryByText('messages.toolActivity.tools.render_report.failedTitle')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/messages\.toolActivity\.recap\.(?:headline|outcome)\.recovered/)
+      ).not.toBeInTheDocument();
     });
 
-    it('renders English recap templates as friendly sentences without zero-value buckets', () => {
+    it('renders grammatical active English outcomes for one and many actions through i18next', async () => {
+      const instance = await createMessagesInstance('en-US', enUsMessages);
+
+      expect(instance.t('messages.toolActivity.recap.outcome.active', { completed: 1, total: 2, pending: 1 })).toBe(
+        "I'm making steady progress. Completed: 1 of 2. Actions still underway: 1."
+      );
+      expect(
+        instance.t('messages.toolActivity.recap.outcome.active', { completed: 1234, total: 1500, pending: 266 })
+      ).toBe("I'm making steady progress. Completed: 1,234 of 1,500. Actions still underway: 266.");
+    });
+
+    it('renders grammatical partial English outcomes for one and many actions through i18next', async () => {
+      const instance = await createMessagesInstance('en-US', enUsMessages);
+
+      expect(instance.t('messages.toolActivity.recap.outcome.partial', { completed: 1, total: 2, failed: 1 })).toBe(
+        'I completed part of the planned work. Completed: 1 of 2. Actions needing another attempt: 1.'
+      );
+      expect(
+        instance.t('messages.toolActivity.recap.outcome.partial', { completed: 1234, total: 1500, failed: 266 })
+      ).toBe('I completed part of the planned work. Completed: 1,234 of 1,500. Actions needing another attempt: 266.');
+    });
+
+    it('renders grammatical canceled English outcomes for one and many actions through i18next', async () => {
+      const instance = await createMessagesInstance('en-US', enUsMessages);
+
+      expect(instance.t('messages.toolActivity.recap.outcome.canceled', { total: 1, unfinished: 1, canceled: 1 })).toBe(
+        'I stopped this turn before the planned work was complete. Planned actions: 1. Actions left unfinished: 1. Actions stopped: 1.'
+      );
+      expect(
+        instance.t('messages.toolActivity.recap.outcome.canceled', {
+          total: 1500,
+          unfinished: 266,
+          canceled: 266,
+        })
+      ).toBe(
+        'I stopped this turn before the planned work was complete. Planned actions: 1,500. Actions left unfinished: 266. Actions stopped: 266.'
+      );
+    });
+
+    it('keeps completed and recovered English outcomes natural', () => {
       const outcome = enUsMessages.toolActivity.recap.outcome;
 
-      expect(renderOutcomeTemplate(outcome.active, { completed: 1, total: 2 })).toBe(
-        "I've completed 1 of 2 so far, and the remaining work is still underway."
-      );
-      expect(renderOutcomeTemplate(outcome.activeWithFailure, { completed: 1, total: 3 })).toBe(
-        "I've completed 1 of 3 so far; some work needs another attempt while the remaining work is still underway."
-      );
-      expect(renderOutcomeTemplate(outcome.recovered, {})).toBe(
-        'I completed everything planned for this turn after retrying the work.'
-      );
+      expect(outcome.completed).toBe('I completed everything planned for this turn.');
+      expect(outcome.recovered).toBe('I completed everything planned for this turn after retrying the work.');
       expect(outcome.recovered).not.toContain('{{retries}}');
-      expect(outcome.recovered.match(/[.!?]/g)).toHaveLength(1);
-      expect(Object.values(outcome).join(' ')).not.toMatch(/\b(?:failed|stopped|remaining|unfinished):/);
     });
 
-    it('reports partial completion while keeping the failed step in technical details', () => {
+    it('reports partial completion while leaving the failed tool inside technical inspection', () => {
       render(
         <MessageToolGroupSummary
           messages={[
@@ -1193,10 +1384,10 @@ describe('MessageToolGroupSummary plain-language activity', () => {
         />
       );
 
-      expect(screen.getByText('messages.toolActivity.recap.headline.partial')).toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.headline\.partial .*"total":2/)).toBeInTheDocument();
       expect(screen.queryByText('messages.toolActivity.tools.render_report.failedTitle')).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'common.technical_details' }));
-      expect(screen.getByText('messages.toolActivity.tools.render_report.failedTitle')).toBeInTheDocument();
+      expect(screen.getByText('forge-reports_render_report')).toBeInTheDocument();
     });
 
     it('reports canceled work as stopped', () => {
@@ -1218,7 +1409,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
 
       render(<MessageToolGroupSummary messages={[canceled]} />);
 
-      expect(screen.getByText('messages.toolActivity.recap.headline.canceled')).toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.headline\.canceled .*"total":1/)).toBeInTheDocument();
     });
 
     it('accounts for failed and canceled terminal work together', () => {
@@ -1282,6 +1473,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       expect(screen.queryByText(/rg -n secret/)).not.toBeInTheDocument();
       expect(screen.queryByText(/packages\/desktop\/src/)).not.toBeInTheDocument();
       expect(screen.queryByText(/request_id=secret/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/messages\.toolActivity\.recap\.subject/)).not.toBeInTheDocument();
       expect(screen.getAllByRole('button', { name: 'common.technical_details' })).toHaveLength(1);
     });
   });

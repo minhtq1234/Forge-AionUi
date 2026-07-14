@@ -5,22 +5,21 @@ import type { CoalescedStep } from './types';
 const collectCallDetail = (call: NormalizedToolCall): string =>
   [call.description, call.input].filter(Boolean).join(' ');
 
-const actionKey = (action: CoalescedStep['action']): string => `${action.purpose}:${action.toolKey ?? action.category}`;
-
-// Merge adjacent calls serving the same semantic purpose into one evolving step.
+// Merge only repeated snapshots of the same stable call identity.
 export function coalesceToolCalls(calls: NormalizedToolCall[]): CoalescedStep[] {
   const steps: CoalescedStep[] = [];
+  const stepByCallId = new Map<string, CoalescedStep>();
   for (const call of calls) {
     const action = resolveToolAction(call.name, call.kind, collectCallDetail(call));
-    const previous = steps[steps.length - 1];
-    if (previous && actionKey(previous.action) === actionKey(action)) {
-      previous.calls.push(call);
-      previous.attempts += 1;
-      previous.status = call.status;
-      previous.hadError ||= call.status === 'error';
+    const existing = call.key.length > 0 ? stepByCallId.get(call.key) : undefined;
+    if (existing) {
+      existing.calls.push(call);
+      existing.attempts += 1;
+      existing.status = call.status;
+      existing.hadError ||= call.status === 'error';
       continue;
     }
-    steps.push({
+    const step: CoalescedStep = {
       key: call.key,
       rawName: call.name,
       kind: call.kind,
@@ -29,7 +28,9 @@ export function coalesceToolCalls(calls: NormalizedToolCall[]): CoalescedStep[] 
       attempts: 1,
       calls: [call],
       action,
-    });
+    };
+    steps.push(step);
+    if (call.key.length > 0) stepByCallId.set(call.key, step);
   }
   return steps;
 }

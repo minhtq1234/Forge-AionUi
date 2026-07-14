@@ -51,6 +51,40 @@ const [useMessagePaginationState, MessagePaginationProvider, useUpdateMessagePag
 
 const beforeUpdateMessageListStack: Array<(list: TMessage[]) => TMessage[]> = [];
 
+const HISTORY_GAP_MARKER_CODE = '__aionui_renderer_history_gap__';
+
+const createHistoryGapMarker = (conversationId: string): IMessageTips => ({
+  id: `renderer-history-gap:${conversationId}`,
+  conversation_id: conversationId,
+  type: 'tips',
+  position: 'center',
+  hidden: true,
+  content: {
+    content: '',
+    type: 'info',
+    code: HISTORY_GAP_MARKER_CODE,
+  },
+});
+
+export const isHistoryGapMarker = (message: TMessage): boolean =>
+  message.type === 'tips' && message.hidden === true && message.content.code === HISTORY_GAP_MARKER_CODE;
+
+type MessageAliasState = {
+  conversationId?: string;
+  messageAliases: Map<string, string>;
+};
+
+const messageAliasStateCache = new WeakMap<ReturnType<typeof useUpdateMessageList>, MessageAliasState>();
+
+const getMessageAliasState = (update: ReturnType<typeof useUpdateMessageList>): MessageAliasState => {
+  const existing = messageAliasStateCache.get(update);
+  if (existing) return existing;
+
+  const created = { messageAliases: new Map<string, string>() };
+  messageAliasStateCache.set(update, created);
+  return created;
+};
+
 // 消息索引缓存类型定义
 // Message index cache type definitions
 interface MessageIndex {
@@ -245,6 +279,7 @@ function composeMessageWithIndex(message: TMessage | undefined, list: TMessage[]
       const newList = list.slice();
       newList[newList.length - 1] = {
         ...last,
+        status: last.status === 'finish' || message.status === 'finish' ? 'finish' : (message.status ?? last.status),
         content: mergeTextMessageContent(last.content, message.content),
       };
       return newList;
@@ -356,6 +391,7 @@ export const useMergeLiveMessage = () => {
   const update = useUpdateMessageList();
   const pendingRef = useRef<Array<{ message: TMessage; add: boolean }>>([]);
   const rafRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aliasState = getMessageAliasState(update);
 
   const flush = useCallback(() => {
     rafRef.current = null;
@@ -374,14 +410,18 @@ export const useMergeLiveMessage = () => {
           continue;
         }
 
-        if (logDroppedToolCallWithoutCallId(item.message)) {
+        const messageAliases = getConversationMessageAliases(aliasState, item.message.conversation_id);
+        reconcileMessageAliases(newList, messageAliases);
+        const message = resolveTextMessageAlias(item.message, messageAliases);
+
+        if (logDroppedToolCallWithoutCallId(message)) {
           continue;
         }
 
         if (item.add) {
           // 新增消息，更新索引
           // New message, update index
-          const msg = sanitizeMessageForList(item.message);
+          const msg = sanitizeMessageForList(message);
           const newIdx = newList.length;
           const msgIndexKey = getMessageIndexKey(msg);
           if (msgIndexKey) index.msgIdIndex.set(msgIndexKey, newIdx);
@@ -398,14 +438,28 @@ export const useMergeLiveMessage = () => {
         } else {
           // 使用索引优化的消息合并
           // Use index-optimized message compose
-          newList = composeMessageWithIndex(item.message, newList, index);
+          newList = composeMessageWithIndex(message, newList, index);
         }
 
         while (beforeUpdateMessageListStack.length) {
           newList = beforeUpdateMessageListStack.shift()!(newList);
         }
+
+        if (isDedupeCandidate(message)) {
+          const dedupedList = reconcileAssistantReplyList(newList, item.message.conversation_id, aliasState);
+          if (dedupedList !== newList) {
+            newList = dedupedList;
+            const rebuilt = buildMessageIndex(newList);
+            index.msgIdIndex = rebuilt.msgIdIndex;
+            index.call_idIndex = rebuilt.call_idIndex;
+            index.tool_call_idIndex = rebuilt.tool_call_idIndex;
+            index.permission_call_idIndex = rebuilt.permission_call_idIndex;
+          }
+        }
       }
-      const dedupedList = dedupeAssistantRepliesByTurn(newList);
+      const conversationId =
+        aliasState.conversationId ?? newList.find((message) => !isHistoryGapMarker(message))?.conversation_id;
+      const dedupedList = conversationId ? reconcileAssistantReplyList(newList, conversationId, aliasState) : newList;
       const rebuilt = buildMessageIndex(dedupedList);
       index.msgIdIndex = rebuilt.msgIdIndex;
       index.call_idIndex = rebuilt.call_idIndex;
@@ -416,7 +470,7 @@ export const useMergeLiveMessage = () => {
     });
 
     rafRef.current = setTimeout(flush);
-  }, []);
+  }, [aliasState, update]);
 
   useEffect(() => {
     return () => {
@@ -444,12 +498,20 @@ export const useAddOrUpdateMessage = useMergeLiveMessage;
 
 export const useRemoveMessageByMsgId = () => {
   const update = useUpdateMessageList();
+  const aliasState = getMessageAliasState(update);
 
   return useCallback(
     (msgId: string) => {
-      update((list) => list.filter((message) => message.msg_id !== msgId));
+      update((list) => {
+        const conversationId = list.find((message) => !isHistoryGapMarker(message))?.conversation_id;
+        if (conversationId) {
+          invalidateMessageAlias(msgId, getConversationMessageAliases(aliasState, conversationId));
+        }
+        const filtered = list.filter((message) => message.msg_id !== msgId);
+        return conversationId ? reconcileAssistantReplyList(filtered, conversationId, aliasState) : filtered;
+      });
     },
-    [update]
+    [aliasState, update]
   );
 };
 
@@ -679,16 +741,41 @@ const getMessageMergeKey = (message: TMessage): string => {
   return `id:${message.id}`;
 };
 
-const normalizeDedupeTextContent = (content: string): string => content.trim().replace(/\s+/g, ' ');
+const normalizeDedupeTextContent = (content: string): string => {
+  const lines = content.replace(/\r\n?/g, '\n').split('\n');
+
+  while (lines.length && lines[0].trim().length === 0) lines.shift();
+  while (lines.length && lines.at(-1)?.trim().length === 0) lines.pop();
+  if (!lines.length) return '';
+
+  // CommonMark allows up to three insignificant leading spaces; four starts an indented code block.
+  lines[0] = lines[0].replace(/^ {1,3}(?=\S)/, '');
+  lines[lines.length - 1] = lines[lines.length - 1].replace(/[ \t]+$/, '');
+  return lines.join('\n');
+};
 
 const isDedupeCandidate = (message: TMessage): message is IMessageText =>
   message.type === 'text' && message.position === 'left' && !message.hidden && !message.content.teammateMessage;
 
-const dedupeAssistantRepliesByTurn = (messages: TMessage[]): TMessage[] => {
+const dedupeAssistantRepliesByTurn = (messages: TMessage[], messageAliases?: Map<string, string>): TMessage[] => {
   const dedupedMessages: TMessage[] = [];
   const assistantReplyIndexes = new Map<string, number>();
+  const currentSegmentAliases = messageAliases ? new Map(messageAliases) : undefined;
+  let changed = false;
 
   for (const message of messages) {
+    if (isHistoryGapMarker(message)) {
+      assistantReplyIndexes.clear();
+      if (messageAliases && currentSegmentAliases) {
+        messageAliases.clear();
+        for (const [sourceMessageId, canonicalMessageId] of currentSegmentAliases) {
+          messageAliases.set(sourceMessageId, canonicalMessageId);
+        }
+      }
+      dedupedMessages.push(message);
+      continue;
+    }
+
     if (message.position === 'right' && !message.hidden) {
       assistantReplyIndexes.clear();
     }
@@ -708,10 +795,108 @@ const dedupeAssistantRepliesByTurn = (messages: TMessage[]): TMessage[] => {
 
     const existing = dedupedMessages[existingIndex];
     if (isDedupeCandidate(existing)) {
-      dedupedMessages[existingIndex] = preferTextMessageVersion(existing, message);
+      const replacementPreferenceChanged = (existing.content.replace === true) !== (message.content.replace === true);
+      const preferredVersion = replacementPreferenceChanged ? preferTextMessageVersion(existing, message) : existing;
+      const discarded = preferredVersion === existing ? message : existing;
+      const preferred =
+        existing.status === 'finish' || message.status === 'finish'
+          ? { ...preferredVersion, status: 'finish' as const }
+          : preferredVersion;
+      dedupedMessages[existingIndex] = preferred;
+      changed = true;
+
+      if (messageAliases && discarded.msg_id && preferred.msg_id && discarded.msg_id !== preferred.msg_id) {
+        messageAliases.set(discarded.msg_id, preferred.msg_id);
+      }
     }
   }
 
+  return changed ? dedupedMessages : messages;
+};
+
+const resolveMessageAlias = (messageId: string, messageAliases: Map<string, string>): string => {
+  let currentId = messageId;
+  const visited = new Set<string>();
+
+  while (!visited.has(currentId)) {
+    visited.add(currentId);
+    const nextId = messageAliases.get(currentId);
+    if (!nextId) break;
+    currentId = nextId;
+  }
+
+  return currentId;
+};
+
+const invalidateMessageAlias = (messageId: string, messageAliases: Map<string, string>): void => {
+  for (const sourceMessageId of messageAliases.keys()) {
+    let currentId = sourceMessageId;
+    const visited = new Set<string>();
+
+    while (!visited.has(currentId)) {
+      if (currentId === messageId) {
+        messageAliases.delete(sourceMessageId);
+        break;
+      }
+      visited.add(currentId);
+      const nextId = messageAliases.get(currentId);
+      if (!nextId) break;
+      currentId = nextId;
+    }
+  }
+};
+
+const resolveTextMessageAlias = (message: TMessage, messageAliases: Map<string, string>): TMessage => {
+  if (message.type !== 'text' || !message.msg_id) return message;
+
+  const canonicalMessageId = resolveMessageAlias(message.msg_id, messageAliases);
+  return canonicalMessageId === message.msg_id ? message : { ...message, msg_id: canonicalMessageId };
+};
+
+const getConversationMessageAliases = (aliasState: MessageAliasState, conversationId: string): Map<string, string> => {
+  if (aliasState.conversationId !== conversationId) {
+    aliasState.conversationId = conversationId;
+    aliasState.messageAliases.clear();
+  }
+  return aliasState.messageAliases;
+};
+
+const getCurrentAliasSegment = (messages: TMessage[]): TMessage[] => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (isHistoryGapMarker(messages[index])) return messages.slice(index + 1);
+  }
+  return messages;
+};
+
+const reconcileMessageAliases = (messages: TMessage[], messageAliases: Map<string, string>): void => {
+  const retainedMessageIds = new Set(
+    getCurrentAliasSegment(messages).flatMap((message) =>
+      message.type === 'text' && message.msg_id ? [message.msg_id] : []
+    )
+  );
+
+  for (const retainedMessageId of retainedMessageIds) {
+    messageAliases.delete(retainedMessageId);
+  }
+
+  for (const [sourceMessageId] of messageAliases) {
+    const canonicalMessageId = resolveMessageAlias(sourceMessageId, messageAliases);
+    if (canonicalMessageId === sourceMessageId || !retainedMessageIds.has(canonicalMessageId)) {
+      messageAliases.delete(sourceMessageId);
+      continue;
+    }
+    messageAliases.set(sourceMessageId, canonicalMessageId);
+  }
+};
+
+const reconcileAssistantReplyList = (
+  messages: TMessage[],
+  conversationId: string,
+  aliasState: MessageAliasState
+): TMessage[] => {
+  const messageAliases = getConversationMessageAliases(aliasState, conversationId);
+  const dedupedMessages = dedupeAssistantRepliesByTurn(messages, messageAliases);
+  reconcileMessageAliases(dedupedMessages, messageAliases);
   return dedupedMessages;
 };
 
@@ -722,29 +907,58 @@ const preferPersistedOrLiveMessage = (persisted: TMessage, live: TMessage): TMes
   return persisted;
 };
 
-function mergeLoadedPageWithCurrent(conversationId: string, messages: TMessage[], currentList: TMessage[]): TMessage[] {
-  if (!currentList.length) return dedupeAssistantRepliesByTurn(messages);
+type AnchorWindowMergeOptions = {
+  hasMoreAfter?: boolean;
+};
 
+function mergeLoadedPageWithCurrent(
+  conversationId: string,
+  messages: TMessage[],
+  currentList: TMessage[],
+  options: AnchorWindowMergeOptions = {},
+  aliasState: MessageAliasState = { messageAliases: new Map<string, string>() }
+): TMessage[] {
+  const loadedMessages = messages.filter((message) => !isHistoryGapMarker(message));
   const sameConversation = currentList.filter((message) => message.conversation_id === conversationId);
-  if (!sameConversation.length) return dedupeAssistantRepliesByTurn(messages);
+  const currentGapIndex = sameConversation.findLastIndex(isHistoryGapMarker);
+  const currentTail = (currentGapIndex >= 0 ? sameConversation.slice(currentGapIndex + 1) : sameConversation).filter(
+    (message) => !isHistoryGapMarker(message)
+  );
+  const comparableCurrent = sameConversation.filter((message) => !isHistoryGapMarker(message));
 
-  const currentById = new Map(sameConversation.map((message) => [message.id, message]));
-  const currentByKey = new Map(sameConversation.map((message) => [getMessageMergeKey(message), message]));
-  const loadedIds = new Set(messages.map((message) => message.id));
-  const loadedKeys = new Set(messages.map(getMessageMergeKey));
+  const currentById = new Map(comparableCurrent.map((message) => [message.id, message]));
+  const currentByKey = new Map(comparableCurrent.map((message) => [getMessageMergeKey(message), message]));
+  const loadedIds = new Set(loadedMessages.map((message) => message.id));
+  const loadedKeys = new Set(loadedMessages.map(getMessageMergeKey));
 
-  const mergedMessages = messages.map((message) => {
+  const mergedMessages = loadedMessages.map((message) => {
     const live = currentById.get(message.id) ?? currentByKey.get(getMessageMergeKey(message));
     return live ? preferPersistedOrLiveMessage(message, live) : message;
   });
-  const liveOnly = sameConversation.filter(
+  const liveOnly = currentTail.filter(
     (message) => !loadedIds.has(message.id) && !loadedKeys.has(getMessageMergeKey(message))
   );
+  const combinedMessages = options.hasMoreAfter
+    ? [...mergedMessages, createHistoryGapMarker(conversationId), ...liveOnly]
+    : [...mergedMessages, ...liveOnly];
 
-  return dedupeAssistantRepliesByTurn(liveOnly.length ? [...mergedMessages, ...liveOnly] : mergedMessages);
+  return reconcileAssistantReplyList(combinedMessages, conversationId, aliasState);
 }
 
 export function prependHistoryMessages(currentList: TMessage[], messages: TMessage[]): TMessage[] {
+  const conversationId = messages[0]?.conversation_id ?? currentList[0]?.conversation_id;
+  const aliasState: MessageAliasState = { messageAliases: new Map<string, string>() };
+  return conversationId
+    ? prependHistoryMessagesWithAliases(currentList, messages, conversationId, aliasState)
+    : currentList;
+}
+
+const prependHistoryMessagesWithAliases = (
+  currentList: TMessage[],
+  messages: TMessage[],
+  conversationId: string,
+  aliasState: MessageAliasState
+): TMessage[] => {
   if (!messages.length) return currentList;
 
   const currentIds = new Set(currentList.map((message) => message.id));
@@ -752,26 +966,35 @@ export function prependHistoryMessages(currentList: TMessage[], messages: TMessa
   const uniqueHistory = messages.filter(
     (message) => !currentIds.has(message.id) && !currentKeys.has(getMessageMergeKey(message))
   );
-  return dedupeAssistantRepliesByTurn(uniqueHistory.length ? [...uniqueHistory, ...currentList] : currentList);
-}
+  return reconcileAssistantReplyList(
+    uniqueHistory.length ? [...uniqueHistory, ...currentList] : currentList,
+    conversationId,
+    aliasState
+  );
+};
 
 export const usePrependHistoryPage = () => {
   const update = useUpdateMessageList();
+  const aliasState = getMessageAliasState(update);
   return useCallback(
     (messages: TMessage[]) => {
-      update((list) => prependHistoryMessages(list, messages));
+      update((list) => {
+        const conversationId = messages[0]?.conversation_id ?? list[0]?.conversation_id;
+        return conversationId ? prependHistoryMessagesWithAliases(list, messages, conversationId, aliasState) : list;
+      });
     },
-    [update]
+    [aliasState, update]
   );
 };
 
 export const useReplaceWithAnchorWindow = () => {
   const update = useUpdateMessageList();
+  const aliasState = getMessageAliasState(update);
   return useCallback(
-    (conversationId: string, messages: TMessage[]) => {
-      update((list) => mergeLoadedPageWithCurrent(conversationId, messages, list));
+    (conversationId: string, messages: TMessage[], options: AnchorWindowMergeOptions = {}) => {
+      update((list) => mergeLoadedPageWithCurrent(conversationId, messages, list, options, aliasState));
     },
-    [update]
+    [aliasState, update]
   );
 };
 
@@ -832,7 +1055,9 @@ export const useLoadAnchorMessageWindow = (conversationId?: string) => {
           limit: DEFAULT_MESSAGE_PAGE_LIMIT,
           contentMode: 'compact',
         });
-        replaceWithAnchorWindow(conversationId, page.items.map(normalizeDbMessage));
+        replaceWithAnchorWindow(conversationId, page.items.map(normalizeDbMessage), {
+          hasMoreAfter: page.has_more_after,
+        });
         setPagination({
           oldestCursor: page.oldest_cursor ?? undefined,
           newestCursor: page.newest_cursor ?? undefined,
@@ -854,6 +1079,7 @@ export const useLoadAnchorMessageWindow = (conversationId?: string) => {
 
 export const useMessageLstCache = (key: string) => {
   const update = useUpdateMessageList();
+  const aliasState = getMessageAliasState(update);
   const setLoading = useUpdateMessageListLoading();
   const setPagination = useUpdateMessagePaginationState();
   const loadMessages = useCallback(async (): Promise<TMessage[]> => {
@@ -863,7 +1089,7 @@ export const useMessageLstCache = (key: string) => {
     });
     const messages = result?.items?.map(normalizeDbMessage);
     if (messages && Array.isArray(messages)) {
-      update((currentList) => mergeLoadedPageWithCurrent(key, messages, currentList));
+      update((currentList) => mergeLoadedPageWithCurrent(key, messages, currentList, {}, aliasState));
       setPagination({
         oldestCursor: result.oldest_cursor ?? undefined,
         newestCursor: result.newest_cursor ?? undefined,
@@ -875,7 +1101,7 @@ export const useMessageLstCache = (key: string) => {
       return messages;
     }
     return [];
-  }, [key, setPagination, update]);
+  }, [aliasState, key, setPagination, update]);
 
   useEffect(() => {
     if (!key) return;
@@ -907,8 +1133,9 @@ export const useMessageLstCache = (key: string) => {
       }
 
       update((list) => {
+        const messageAliases = getConversationMessageAliases(aliasState, key);
         const index = getOrBuildIndex(list);
-        return composeMessageWithIndex(
+        const message = resolveTextMessageAlias(
           {
             id: payload.msg_id,
             msg_id: payload.msg_id,
@@ -922,12 +1149,12 @@ export const useMessageLstCache = (key: string) => {
               content: payload.content,
             },
           },
-          list,
-          index
+          messageAliases
         );
+        return reconcileAssistantReplyList(composeMessageWithIndex(message, list, index), key, aliasState);
       });
     });
-  }, [key, update]);
+  }, [aliasState, key, update]);
 };
 
 export const beforeUpdateMessageList = (fn: (list: TMessage[]) => TMessage[]) => {

@@ -70,42 +70,42 @@
   "toolActivity": {
     "recap": {
       "headline": {
-        "active": "Work in progress",
-        "completed": "Work completed",
-        "recovered": "Work recovered",
-        "partial": "Work partly completed",
-        "failed": "Work could not be completed",
-        "canceled": "Work stopped"
+        "active": "Work in progress ({{total, number}} total)",
+        "completed": "Work completed ({{total, number}} total)",
+        "recovered": "Work recovered and completed ({{total, number}} total)",
+        "partial": "Work partly completed ({{total, number}} total)",
+        "failed": "Work could not be completed ({{total, number}} total)",
+        "canceled": "Work stopped ({{total, number}} total)"
       },
       "activity": "This turn covered {{categories}}.",
       "subject": "Focus: {{subject}}.",
-      "connector": { "pair": "{{first}} and {{second}}", "series": "{{first}}, {{rest}}" },
+      "overflow": "{{count, number}} more",
       "category": {
-        "web": "Web search ({{count}})",
-        "search": "Project search ({{count}})",
-        "fileRead": "File review ({{count}})",
-        "fileWrite": "Implementation update ({{count}})",
-        "data": "Data review ({{count}})",
-        "report": "Report task ({{count}})",
-        "export": "Export ({{count}})",
-        "memory": "Memory update ({{count}})",
-        "code": "Project step ({{count}})",
-        "verify": "Verification ({{count}})",
-        "office": "Document task ({{count}})",
-        "generic": "Project step ({{count}})"
+        "web": "Web search ({{count, number}})",
+        "search": "Project search ({{count, number}})",
+        "fileRead": "File review ({{count, number}})",
+        "fileWrite": "Implementation update ({{count, number}})",
+        "data": "Data review ({{count, number}})",
+        "report": "Report task ({{count, number}})",
+        "export": "Export ({{count, number}})",
+        "memory": "Memory update ({{count, number}})",
+        "code": "Project step ({{count, number}})",
+        "verify": "Verification ({{count, number}})",
+        "office": "Document task ({{count, number}})",
+        "generic": "Project step ({{count, number}})"
       },
       "outcome": {
-        "active": "I've completed {{completed}} of {{total}} so far, and the remaining work is still underway.",
-        "activeWithFailure": "I've completed {{completed}} of {{total}} so far; some work needs another attempt while the remaining work is still underway.",
-        "activeWithCanceled": "I've completed {{completed}} of {{total}} so far; some work was stopped while the remaining work is still underway.",
-        "activeWithFailureAndCanceled": "I've completed {{completed}} of {{total}} so far; some work needs another attempt, some was stopped, and the remaining work is still underway.",
+        "active": "I'm making steady progress. Completed: {{completed, number}} of {{total, number}}. Actions still underway: {{pending, number}}.",
+        "activeWithFailure": "I'm making progress, though some work needs another attempt. Completed: {{completed, number}} of {{total, number}}. Actions still underway: {{pending, number}}. Actions needing another attempt: {{failed, number}}.",
+        "activeWithCanceled": "I'm making progress, with some work stopped. Completed: {{completed, number}} of {{total, number}}. Actions still underway: {{pending, number}}. Actions stopped: {{canceled, number}}.",
+        "activeWithFailureAndCanceled": "I'm making progress, though some work needs attention. Completed: {{completed, number}} of {{total, number}}. Actions still underway: {{pending, number}}. Actions needing another attempt: {{failed, number}}. Actions stopped: {{canceled, number}}.",
         "completed": "I completed everything planned for this turn.",
         "recovered": "I completed everything planned for this turn after retrying the work.",
-        "partial": "I completed part of the planned work, but some work still needs another attempt.",
-        "partialWithCanceled": "I completed part of the planned work, but some work needs another attempt and some was stopped.",
-        "failed": "I couldn't complete the planned work, and some work still needs another attempt.",
-        "failedWithCanceled": "I couldn't complete the planned work; some work needs another attempt and some was stopped.",
-        "canceled": "I stopped this turn before all planned work was completed."
+        "partial": "I completed part of the planned work. Completed: {{completed, number}} of {{total, number}}. Actions needing another attempt: {{failed, number}}.",
+        "partialWithCanceled": "I completed part of the planned work. Completed: {{completed, number}} of {{total, number}}. Actions needing another attempt: {{failed, number}}. Actions stopped: {{canceled, number}}.",
+        "failed": "I couldn't complete the planned work. Planned actions: {{total, number}}. Actions needing another attempt: {{failed, number}}.",
+        "failedWithCanceled": "I couldn't complete the planned work. Planned actions: {{total, number}}. Actions needing another attempt: {{failed, number}}. Actions stopped: {{canceled, number}}.",
+        "canceled": "I stopped this turn before the planned work was complete. Planned actions: {{total, number}}. Actions left unfinished: {{unfinished, number}}. Actions stopped: {{canceled, number}}."
       }
     },
     "attempt": "(attempt {{n}})",
@@ -114,7 +114,10 @@
       "done": "Completed the next step.",
       "failedTitle": "I couldn't complete this step"
     },
-    "status": { "stopped": "Stopped", "recovered": "Recovered after retry." },
+    "status": {
+      "stopped": "Stopped",
+      "recovered": "Recovered after retry."
+    },
     "error": {
       "suggestion": "The error details are available below. You can try this step again when you're ready."
     },

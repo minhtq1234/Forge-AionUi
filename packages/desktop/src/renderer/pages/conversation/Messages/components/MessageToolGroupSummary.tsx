@@ -11,12 +11,12 @@ import { coalesceToolCalls } from '@/common/chat/toolActivity/coalesceToolCalls'
 import type { CoalescedStep } from '@/common/chat/toolActivity/types';
 import type { NormalizedToolCall, NormalizedToolStatus, ToolMessage } from '@/common/chat/normalizeToolCall';
 import { isDiagnosticTelemetryText, normalizeToolMessages } from '@/common/chat/normalizeToolCall';
+import { DEFAULT_LANGUAGE, normalizeLanguageCode } from '@/common/config/i18n';
 import LocalImageView from '@/renderer/components/media/LocalImageView';
 import type { WorkJournalSourceMessage } from '@/renderer/pages/conversation/Messages/types';
 import { iconColors } from '@/renderer/styles/colors';
 import { downloadFileFromPath } from '@/renderer/utils/file/download';
 import { buildTurnWorkRecap } from './toolActivity/buildTurnWorkRecap';
-import ToolActivityError from './toolActivity/ToolActivityError';
 import { useToolActionText } from './toolActivity/useToolActionText';
 import './MessageToolGroupSummary.css';
 
@@ -55,7 +55,7 @@ const planStatus: Record<'pending' | 'in_progress' | 'completed', NormalizedTool
 
 const PROVIDER_NARRATION_MAX_LENGTH = 180;
 const SHELL_COMMAND =
-  '(?:aws|az|bash|bunx?|cat|cargo|cmake|cmd|cp|curl|deno|docker|dotnet|echo|env|fd|find|fish|gcloud|gh|git|go|gradle|grep|helm|java|jq|just|kubectl|make|mkdir|mv|mvn|node|npm|npx|perl|pip3?|pnpm|podman|powershell|pwd|pwsh|pytest|python(?:3(?:\\.\\d+)?)?|rg|rm|ruby|sed|sh|sudo|swift|terraform|test|vitest|wget|xcodebuild|yarn|yq|zsh)';
+  '(?:aws|az|bash|bunx?|cat|cargo|cmake|cmd|cp|curl|deno|docker|dotnet|echo|env|fd|find|fish|gcloud|gh|git|go|gradle|grep|helm|java|jq|just|kubectl|ls|make|mkdir|mv|mvn|node|npm|npx|perl|pip3?|pnpm|podman|powershell|pwd|pwsh|pytest|python(?:3(?:\\.\\d+)?)?|rg|rm|ruby|sed|sh|sudo|swift|terraform|test|vitest|wget|xcodebuild|yarn|yq|zsh)';
 const SHELL_COMMAND_WORD = new RegExp(`^${SHELL_COMMAND}$`, 'i');
 const NATURAL_COMMAND_VERBS = new Set(['echo', 'find', 'test']);
 const NATURAL_COMMAND_DETERMINERS = new Set(['a', 'an', 'our', 'the', 'these', 'this', 'those', 'your']);
@@ -68,7 +68,8 @@ const COMMAND_LABEL_SHELL_COMMAND = new RegExp(
   'i'
 );
 const DIAGNOSTIC_NARRATION = /\b(?:local_estimate|token\s+watermark|microcompact)\b/i;
-const TELEMETRY_IDENTIFIER = /\b(?:request|trace|session|provider|token)(?:[\s_-]*(?:id|identifier))?\s*[:=]\s*\S+/i;
+const TELEMETRY_IDENTIFIER =
+  /\b(?:call|conversation|message|provider|request|session|token|tool|trace)(?:[\s_-]*(?:id|identifier))?\s*[:=]\s*\S+/i;
 const FILE_PATH_TOKEN =
   /\b[\w@.-]+\.(?:tsx?|jsx?|mjs|cjs|json|ya?ml|toml|md|css|scss|less|html?|py|rs|go|java|kt|swift|sh|bash|zsh|fish|sql|lock)\b/i;
 const ROOTED_PATH =
@@ -146,7 +147,19 @@ const buildJournalRows = (
   planFallback: { running: string; done: string }
 ): JournalRow[] => {
   const rows: JournalRow[] = [];
-  let bufferedTools: ToolMessage[] = [];
+  const normalizedCallsWithSource = messages.flatMap((message, messageIndex) =>
+    isToolMessage(message) ? normalizeToolMessages([message]).map((call) => ({ call, messageIndex })) : []
+  );
+  const sourceIndexByCall = new Map(normalizedCallsWithSource.map(({ call, messageIndex }) => [call, messageIndex]));
+  const toolStepsByMessageIndex = new Map<number, CoalescedStep[]>();
+
+  for (const step of coalesceToolCalls(normalizedCallsWithSource.map(({ call }) => call))) {
+    const messageIndex = sourceIndexByCall.get(step.calls[0]);
+    if (messageIndex === undefined) continue;
+    const steps = toolStepsByMessageIndex.get(messageIndex) ?? [];
+    steps.push(step);
+    toolStepsByMessageIndex.set(messageIndex, steps);
+  }
 
   const pushNarration = (row: Extract<JournalRow, { kind: 'narration' }>) => {
     const previous = rows[rows.length - 1];
@@ -162,20 +175,19 @@ const buildJournalRows = (
     rows.push(row);
   };
 
-  const flushTools = () => {
-    for (const step of coalesceToolCalls(normalizeToolMessages(bufferedTools))) {
-      rows.push({ key: `tool-${step.key}`, kind: 'tool', step, status: step.status });
-    }
-    bufferedTools = [];
-  };
-
-  for (const message of messages) {
+  for (const [messageIndex, message] of messages.entries()) {
     if (isToolMessage(message)) {
-      bufferedTools.push(message);
+      toolStepsByMessageIndex.get(messageIndex)?.forEach((step, stepIndex) => {
+        rows.push({
+          key: `tool-${messageIndex}-${step.key || stepIndex}`,
+          kind: 'tool',
+          step,
+          status: step.status,
+        });
+      });
       continue;
     }
 
-    flushTools();
     if (message.type === 'plan') {
       message.content.entries.forEach((entry, index) => {
         const status = planStatus[entry.status];
@@ -203,7 +215,6 @@ const buildJournalRows = (
     }
   }
 
-  flushTools();
   return rows;
 };
 
@@ -219,6 +230,11 @@ const settleJournalRows = (rows: JournalRow[], isActive: boolean): JournalRow[] 
   }
 
   return rows.map((row, index) => {
+    if (!isActive && row.status === 'pending') {
+      return row.kind === 'tool'
+        ? { ...row, status: 'canceled', step: { ...row.step, status: 'canceled' } }
+        : { ...row, status: 'canceled' };
+    }
     if (row.status !== 'running' || index === activeRowIndex) return row;
     if (row.kind === 'tool') {
       if (row.step.hadError) {
@@ -431,12 +447,7 @@ const StepRow: React.FC<{ label: string; status: Exclude<NormalizedToolStatus, '
   })();
 
   return (
-    <div
-      className='flex flex-row items-center gap-8px text-t-secondary'
-      data-status={status}
-      role={status === 'running' ? 'status' : undefined}
-      aria-live={status === 'running' ? 'polite' : undefined}
-    >
+    <div className='flex flex-row items-center gap-8px text-t-secondary' data-status={status}>
       <span className='flex-shrink-0 flex items-center'>{icon}</span>
       <span className='text-13px'>{label}</span>
     </div>
@@ -445,30 +456,25 @@ const StepRow: React.FC<{ label: string; status: Exclude<NormalizedToolStatus, '
 
 const formatCategorySummary = (
   categories: Array<{ category: string; count: number }>,
-  t: ReturnType<typeof useTranslation>['t']
+  t: ReturnType<typeof useTranslation>['t'],
+  locale: string
 ): string => {
-  const clauses = categories.map(({ category, count }) =>
+  const visibleCategories = categories.slice(0, 3);
+  const omittedActionCount = categories.slice(3).reduce((total, { count }) => total + count, 0);
+  const clauses = visibleCategories.map(({ category, count }) =>
     t(`messages.toolActivity.recap.category.${category}`, { count })
   );
-  const joinClauses = (items: string[]): string => {
-    if (items.length === 0) return '';
-    if (items.length === 1) return items[0];
-    if (items.length === 2)
-      return t('messages.toolActivity.recap.connector.pair', { first: items[0], second: items[1] });
-    return t('messages.toolActivity.recap.connector.series', {
-      first: items[0],
-      rest: joinClauses(items.slice(1)),
-    });
-  };
-
-  return joinClauses(clauses);
+  if (omittedActionCount > 0) {
+    clauses.push(t('messages.toolActivity.recap.overflow', { count: omittedActionCount }));
+  }
+  return new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(clauses);
 };
 
 const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[]; isActive?: boolean }> = ({
   messages,
   isActive = false,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const action = useToolActionText();
   const toolMessages = useMemo(() => messages.filter(isToolMessage), [messages]);
   const tools = useMemo(() => normalizeToolMessages(toolMessages), [toolMessages]);
@@ -502,7 +508,11 @@ const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[]; 
       ),
     [isActive, rows]
   );
-  const categorySummary = useMemo(() => formatCategorySummary(recap.categories, t), [recap.categories, t]);
+  const locale = normalizeLanguageCode(i18n?.resolvedLanguage ?? i18n?.language ?? DEFAULT_LANGUAGE);
+  const categorySummary = useMemo(
+    () => formatCategorySummary(recap.categories, t, locale),
+    [locale, recap.categories, t]
+  );
   const outcome = useMemo(() => {
     switch (recap.status) {
       case 'active':
@@ -540,8 +550,20 @@ const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[]; 
 
   return (
     <div className='tool-group-summary flex flex-col gap-6px'>
-      <div className='flex flex-col gap-2px' role={recap.status === 'active' ? 'status' : undefined} aria-live='polite'>
-        <div className='font-500 text-t-primary'>{t(`messages.toolActivity.recap.headline.${recap.status}`)}</div>
+      <div className='flex flex-col gap-2px'>
+        <div
+          className='font-500 text-t-primary'
+          role={recap.status === 'active' ? 'status' : undefined}
+          aria-live={recap.status === 'active' ? 'polite' : undefined}
+          aria-atomic={recap.status === 'active' ? true : undefined}
+        >
+          {t(`messages.toolActivity.recap.headline.${recap.status}`, { total: recap.total })}
+        </div>
+        {recap.safeSubject && (
+          <div className='text-13px text-t-secondary'>
+            {t('messages.toolActivity.recap.subject', { subject: recap.safeSubject })}
+          </div>
+        )}
         <div className='text-13px text-t-secondary'>
           {t('messages.toolActivity.recap.activity', { categories: categorySummary })}
         </div>
@@ -566,9 +588,7 @@ const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[]; 
       {showDetails && (
         <div className='tool-group-summary__body'>
           {rows.map((row) => {
-            if (row.status === 'error') {
-              return row.kind === 'tool' ? <ToolActivityError key={row.key} step={row.step} /> : null;
-            }
+            if (row.status === 'error') return null;
             return (
               <StepRow
                 key={row.key}

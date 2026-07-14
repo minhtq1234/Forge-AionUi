@@ -6,7 +6,9 @@
 
 import type { IConversationArtifact } from '@/common/adapter/ipcBridge';
 import type { TMessage } from '@/common/chat/chatLib';
-import { isDiagnosticToolMessage } from '@/common/chat/normalizeToolCall';
+import { coalesceToolCalls } from '@/common/chat/toolActivity/coalesceToolCalls';
+import type { CoalescedStep } from '@/common/chat/toolActivity/types';
+import { isDiagnosticToolMessage, normalizeToolMessages, type ToolMessage } from '@/common/chat/normalizeToolCall';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useConversationRuntimeView } from '@/renderer/pages/conversation/runtime/useConversationRuntimeView';
 import { getChatSurfaceWidthClass } from '@/renderer/pages/conversation/utils/chatSurfaceWidth';
@@ -29,6 +31,7 @@ import type { FileChangeInfo } from './MessageFileChanges';
 import MessageFileChanges, { parseDiff } from './MessageFileChanges';
 import { useConversationArtifacts } from './artifacts';
 import {
+  isHistoryGapMarker,
   useLoadAnchorMessageWindow,
   useLoadPreviousMessagePage,
   useMessageList,
@@ -41,6 +44,7 @@ import MessageTips from './components/MessageTips';
 import MessageToolCall from './components/MessageToolCall';
 import MessageToolGroup from './components/MessageToolGroup';
 import MessageToolGroupSummary from './components/MessageToolGroupSummary';
+import ToolActivityError from './components/toolActivity/ToolActivityError';
 import MessageCronTrigger from './components/MessageCronTrigger';
 import MessageSkillSuggest from './components/MessageSkillSuggest';
 import MessageText from './components/MessageText';
@@ -53,6 +57,13 @@ import SelectionReplyButton from './components/SelectionReplyButton';
 type IMessageVO =
   | TMessage
   | { type: 'file_summary'; id: string; diffs: FileChangeInfo[]; sourceMessageIds: string[]; created_at: number }
+  | {
+      type: 'work_error';
+      id: string;
+      step: CoalescedStep;
+      sourceMessageIds: string[];
+      created_at: number;
+    }
   | {
       type: 'work_summary';
       id: string;
@@ -75,6 +86,9 @@ const getProcessedItemSourceMessageIds = (item: IProcessedItem): string[] => {
   if ('type' in item && item.type === 'work_summary') {
     return item.sourceMessageIds;
   }
+  if ('type' in item && item.type === 'work_error') {
+    return item.sourceMessageIds;
+  }
   if ('type' in item && item.type === 'file_summary') {
     return item.sourceMessageIds;
   }
@@ -89,12 +103,13 @@ const matchesTargetMessage = (item: IProcessedItem, targetMessageId?: string): b
 };
 
 const getProcessedItemAnchorId = (item: IProcessedItem): string => {
+  if ('type' in item && item.type === 'work_error') return item.id;
   const sourceIds = getProcessedItemSourceMessageIds(item);
   return sourceIds[0] || ('id' in item ? item.id : uuid());
 };
 
 const getProcessedItemCreatedAt = (item: IProcessedItem): number => {
-  if ('type' in item && ['file_summary', 'work_summary', 'artifact'].includes(item.type)) {
+  if ('type' in item && ['file_summary', 'work_summary', 'work_error', 'artifact'].includes(item.type)) {
     return item.created_at;
   }
   return item.created_at ?? 0;
@@ -299,6 +314,8 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
     let diffsChanges: FileChangeInfo[] = [];
     let diffsSourceMessageIds: string[] = [];
     let pendingWorkSummary: PendingWorkSummary | undefined;
+    const pendingWorkErrorIdByCallKey = new Map<string, string>();
+    const supersededWorkErrorIds = new Set<string>();
 
     const pushFileDffChanges = (changes: FileChangeInfo, sourceMessageId: string, created_at: number) => {
       if (!diffsChanges.length) {
@@ -333,6 +350,29 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       pendingWorkSummary.latestCreatedAt = message.created_at ?? 0;
       resetFileDiffChanges();
     };
+    const pushWorkErrors = (message: ToolMessage) => {
+      normalizeToolMessages([message]).forEach((call, index) => {
+        const previousErrorId = call.key ? pendingWorkErrorIdByCallKey.get(call.key) : undefined;
+        if (previousErrorId) supersededWorkErrorIds.add(previousErrorId);
+
+        if (call.status !== 'error') {
+          if (call.key) pendingWorkErrorIdByCallKey.delete(call.key);
+          return;
+        }
+
+        const step = coalesceToolCalls([call])[0];
+        if (!step) return;
+        const id = `work-error-${message.id}-${call.key || index}`;
+        result.push({
+          type: 'work_error',
+          id,
+          step,
+          sourceMessageIds: [message.id],
+          created_at: message.created_at ?? 0,
+        });
+        if (call.key) pendingWorkErrorIdByCallKey.set(call.key, id);
+      });
+    };
     const flushPendingWorkSummary = () => {
       if (!pendingWorkSummary) return;
       result.splice(pendingWorkSummary.latestResultIndex, 0, {
@@ -347,6 +387,12 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
 
     for (let i = 0, len = list.length; i < len; i++) {
       const message = list[i];
+      if (isHistoryGapMarker(message)) {
+        flushPendingWorkSummary();
+        pendingWorkErrorIdByCallKey.clear();
+        resetFileDiffChanges();
+        continue;
+      }
       // Skip hidden and available_commands messages
       if (message.hidden) continue;
       if (message.type === 'available_commands') continue;
@@ -372,6 +418,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
           }
         }
         if (message.position === 'left') {
+          pushWorkErrors(message);
           pushWorkMessage(message);
           continue;
         }
@@ -379,6 +426,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       if (message.type === 'acp_tool_call') {
         if (isDiagnosticToolMessage(message)) continue;
         if (message.position === 'left') {
+          pushWorkErrors(message);
           pushWorkMessage(message);
           continue;
         }
@@ -386,6 +434,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       if (message.type === 'tool_call') {
         if (isDiagnosticToolMessage(message)) continue;
         if (message.position === 'left') {
+          pushWorkErrors(message);
           pushWorkMessage(message);
           continue;
         }
@@ -396,6 +445,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       }
       if (message.position === 'right') {
         flushPendingWorkSummary();
+        pendingWorkErrorIdByCallKey.clear();
       }
       resetFileDiffChanges();
       result.push(message);
@@ -414,20 +464,37 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         created_at: artifact.created_at,
       }));
 
-    return [...result, ...visibleArtifacts].toSorted(
-      (a, b) => getProcessedItemCreatedAt(a) - getProcessedItemCreatedAt(b)
-    );
+    return [
+      ...result.filter((item) => item.type !== 'work_error' || !supersededWorkErrorIds.has(item.id)),
+      ...visibleArtifacts,
+    ].toSorted((a, b) => getProcessedItemCreatedAt(a) - getProcessedItemCreatedAt(b));
   }, [artifacts, list]);
 
   const activeWorkSummaryId = useMemo(() => {
     if (!isProcessing) return undefined;
+    const sourceIndexById = new Map(list.map((message, index) => [message.id, index]));
+    let lastHistoryGapIndex = -1;
+    for (let index = list.length - 1; index >= 0; index--) {
+      if (isHistoryGapMarker(list[index])) {
+        lastHistoryGapIndex = index;
+        break;
+      }
+    }
     for (let index = processedList.length - 1; index >= 0; index--) {
       const item = processedList[index];
       if (item.type === 'artifact') continue;
-      return item.type === 'work_summary' ? item.id : undefined;
+      if (item.type === 'work_summary') {
+        const followsHistoryGap = item.sourceMessageIds.some(
+          (sourceId) => (sourceIndexById.get(sourceId) ?? -1) > lastHistoryGapIndex
+        );
+        return followsHistoryGap ? item.id : undefined;
+      }
+      if (item.type === 'file_summary' || item.type === 'work_error') continue;
+      if (item.position === 'right') return undefined;
+      if (item.type === 'text' && item.position === 'left' && item.status === 'finish') return undefined;
     }
     return undefined;
-  }, [isProcessing, processedList]);
+  }, [isProcessing, list, processedList]);
 
   // An AI reply can be split into several messages (thinking / multiple text /
   // tool blocks). The hover copy + timestamp row should appear once per turn,
@@ -449,7 +516,10 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
     for (const item of processedList) {
       if (
         'type' in item &&
-        (item.type === 'file_summary' || item.type === 'work_summary' || item.type === 'artifact')
+        (item.type === 'file_summary' ||
+          item.type === 'work_summary' ||
+          item.type === 'work_error' ||
+          item.type === 'artifact')
       ) {
         continue;
       }
@@ -476,7 +546,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
 
     for (let index = processedList.length - 1; index >= 0; index -= 1) {
       const item = processedList[index];
-      if ('type' in item && ['file_summary', 'work_summary', 'artifact'].includes(item.type)) {
+      if ('type' in item && ['file_summary', 'work_summary', 'work_error', 'artifact'].includes(item.type)) {
         continue;
       }
       const message = item as TMessage;
@@ -668,6 +738,18 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
           ) : (
             <MessageSkillSuggest artifact={item.artifact} />
           )}
+        </div>
+      );
+    }
+    if ('type' in item && item.type === 'work_error') {
+      return (
+        <div
+          key={item.id}
+          id={`message-${getProcessedItemAnchorId(item)}`}
+          className={`${rowWidthClass} min-w-0 message-item px-8px m-t-10px work_error`}
+          style={highlighted ? highlightStyle : undefined}
+        >
+          <ToolActivityError step={item.step} />
         </div>
       );
     }

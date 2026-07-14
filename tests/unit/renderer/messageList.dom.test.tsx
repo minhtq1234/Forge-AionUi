@@ -141,6 +141,14 @@ vi.mock('@/renderer/pages/conversation/Messages/components/MessageToolGroupSumma
   },
 }));
 
+vi.mock('@/renderer/pages/conversation/Messages/components/toolActivity/ToolActivityError', () => ({
+  default: ({ step }: { step: { key: string } }) => (
+    <div data-testid='tool-activity-error' data-tool-key={step.key}>
+      tool error
+    </div>
+  ),
+}));
+
 vi.mock('@/renderer/pages/conversation/Messages/MessageFileChanges', () => ({
   __esModule: true,
   default: () => <div>file_changes</div>,
@@ -533,7 +541,7 @@ describe('MessageList', () => {
     expect(screen.getByTestId('work-summary')).toHaveAttribute('data-active', 'false');
   });
 
-  it('settles a work summary followed by final assistant text while processing', () => {
+  it('keeps the latest work summary active after nonterminal assistant narration', () => {
     mockIsProcessing = true;
     const messages = [
       {
@@ -543,7 +551,121 @@ describe('MessageList', () => {
         content: { call_id: 'call-1', name: 'Read', status: 'in_progress' },
         created_at: 1,
       },
-      { id: 'answer-1', type: 'text', position: 'left', content: { content: 'Finished' }, created_at: 2 },
+      {
+        id: 'narration-1',
+        type: 'text',
+        position: 'left',
+        status: 'pending',
+        content: { content: 'I found the relevant files.' },
+        created_at: 2,
+      },
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    expect(screen.getByTestId('work-summary')).toHaveAttribute('data-active', 'true');
+  });
+
+  it('settles the latest work summary after a terminal assistant answer', () => {
+    mockIsProcessing = true;
+    const messages = [
+      {
+        id: 'tool-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'in_progress' },
+        created_at: 1,
+      },
+      {
+        id: 'answer-1',
+        type: 'text',
+        position: 'left',
+        status: 'finish',
+        content: { content: 'Finished' },
+        created_at: 2,
+      },
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    expect(screen.getByTestId('work-summary')).toHaveAttribute('data-active', 'false');
+  });
+
+  it.each([
+    ['a permission prompt', { id: 'permission-1', type: 'permission', position: 'left', content: {}, created_at: 2 }],
+    [
+      'an error tip',
+      { id: 'tips-1', type: 'tips', position: 'left', content: { content: 'Try again' }, created_at: 2 },
+    ],
+  ])('keeps the latest work summary active when followed by %s in the same turn', (_label, trailingMessage) => {
+    mockIsProcessing = true;
+    const messages = [
+      {
+        id: 'tool-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'in_progress' },
+        created_at: 1,
+      },
+      trailingMessage,
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    expect(screen.getByTestId('work-summary')).toHaveAttribute('data-active', 'true');
+  });
+
+  it('keeps the latest work summary active when followed by a file summary in the same turn', () => {
+    mockIsProcessing = true;
+    const messages = [
+      {
+        id: 'tool-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'in_progress' },
+        created_at: 1,
+      },
+      {
+        id: 'file-change-1',
+        type: 'tool_group',
+        position: 'left',
+        content: [
+          {
+            call_id: 'write-1',
+            name: 'WriteFile',
+            status: 'Success',
+            result_display: { file_diff: 'diff --git a/file.txt b/file.txt', file_name: 'file.txt' },
+          },
+        ],
+        created_at: 2,
+      },
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    expect(screen.getByTestId('work-summary')).toHaveAttribute('data-active', 'true');
+    expect(screen.getByText('file_changes')).toBeInTheDocument();
+  });
+
+  it('does not carry an active work summary across the next user message', () => {
+    mockIsProcessing = true;
+    const messages = [
+      {
+        id: 'tool-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'in_progress' },
+        created_at: 1,
+      },
+      { id: 'user-1', type: 'text', position: 'right', content: { content: 'One more thing' }, created_at: 2 },
     ] as unknown as TMessage[];
 
     render(<MessageList />, {
@@ -639,6 +761,44 @@ describe('MessageList', () => {
     expect(screen.getByText('permission').compareDocumentPosition(summaries[0])).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
+  it('keeps a terminal tool error at its source position before permission and later work', () => {
+    const messages = [
+      {
+        id: 'tool-error-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-error-1', name: 'Read', status: 'error', error: 'Access denied' },
+        created_at: 1,
+      },
+      { id: 'permission-1', type: 'permission', position: 'left', content: {}, created_at: 2 },
+      {
+        id: 'tool-success-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-success-1', name: 'Write', status: 'completed', output: 'Saved' },
+        created_at: 3,
+      },
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    const error = screen.getByTestId('tool-activity-error');
+    const permission = screen.getByText('permission');
+    const summary = screen.getByTestId('work-summary');
+    expect(screen.getAllByTestId('tool-activity-error')).toHaveLength(1);
+    expect(error).toHaveAttribute('data-tool-key', 'call-error-1');
+    expect(error.compareDocumentPosition(permission)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(permission.compareDocumentPosition(summary)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(workSummaryMessagesMock).toHaveBeenLastCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'tool-error-1' }),
+        expect.objectContaining({ id: 'tool-success-1' }),
+      ])
+    );
+  });
+
   it('keeps visible tools in one work summary across a hidden diagnostic', () => {
     const messages = [
       {
@@ -675,6 +835,46 @@ describe('MessageList', () => {
 
     expect(screen.getAllByTestId('work-summary')).toHaveLength(1);
     expect(screen.getByTestId('work-summary')).toHaveTextContent('tool_call,tool_call');
+  });
+
+  it('splits work summaries at a hidden renderer history gap', () => {
+    const messages = [
+      {
+        id: 'tool-1',
+        conversation_id: 'conversation-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-1', name: 'Read', status: 'completed' },
+        created_at: 1,
+      },
+      {
+        id: 'renderer-history-gap:conversation-1',
+        conversation_id: 'conversation-1',
+        type: 'tips',
+        position: 'center',
+        hidden: true,
+        content: { content: '', type: 'info', code: '__aionui_renderer_history_gap__' },
+        created_at: 2,
+      },
+      {
+        id: 'tool-2',
+        conversation_id: 'conversation-1',
+        type: 'tool_call',
+        position: 'left',
+        content: { call_id: 'call-2', name: 'Write', status: 'completed' },
+        created_at: 3,
+      },
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    const summaries = screen.getAllByTestId('work-summary');
+    expect(summaries).toHaveLength(2);
+    expect(summaries[0]).toHaveTextContent('tool_call');
+    expect(summaries[1]).toHaveTextContent('tool_call');
+    expect(screen.queryByText('tips')).not.toBeInTheDocument();
   });
 
   it('renders the empty slot when there are no messages', () => {

@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { createInstance } from 'i18next';
 import { normalizeLanguageCode, DEFAULT_LANGUAGE } from '@/common/config/i18n';
 import i18nConfig from '@/common/config/i18n-config.json';
 import deDEMessages from '@renderer/services/i18n/locales/de-DE/messages.json';
@@ -53,6 +54,29 @@ const flattenStringLeaves = (value: unknown, prefix = ''): Record<string, string
 };
 
 const getPlaceholders = (value: string): string[] => value.match(/{{[^{}]+}}/g) ?? [];
+const NUMERIC_RECAP_PLACEHOLDERS = new Set([
+  'total',
+  'count',
+  'completed',
+  'failed',
+  'pending',
+  'canceled',
+  'unfinished',
+  'retries',
+]);
+const RECAP_OUTCOME_PLACEHOLDERS = {
+  active: ['completed', 'pending', 'total'],
+  activeWithFailure: ['completed', 'failed', 'pending', 'total'],
+  activeWithCanceled: ['canceled', 'completed', 'pending', 'total'],
+  activeWithFailureAndCanceled: ['canceled', 'completed', 'failed', 'pending', 'total'],
+  completed: [],
+  recovered: [],
+  partial: ['completed', 'failed', 'total'],
+  partialWithCanceled: ['canceled', 'completed', 'failed', 'total'],
+  failed: ['failed', 'total'],
+  failedWithCanceled: ['canceled', 'failed', 'total'],
+  canceled: ['canceled', 'total', 'unfinished'],
+} as const;
 
 const findCopiedReferenceLeaves = (
   referenceLeaves: Record<string, string>,
@@ -171,6 +195,77 @@ describe('i18n', () => {
       }
 
       expect(issues).toEqual([]);
+    });
+
+    it('formats every visible recap number and keeps exact outcome counts without obsolete connectors', () => {
+      const issues: string[] = [];
+
+      for (const [locale, messages] of Object.entries(MESSAGE_LOCALES)) {
+        if ('connector' in messages.toolActivity.recap) {
+          issues.push(`${locale}.toolActivity.recap.connector is obsolete`);
+        }
+
+        const recapLeaves = flattenStringLeaves(messages.toolActivity, 'toolActivity');
+        for (const [key, value] of Object.entries(recapLeaves)) {
+          if (!key.startsWith('toolActivity.recap.')) continue;
+          for (const placeholder of getPlaceholders(value)) {
+            const match = placeholder.match(/^{{(\w+)(?:,\s*(\w+))?}}$/);
+            const name = match?.[1];
+            if (name && NUMERIC_RECAP_PLACEHOLDERS.has(name) && match?.[2] !== 'number') {
+              issues.push(`${locale}.${key} does not number-format ${name}`);
+            }
+          }
+        }
+
+        for (const [key, expectedNames] of Object.entries(RECAP_OUTCOME_PLACEHOLDERS)) {
+          const outcome = messages.toolActivity.recap.outcome[key];
+          const actualNames = getPlaceholders(outcome)
+            .map((placeholder) => placeholder.match(/^{{(\w+)/)?.[1])
+            .filter((name): name is string => Boolean(name))
+            .toSorted();
+          if (actualNames.join('\n') !== expectedNames.join('\n')) {
+            issues.push(
+              `${locale}.toolActivity.recap.outcome.${key} placeholders ${actualNames.join(', ')} do not match ${expectedNames.join(', ')}`
+            );
+          }
+        }
+      }
+
+      expect(issues).toEqual([]);
+    });
+
+    it('renders localized category and outcome counts through i18next in all locales', async () => {
+      await Promise.all(
+        Object.entries(MESSAGE_LOCALES).map(async ([locale, messages]) => {
+          const instance = createInstance();
+          await instance.init({
+            lng: locale,
+            fallbackLng: false,
+            resources: { [locale]: { translation: { messages } } },
+            interpolation: { escapeValue: false },
+          });
+
+          const values = {
+            canceled: 12,
+            completed: 1234,
+            failed: 56,
+            pending: 78,
+            total: 1500,
+            unfinished: 266,
+          };
+          expect(instance.t('messages.toolActivity.recap.category.search', { count: 1234 })).toContain(
+            new Intl.NumberFormat(locale).format(1234)
+          );
+
+          for (const [key, placeholderNames] of Object.entries(RECAP_OUTCOME_PLACEHOLDERS)) {
+            const outcome = instance.t(`messages.toolActivity.recap.outcome.${key}`, values);
+            for (const placeholderName of placeholderNames) {
+              const value = values[placeholderName as keyof typeof values];
+              expect(outcome).toContain(new Intl.NumberFormat(locale).format(value));
+            }
+          }
+        })
+      );
     });
   });
 });
