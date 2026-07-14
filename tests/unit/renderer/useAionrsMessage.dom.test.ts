@@ -120,6 +120,80 @@ describe('useAionrsMessage runtime state', () => {
     expect(getLocalTokenUsageSummary()).toEqual({ today: 15, weekToDate: 15, monthToDate: 15 });
   });
 
+  it('records diagnostic estimates when completed turns omit provider usage', async () => {
+    renderHook(() => useAionrsMessage('conv-1'));
+
+    await waitFor(() => {
+      expect(responseStreamHandlerRef.current).toBeDefined();
+    });
+
+    act(() => {
+      responseStreamHandlerRef.current?.({
+        type: 'tips',
+        data: {
+          content: 'Token watermark override: provider=0, local_estimate=11768, using=11768',
+        },
+        msg_id: 'message-1',
+        turn_id: 'turn-1',
+        conversation_id: 'conv-1',
+      });
+      responseStreamHandlerRef.current?.({
+        type: 'finish',
+        data: null,
+        msg_id: 'message-1',
+        turn_id: 'turn-1',
+        conversation_id: 'conv-1',
+      });
+      responseStreamHandlerRef.current?.({
+        type: 'tips',
+        data: {
+          content: 'Token watermark override: provider=0, local_estimate=37034, using=37034',
+        },
+        msg_id: 'message-1',
+        turn_id: 'turn-1',
+        conversation_id: 'conv-1',
+      });
+      responseStreamHandlerRef.current?.({
+        type: 'finish',
+        data: {},
+        msg_id: 'message-1',
+        turn_id: 'turn-1',
+        conversation_id: 'conv-1',
+      });
+    });
+
+    expect(getLocalTokenUsageSummary()).toEqual({ today: 48_802, weekToDate: 48_802, monthToDate: 48_802 });
+  });
+
+  it('prefers explicit provider usage over a pending diagnostic estimate', async () => {
+    renderHook(() => useAionrsMessage('conv-1'));
+
+    await waitFor(() => {
+      expect(responseStreamHandlerRef.current).toBeDefined();
+    });
+
+    act(() => {
+      responseStreamHandlerRef.current?.({
+        type: 'tips',
+        data: {
+          content: 'Token watermark override: provider=0, local_estimate=11768, using=11768',
+        },
+        msg_id: 'message-1',
+        turn_id: 'turn-1',
+        conversation_id: 'conv-1',
+      });
+      responseStreamHandlerRef.current?.({
+        type: 'finish',
+        data: { input_tokens: 10, output_tokens: 5 },
+        msg_id: 'message-1',
+        turn_id: 'turn-1',
+        conversation_id: 'conv-1',
+      });
+    });
+
+    expect(getLocalTokenUsageSummary()).toEqual({ today: 15, weekToDate: 15, monthToDate: 15 });
+  });
+
   it('does not record a completed turn without explicit usage', async () => {
     renderHook(() => useAionrsMessage('conv-1'));
 

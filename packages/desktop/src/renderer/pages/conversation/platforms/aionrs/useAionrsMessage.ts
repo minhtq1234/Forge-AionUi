@@ -55,6 +55,7 @@ export const useAionrsMessage = (
   });
   const [tokenUsage, setTokenUsage] = useState<TokenUsageData | null>(null);
   const tokenUsageRef = useRef<TokenUsageData | null>(null);
+  const pendingDiagnosticTokenEstimateRef = useRef<number | null>(null);
   // Current active message ID to filter out events from old requests (prevents aborted request events from interfering with new ones)
   const activeMsgIdRef = useRef<string | null>(null);
   const messageBufferRef = useRef(new Map<string, string>());
@@ -222,6 +223,7 @@ export const useAionrsMessage = (
 
       const tokenEstimate = extractDiagnosticTokenEstimate(getTipContent(message));
       if (tokenEstimate !== null) {
+        pendingDiagnosticTokenEstimateRef.current = tokenEstimate;
         persistTokenUsage({ total_tokens: tokenEstimate });
       }
 
@@ -234,6 +236,7 @@ export const useAionrsMessage = (
         hasActiveToolsRef.current = false;
         setThought({ subject: '', description: '' });
         hasContentInTurnRef.current = false;
+        pendingDiagnosticTokenEstimateRef.current = null;
         const transformedMessage = transformMessage(message);
         if (transformedMessage) {
           mergeLiveMessage(transformedMessage);
@@ -290,6 +293,8 @@ export const useAionrsMessage = (
             const hasValidOutputTokens = isValidTokenCount(usageData?.output_tokens);
             const inputTokens = hasValidInputTokens ? usageData.input_tokens : 0;
             const outputTokens = hasValidOutputTokens ? usageData.output_tokens : 0;
+            const diagnosticTokenEstimate = pendingDiagnosticTokenEstimateRef.current;
+            pendingDiagnosticTokenEstimateRef.current = null;
             if (hasValidInputTokens) {
               const newTokenUsage: TokenUsageData = {
                 total_tokens: inputTokens + outputTokens,
@@ -301,6 +306,13 @@ export const useAionrsMessage = (
                 id: `${conversation_id}:${message.turn_id ?? message.msg_id}`,
                 inputTokens,
                 outputTokens,
+                occurredAt: Date.now(),
+              });
+            } else if (diagnosticTokenEstimate !== null) {
+              recordLocalTokenUsage({
+                id: `${conversation_id}:${message.turn_id ?? message.msg_id}:estimate:${diagnosticTokenEstimate}`,
+                inputTokens: diagnosticTokenEstimate,
+                outputTokens: 0,
                 occurredAt: Date.now(),
               });
             }
@@ -390,6 +402,7 @@ export const useAionrsMessage = (
             setWaitingResponse(false);
             waitingResponseRef.current = false;
             setThought({ subject: '', description: '' });
+            pendingDiagnosticTokenEstimateRef.current = null;
             onError?.(message as IResponseMessage);
           } else {
             // Mark that current turn has content output (exclude error type)
@@ -420,6 +433,7 @@ export const useAionrsMessage = (
     setThought({ subject: '', description: '' });
     setTokenUsage(null);
     tokenUsageRef.current = null;
+    pendingDiagnosticTokenEstimateRef.current = null;
     hasContentInTurnRef.current = false;
     setHasHydratedRunningState(false);
 
@@ -473,6 +487,7 @@ export const useAionrsMessage = (
     hasActiveToolsRef.current = false;
     setThought({ subject: '', description: '' });
     hasContentInTurnRef.current = false;
+    pendingDiagnosticTokenEstimateRef.current = null;
     // Clear active message ID to prevent filtering events from new messages after stop
     activeMsgIdRef.current = null;
   }, []);
