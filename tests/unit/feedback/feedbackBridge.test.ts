@@ -69,6 +69,12 @@ function createFakeWindow(webContents: FakeWebContents = { isDestroyed: () => fa
   };
 }
 
+function createSizedAsciiLog(prefix: string, byteLength: number): string {
+  const remainingBytes = byteLength - Buffer.byteLength(prefix, 'utf8');
+  const line = `${'x'.repeat(1023)}\n`;
+  return `${prefix}${line.repeat(Math.floor(remainingBytes / line.length))}${'x'.repeat(remainingBytes % line.length)}`;
+}
+
 const allowedWindow: FakeWindow = {
   isDestroyed: () => false,
   once: vi.fn(),
@@ -455,6 +461,111 @@ describe('feedback logs', () => {
     }
   });
 
+  it('limits default collection to twelve deterministic candidates', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-default-candidates-'));
+    try {
+      const roots = Array.from({ length: 13 }, (_, index) => {
+        const root = path.join(logsDir, `root-${String(index).padStart(2, '0')}`);
+        mkdirSync(root);
+        writeFileSync(path.join(root, '2026-07-14.log'), `default-candidate-${String(index).padStart(2, '0')}\n`);
+        return root;
+      });
+
+      const attachment = collectFeedbackLogAttachment(roots.toReversed());
+      const content = gunzipSync(attachment!.data).toString('utf8');
+
+      expect([...content.matchAll(/default-candidate-(\d+)/gmu)].map((match) => match[1])).toEqual(
+        Array.from({ length: 12 }, (_, index) => String(index).padStart(2, '0'))
+      );
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the default one MiB bounded tail read through the collector', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-default-file-limit-'));
+    const defaultFileBytes = 1024 * 1024;
+    try {
+      const leadingRecord = 'discarded-record\n';
+      const retainedRecord = 'default-per-file-retained\n';
+      const tail = createSizedAsciiLog(retainedRecord, defaultFileBytes);
+      const logPath = path.join(logsDir, '2026-07-14.log');
+      writeFileSync(logPath, `${leadingRecord}${tail}`);
+      vi.clearAllMocks();
+
+      const attachment = collectFeedbackLogAttachment(logsDir);
+      const content = gunzipSync(attachment!.data).toString('utf8');
+      const tailRead = fs.readSync.mock.calls.find(
+        ([, buffer, offset, length, position]) =>
+          buffer.length === defaultFileBytes &&
+          offset === 0 &&
+          length === defaultFileBytes &&
+          position === Buffer.byteLength(leadingRecord, 'utf8')
+      );
+
+      expect(tailRead).toBeDefined();
+      expect(content).toContain('[TRUNCATED: recent tail retained]');
+      expect(content).toContain('default-per-file-retained');
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the default four MiB aggregate limit with retained content and safe output', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-default-aggregate-'));
+    const defaultFileBytes = 1024 * 1024;
+    const defaultAggregateBytes = 4 * 1024 * 1024;
+    try {
+      const primaryLogsDir = path.join(logsDir, 'a-primary');
+      const extraLogsDir = path.join(logsDir, 'b-extra');
+      mkdirSync(primaryLogsDir);
+      mkdirSync(extraLogsDir);
+      const firstContent = 'default aggregate retained \u{1F4A5}\n';
+      const fullFirstLog = createSizedAsciiLog(firstContent, defaultFileBytes);
+      const fullLog = createSizedAsciiLog('', defaultFileBytes);
+      writeFileSync(path.join(primaryLogsDir, '2026-07-14.aioncore.log'), fullFirstLog);
+      writeFileSync(path.join(primaryLogsDir, '2026-07-14.aionrs.log'), fullLog);
+      writeFileSync(path.join(primaryLogsDir, '2026-07-14.log'), fullLog);
+      writeFileSync(path.join(extraLogsDir, '2026-07-14.log'), createSizedAsciiLog('', defaultFileBytes));
+
+      const attachment = collectFeedbackLogAttachment([primaryLogsDir, extraLogsDir]);
+      const content = gunzipSync(attachment!.data);
+      const text = content.toString('utf8');
+
+      expect(content.byteLength).toBe(defaultAggregateBytes);
+      expect(text).toContain('default aggregate retained \u{1F4A5}');
+      expect(text).toContain('[TRUNCATED: aggregate feedback log limit]');
+      expect(text).not.toContain('\uFFFD');
+      expect([...text.matchAll(/^=== (.+) ===$/gmu)].map((match) => match[1])).toEqual([
+        '2026-07-14.aioncore.log',
+        '2026-07-14.aionrs.log',
+        '2026-07-14.log',
+        '2026-07-14.log',
+      ]);
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ['LF', '\n'],
+    ['CRLF', '\r\n'],
+    ['CR', '\r'],
+  ])('retains a complete first tail record after a %s boundary', (_name, lineBreak) => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-tail-boundary-'));
+    try {
+      const tail = `complete-first-record${lineBreak}complete-second-record${lineBreak}`;
+      writeFileSync(path.join(logsDir, '2026-07-14.log'), `discarded-record${lineBreak}${tail}`);
+
+      const attachment = collectFeedbackLogAttachment(logsDir, { maxFileBytes: Buffer.byteLength(tail, 'utf8') });
+      const content = gunzipSync(attachment!.data).toString('utf8');
+
+      expect(content).toContain('complete-first-record');
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
   it('reads oversized logs through the collector with a bounded descriptor offset', () => {
     const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-bounded-read-'));
     try {
@@ -467,7 +578,10 @@ describe('feedback logs', () => {
       expect(fs.openSync).toHaveBeenCalledWith(logPath, 'r');
       expect(fs.fstatSync).toHaveBeenCalledOnce();
       expect(fs.readSync).toHaveBeenCalledWith(expect.any(Number), expect.any(Buffer), 0, 32, 64);
-      expect(fs.readSync.mock.calls[0]?.[1]).toHaveLength(32);
+      const tailRead = fs.readSync.mock.calls.find(([, buffer, offset, length, position]) => {
+        return buffer.length === 32 && offset === 0 && length === 32 && position === 64;
+      });
+      expect(tailRead?.[1]).toHaveLength(32);
     } finally {
       rmSync(logsDir, { recursive: true, force: true });
     }

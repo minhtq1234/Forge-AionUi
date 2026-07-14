@@ -47,6 +47,7 @@ type BoundedFileSystem = {
 };
 
 type BoundedLogText = {
+  beginsAtLineBoundary: boolean;
   text: string;
   truncated: boolean;
 };
@@ -195,9 +196,13 @@ function readBoundedLogTail(filePath: string, maxBytes: number, fileSystem: Boun
     const size = fileSystem.fstatSync(fd).size;
     const bytesToRead = Math.min(size, maxBytes);
     const position = Math.max(0, size - bytesToRead);
+    const precedingByte = Buffer.alloc(1);
+    const precedingBytesRead = position > 0 ? fileSystem.readSync(fd, precedingByte, 0, 1, position - 1) : 0;
     const buffer = Buffer.alloc(bytesToRead);
     const bytesRead = fileSystem.readSync(fd, buffer, 0, bytesToRead, position);
     return {
+      beginsAtLineBoundary:
+        position === 0 || (precedingBytesRead === 1 && (precedingByte[0] === 0x0a || precedingByte[0] === 0x0d)),
       text: buffer.subarray(0, bytesRead).toString('utf8'),
       truncated: position > 0,
     };
@@ -207,8 +212,13 @@ function readBoundedLogTail(filePath: string, maxBytes: number, fileSystem: Boun
 }
 
 function discardFirstPartialLine(text: string): string {
-  const firstLineEnd = text.indexOf('\n');
-  return firstLineEnd === -1 ? '' : text.slice(firstLineEnd + 1);
+  const firstLineEnd = text.search(/[\r\n]/u);
+  if (firstLineEnd === -1) {
+    return '';
+  }
+
+  const nextOffset = text[firstLineEnd] === '\r' && text[firstLineEnd + 1] === '\n' ? 2 : 1;
+  return text.slice(firstLineEnd + nextOffset);
 }
 
 function fitUtf8Section(text: string, maxBytes: number): string {
@@ -265,7 +275,8 @@ export function collectFeedbackLogAttachment(
   for (const logPath of logPaths.slice(0, resolvedLimits.maxCandidateFiles)) {
     const basename = getLogHeaderName(logPath, normalizedDirs[0], true);
     const logTail = readBoundedLogTail(logPath, resolvedLimits.maxFileBytes);
-    const logText = logTail.truncated ? discardFirstPartialLine(logTail.text) : logTail.text;
+    const logText =
+      logTail.truncated && !logTail.beginsAtLineBoundary ? discardFirstPartialLine(logTail.text) : logTail.text;
     const truncationNotice = logTail.truncated ? '[TRUNCATED: recent tail retained]\n' : '';
     const separator = parts.length > 0 ? '\n' : '';
     const section = `${separator}=== ${basename} ===\n${truncationNotice}${redactLogText(logText, resolvedLimits.maxFileBytes)}\n`;
