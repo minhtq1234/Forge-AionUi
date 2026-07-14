@@ -13,10 +13,21 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { app } from 'electron';
+import { DIAGNOSTIC_TRUNCATION_MARKER } from '@/common/utils/diagnosticRedaction';
 import { collectFeedbackLogAttachment } from '@/process/feedback/logs';
 
-const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>();
-const eventHandlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>();
+const { handlers, eventHandlers, exposedMainWorld, ipcRenderer } = vi.hoisted(() => ({
+  eventHandlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
+  exposedMainWorld: new Map<string, unknown>(),
+  handlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
+  ipcRenderer: {
+    invoke: vi.fn(),
+    off: vi.fn(),
+    on: vi.fn(),
+    send: vi.fn(),
+    sendSync: vi.fn(),
+  },
+}));
 
 type FakeWebContents = {
   capturePage?: () => Promise<{ toPNG: () => Buffer }>;
@@ -28,6 +39,34 @@ type FakeWindow = {
   once: (event: string, callback: () => void) => void;
   webContents: FakeWebContents;
 };
+
+type FakeWindowFixture = {
+  close: () => void;
+  window: FakeWindow;
+};
+
+type ExposedElectronApi = {
+  logFeedbackEvent: (payload: { details?: unknown; level: 'info' | 'warn' | 'error'; message: string }) => void;
+};
+
+function createFakeWindow(webContents: FakeWebContents = { isDestroyed: () => false }): FakeWindowFixture {
+  let closedCallback: (() => void) | undefined;
+  const window: FakeWindow = {
+    isDestroyed: () => false,
+    once: vi.fn((event: string, callback: () => void) => {
+      if (event === 'closed') closedCallback = callback;
+    }),
+    webContents,
+  };
+
+  return {
+    close: () => {
+      if (!closedCallback) throw new Error('Expected a closed callback');
+      closedCallback();
+    },
+    window,
+  };
+}
 
 const allowedWindow: FakeWindow = {
   isDestroyed: () => false,
@@ -52,11 +91,21 @@ vi.mock('electron', () => ({
     getPath: vi.fn(() => '/tmp/aionui-test-logs-nonexistent'),
     getVersion: vi.fn(() => '0.0.0'),
   },
+  contextBridge: {
+    exposeInMainWorld: (key: string, value: unknown) => exposedMainWorld.set(key, value),
+  },
+  ipcRenderer,
+  webUtils: {
+    getPathForFile: vi.fn(),
+  },
 }));
+
+vi.mock('@sentry/electron/preload', () => ({}));
 
 beforeEach(async () => {
   handlers.clear();
   eventHandlers.clear();
+  exposedMainWorld.clear();
   vi.resetModules();
   ({ initFeedbackBridgeWithWindow } = await import('@/process/bridge/feedbackBridge'));
 });
@@ -107,6 +156,19 @@ describe('feedbackBridge — capture-screenshot', () => {
     expect(destroyedWindow.webContents.capturePage).not.toHaveBeenCalled();
   });
 
+  it('rejects screenshot capture when the registered webContents is destroyed', async () => {
+    const destroyedWebContents: FakeWebContents = {
+      capturePage: vi.fn(),
+      isDestroyed: () => true,
+    };
+    const window = createFakeWindow(destroyedWebContents);
+    initFeedbackBridgeWithWindow(window.window as never);
+
+    const handler = handlers.get('feedback:capture-screenshot')!;
+    await expect(handler({ sender: destroyedWebContents })).rejects.toThrow('Feedback request rejected');
+    expect(destroyedWebContents.capturePage).not.toHaveBeenCalled();
+  });
+
   it('returns null when capturePage yields an empty buffer', async () => {
     allowedWindow.webContents.capturePage = vi.fn(async () => ({ toPNG: () => Buffer.alloc(0) }));
     initFeedbackBridgeWithWindow(allowedWindow as never);
@@ -123,6 +185,16 @@ describe('feedbackBridge — capture-screenshot', () => {
     const handler = handlers.get('feedback:capture-screenshot')!;
     const result = await handler({ sender: allowedWindow.webContents });
     expect(result).toBeNull();
+  });
+
+  it('accepts a png exactly 10 MiB in size', async () => {
+    const png = Buffer.alloc(10 * 1024 * 1024);
+    allowedWindow.webContents.capturePage = vi.fn(async () => ({ toPNG: () => png }));
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    const handler = handlers.get('feedback:capture-screenshot')!;
+    const result = (await handler({ sender: allowedWindow.webContents })) as { data: number[] } | null;
+    expect(result?.data).toHaveLength(png.length);
   });
 
   it('returns null and does not throw when capturePage rejects', async () => {
@@ -144,6 +216,32 @@ describe('feedback logs', () => {
   it('rejects log collection from an unregistered sender', async () => {
     const handler = handlers.get('feedback:collect-logs')!;
     await expect(handler({ sender: foreignSender })).rejects.toThrow('Feedback request rejected');
+  });
+
+  it('rejects log collection from a foreign sender while a window is registered', async () => {
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+    const handler = handlers.get('feedback:collect-logs')!;
+    await expect(handler({ sender: foreignSender })).rejects.toThrow('Feedback request rejected');
+  });
+
+  it('removes authorization after the registered window closes', async () => {
+    const fixture = createFakeWindow();
+    initFeedbackBridgeWithWindow(fixture.window as never);
+    fixture.close();
+
+    const handler = handlers.get('feedback:collect-logs')!;
+    await expect(handler({ sender: fixture.window.webContents })).rejects.toThrow('Feedback request rejected');
+  });
+
+  it('keeps a newer registration when an older window closes late', async () => {
+    const older = createFakeWindow();
+    const newer = createFakeWindow();
+    initFeedbackBridgeWithWindow(older.window as never);
+    initFeedbackBridgeWithWindow(newer.window as never);
+    older.close();
+
+    const handler = handlers.get('feedback:collect-logs')!;
+    await expect(handler({ sender: newer.window.webContents })).resolves.toBeNull();
   });
 
   it('collects top-level frontend logs and nested backend logs through the IPC handler', async () => {
@@ -294,6 +392,48 @@ describe('feedbackBridge — renderer-log', () => {
     expect(warning).toHaveBeenCalledWith('[feedbackBridge] Rejected renderer log: invalid payload');
   });
 
+  it('measures a multibyte renderer log envelope in UTF-8 bytes', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({ level: 'info', message: '💥'.repeat(16_385) })
+    );
+
+    expect(warning).toHaveBeenCalledWith('[feedbackBridge] Rejected renderer log: invalid payload');
+  });
+
+  it('bounds details whose serialized value exceeds 32 KiB', () => {
+    const infoLog = vi.spyOn(console, 'info').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({ level: 'info', message: 'feedback message', details: 'x'.repeat(32 * 1024 + 1) })
+    );
+
+    expect(infoLog).toHaveBeenCalledWith('[FeedbackReport:renderer] feedback message', DIAGNOSTIC_TRUNCATION_MARKER);
+  });
+
+  it('drops a valid JSON primitive renderer log payload', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.({ sender: allowedWindow.webContents }, 'true');
+
+    expect(warning).toHaveBeenCalledWith('[feedbackBridge] Rejected renderer log: invalid payload');
+  });
+
+  it('drops a valid JSON array renderer log payload', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.({ sender: allowedWindow.webContents }, '[]');
+
+    expect(warning).toHaveBeenCalledWith('[feedbackBridge] Rejected renderer log: invalid payload');
+  });
+
   it('normalizes an unknown renderer log level to info', () => {
     const infoLog = vi.spyOn(console, 'info').mockImplementation(() => {});
     initFeedbackBridgeWithWindow(allowedWindow as never);
@@ -304,5 +444,34 @@ describe('feedbackBridge — renderer-log', () => {
     );
 
     expect(infoLog).toHaveBeenCalledWith('[FeedbackReport:renderer] feedback message');
+  });
+});
+
+describe('preload feedback wire contract', () => {
+  it('exposes an object-shaped logFeedbackEvent that sends serialized payloads', async () => {
+    await import('@/preload/main');
+    const api = exposedMainWorld.get('electronAPI') as ExposedElectronApi;
+
+    expect(typeof api).toBe('object');
+    expect(typeof api.logFeedbackEvent).toBe('function');
+
+    const payload = { level: 'warn' as const, message: 'feedback message', details: { status: 401 } };
+    api.logFeedbackEvent(payload);
+
+    expect(ipcRenderer.send).toHaveBeenCalledWith('feedback:renderer-log', JSON.stringify(payload));
+  });
+
+  it('uses the serialized safe fallback when feedback payload serialization fails', async () => {
+    await import('@/preload/main');
+    const api = exposedMainWorld.get('electronAPI') as ExposedElectronApi;
+    const details: { circular?: unknown } = {};
+    details.circular = details;
+
+    api.logFeedbackEvent({ level: 'error', message: 'feedback message', details });
+
+    expect(ipcRenderer.send).toHaveBeenCalledWith(
+      'feedback:renderer-log',
+      JSON.stringify({ level: 'error', message: 'feedback diagnostic serialization failed' })
+    );
   });
 });
