@@ -15,6 +15,7 @@ import { logStreamTerminalObserved } from '@/renderer/pages/conversation/runtime
 import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 import { isConversationProcessing } from '@/renderer/pages/conversation/utils/conversationRuntime';
 import { emitter } from '@/renderer/utils/emitter';
+import { recordLocalTokenUsage } from '@/renderer/pages/conversation/utils/localTokenUsage';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { processLocalCronResponse } from './localCronCommands';
 
@@ -22,6 +23,9 @@ type TokenUsage = {
   input_tokens?: number;
   output_tokens?: number;
 };
+
+const isValidTokenCount = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0;
 
 const getTipContent = (message: IResponseMessage): unknown => {
   if (message.type !== 'tips') return null;
@@ -282,11 +286,23 @@ export const useAionrsMessage = (
             logStreamTerminalObserved(conversation_id, message.turn_id, 'aionrs', message.type);
             // aionrs stream_end carries usage in data field
             const usageData = message.data as TokenUsage | undefined;
-            if (usageData && typeof usageData === 'object' && 'input_tokens' in usageData) {
+            const hasValidInputTokens = isValidTokenCount(usageData?.input_tokens);
+            const hasValidOutputTokens = isValidTokenCount(usageData?.output_tokens);
+            const inputTokens = hasValidInputTokens ? usageData.input_tokens : 0;
+            const outputTokens = hasValidOutputTokens ? usageData.output_tokens : 0;
+            if (hasValidInputTokens) {
               const newTokenUsage: TokenUsageData = {
-                total_tokens: (usageData.input_tokens || 0) + (usageData.output_tokens || 0),
+                total_tokens: inputTokens + outputTokens,
               };
               persistTokenUsage(newTokenUsage);
+            }
+            if (hasValidInputTokens || hasValidOutputTokens) {
+              recordLocalTokenUsage({
+                id: `${conversation_id}:${message.turn_id ?? message.msg_id}`,
+                inputTokens,
+                outputTokens,
+                occurredAt: Date.now(),
+              });
             }
             setStreamRunning(false);
             streamRunningRef.current = false;

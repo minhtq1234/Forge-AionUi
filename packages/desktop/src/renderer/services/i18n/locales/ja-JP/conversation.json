@@ -536,7 +536,15 @@
     "queueTooLarge": "キューのデータが大きすぎて安全に保持できません。いくつか削除してください。"
   },
   "contextUsage": {
-    "contextUsed": "コンテキスト使用量"
+    "contextUsed": "コンテキスト使用量",
+    "contextWindow": "コンテキストウィンドウ",
+    "percentUsed": "{{percent}}% 使用済み",
+    "tokenCount": "{{used}} / {{limit}} トークン",
+    "localTokenUsage": "ローカルのトークン使用量",
+    "today": "今日",
+    "weekToDate": "今週の合計",
+    "monthToDate": "今月の合計",
+    "triggerLabel": "コンテキストの使用状況を表示"
   },
   "skill_generator": {
     "title": "Generate Skill/Rule",

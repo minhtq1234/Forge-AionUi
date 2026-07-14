@@ -242,6 +242,64 @@ describe('useAcpMessage', () => {
     });
   });
 
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'keeps the last valid context usage when ACP reports invalid used value %s',
+    (used) => {
+      vi.mocked(getConversationOrNull).mockResolvedValue(null);
+      const { result } = renderHook(() => useAcpMessage('conv-1'));
+
+      act(() => {
+        responseStreamHandlerRef.current?.({
+          type: 'acp_context_usage',
+          data: { used: 12_000, size: 32_000 },
+          msg_id: 'usage-valid',
+          conversation_id: 'conv-1',
+        });
+      });
+
+      act(() => {
+        responseStreamHandlerRef.current?.({
+          type: 'acp_context_usage',
+          data: { used, size: 64_000 },
+          msg_id: 'usage-invalid',
+          conversation_id: 'conv-1',
+        });
+      });
+
+      expect(result.current.tokenUsage).toEqual({ total_tokens: 12_000 });
+      expect(result.current.context_limit).toBe(64_000);
+    }
+  );
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'keeps the last valid context limit when ACP reports invalid size %s',
+    (size) => {
+      vi.mocked(getConversationOrNull).mockResolvedValue(null);
+      const { result } = renderHook(() => useAcpMessage('conv-1'));
+
+      act(() => {
+        responseStreamHandlerRef.current?.({
+          type: 'acp_context_usage',
+          data: { used: 12_000, size: 32_000 },
+          msg_id: 'usage-valid',
+          conversation_id: 'conv-1',
+        });
+      });
+
+      act(() => {
+        responseStreamHandlerRef.current?.({
+          type: 'acp_context_usage',
+          data: { used: 24_000, size },
+          msg_id: 'usage-invalid',
+          conversation_id: 'conv-1',
+        });
+      });
+
+      expect(result.current.tokenUsage).toEqual({ total_tokens: 24_000 });
+      expect(result.current.context_limit).toBe(32_000);
+    }
+  );
+
   it('loads initial slash commands after runtime ensure without legacy warmup', async () => {
     vi.mocked(getConversationOrNull).mockResolvedValue(null);
     getSlashCommandsInvokeMock.mockResolvedValue([

@@ -537,7 +537,15 @@
     "queueTooLarge": "Warteschlangendaten sind zu groß zum sicheren Speichern. Entferne zuerst einige Befehle."
   },
   "contextUsage": {
-    "contextUsed": "Kontext verwendet"
+    "contextUsed": "Kontext verwendet",
+    "contextWindow": "Kontextfenster",
+    "percentUsed": "{{percent}} % verwendet",
+    "tokenCount": "{{used}} von {{limit}} Token",
+    "localTokenUsage": "Lokale Tokennutzung",
+    "today": "Heute",
+    "weekToDate": "Woche bis heute",
+    "monthToDate": "Monat bis heute",
+    "triggerLabel": "Kontextnutzung anzeigen"
   },
   "skill_generator": {
     "title": "Skill/Regel generieren",
