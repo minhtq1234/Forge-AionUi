@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   artifactCollapsed: false,
   previewPanelProps: vi.fn(),
   resizableSplitOptions: [] as Array<Record<string, unknown>>,
+  workspaceCollapseOptions: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock('@/renderer/components/agent/AgentBadge', () => ({ AgentLogoIcon: () => null }));
@@ -69,7 +70,10 @@ vi.mock('@/renderer/pages/conversation/hooks/useTitleRename', () => ({
 }));
 
 vi.mock('@/renderer/pages/conversation/hooks/useWorkspaceCollapse', () => ({
-  useWorkspaceCollapse: () => ({ rightSiderCollapsed: mocks.artifactCollapsed, setRightSiderCollapsed: vi.fn() }),
+  useWorkspaceCollapse: (options: Record<string, unknown>) => {
+    mocks.workspaceCollapseOptions.push(options);
+    return { rightSiderCollapsed: mocks.artifactCollapsed, setRightSiderCollapsed: vi.fn() };
+  },
 }));
 
 vi.mock('@/renderer/pages/conversation/Preview', () => ({
@@ -104,6 +108,7 @@ describe('ChatLayout artifact pane', () => {
     mocks.artifactCollapsed = false;
     mocks.previewPanelProps.mockClear();
     mocks.resizableSplitOptions.length = 0;
+    mocks.workspaceCollapseOptions.length = 0;
   });
 
   afterEach(() => cleanup());
@@ -138,6 +143,19 @@ describe('ChatLayout artifact pane', () => {
     expect(artifactPane).toContainElement(screen.getByTestId('legacy-sider'));
     expect(artifactPane).toContainElement(screen.getByTestId('workspace-panel-header'));
     expect(screen.queryByTestId('mock-preview-panel')).not.toBeInTheDocument();
+  });
+
+  it('enables file-driven expansion only for the team workspace pane', () => {
+    const { unmount } = renderLayout('project-menu');
+    expect(mocks.workspaceCollapseOptions.at(-1)).toEqual(
+      expect.objectContaining({ autoExpandOnWorkspaceFiles: false })
+    );
+    unmount();
+
+    renderLayout('panel');
+    expect(mocks.workspaceCollapseOptions.at(-1)).toEqual(
+      expect.objectContaining({ autoExpandOnWorkspaceFiles: true })
+    );
   });
 
   it('drops the legacy preview pane and the separate workspace sider markup', () => {

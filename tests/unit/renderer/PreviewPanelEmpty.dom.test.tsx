@@ -108,6 +108,15 @@ const emptyContext = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe('PreviewPanel empty state', () => {
+  it('requests surrounding-pane collapse when there are no tabs', () => {
+    const onRequestCollapse = vi.fn();
+    ctx.value = emptyContext();
+
+    render(<PreviewPanel onRequestCollapse={onRequestCollapse} />);
+
+    expect(onRequestCollapse).toHaveBeenCalledOnce();
+  });
+
   it('shows the artifact empty state when there are no tabs', () => {
     ctx.value = emptyContext();
     render(<PreviewPanel />);
@@ -129,6 +138,7 @@ describe('PreviewPanel empty state', () => {
     ctx.value = emptyContext({ closePreview });
 
     render(<PreviewPanel onRequestCollapse={onRequestCollapse} />);
+    onRequestCollapse.mockClear();
 
     await user.click(screen.getByRole('button', { name: 'preview.collapsePanel' }));
     expect(onRequestCollapse).toHaveBeenCalledOnce();

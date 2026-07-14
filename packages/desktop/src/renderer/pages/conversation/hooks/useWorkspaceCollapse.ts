@@ -28,6 +28,8 @@ type UseWorkspaceCollapseParams = {
    * that "send 你好 without picking a folder" leaves the panel collapsed.
    */
   isTemporaryWorkspace?: boolean;
+  /** Allow workspace file inventory changes to expand or collapse this pane. */
+  autoExpandOnWorkspaceFiles?: boolean;
 };
 
 type UseWorkspaceCollapseReturn = {
@@ -60,6 +62,7 @@ export function useWorkspaceCollapse({
   conversation_id,
   preferenceKey,
   isTemporaryWorkspace,
+  autoExpandOnWorkspaceFiles = true,
 }: UseWorkspaceCollapseParams): UseWorkspaceCollapseReturn {
   // Artifact pane always starts collapsed; preference and hasFiles events
   // drive expand. See WORKSPACE_HAS_FILES_EVENT handler below.
@@ -126,6 +129,8 @@ export function useWorkspaceCollapse({
       return undefined;
     }
     const handleHasFiles = (event: Event) => {
+      if (!autoExpandOnWorkspaceFiles) return;
+
       const detail = (event as CustomEvent<WorkspaceHasFilesDetail>).detail;
 
       // Mobile: always keep workspace collapsed to avoid covering main chat area
@@ -176,7 +181,14 @@ export function useWorkspaceCollapse({
     return () => {
       window.removeEventListener(WORKSPACE_HAS_FILES_EVENT, handleHasFiles);
     };
-  }, [isMobile, workspaceEnabled, rightSiderCollapsed, isTemporaryWorkspace, preferenceKey]);
+  }, [
+    autoExpandOnWorkspaceFiles,
+    isMobile,
+    workspaceEnabled,
+    rightSiderCollapsed,
+    isTemporaryWorkspace,
+    preferenceKey,
+  ]);
 
   // Broadcast workspace state event
   useEffect(() => {
