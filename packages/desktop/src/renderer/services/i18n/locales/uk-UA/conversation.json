@@ -17,7 +17,25 @@
     "quickActionStar": "Подобається? Поставте нам зірку!",
     "skillsMarket": "Маркет навичок Forge",
     "skillsMarketDesc": "Шукайте та активуйте навички спільноти за запитом. Налаштуйте один раз — доступно для всіх агентів.",
-    "skillsMarketDetails": "Докладніше >>"
+    "skillsMarketDetails": "Докладніше >>",
+    "projectTitle": "What's next in {{name}}?",
+    "projectPill": "Project · {{name}}",
+    "projectModeEyebrow": "You are in a Project workspace",
+    "projectModeBody": "Unlike a regular chat, this space is connected to one local folder. New chats stay grouped here and can use the project files as working context.",
+    "projectModeBadgeFolder": "Folder-backed",
+    "projectModeBadgeChats": "Project chats",
+    "projectModeBadgeFiles": "File-aware work"
+  },
+  "projectHeader": {
+    "label": "Проєкт {{name}}",
+    "eyebrow": "ПРОЄКТ",
+    "tabs": {
+      "label": "Подання проєкту",
+      "chat": "Чат",
+      "files": "Файли",
+      "context": "Контекст",
+      "artifacts": "Артефакти"
+    }
   },
   "history": {
     "recents": "Недавні",
@@ -70,9 +88,30 @@
     "conversationsSection": "Чати",
     "removeProjectTitle": "Видалити проєкт",
     "removeProject": "Видалити проєкт",
-    "removeProjectConfirm": "Видалити проєкт «{{name}}»? Також буде видалено {{count}} розмов у ньому.",
+    "removeProjectConfirm": "Remove project \"{{name}}\" from Forge? Its {{count}} chat(s) and folder files will stay where they are.",
     "newConversationInProject": "Нова розмова в цьому проєкті",
-    "deleting": "Видалення..."
+    "deleting": "Видалення...",
+    "newProject": "New project",
+    "createProjectTitle": "Create project",
+    "projectNameLabel": "Project name",
+    "projectNamePlaceholder": "Name this project",
+    "projectFolderLabel": "Folder",
+    "projectFolderPlaceholder": "Choose a folder to start your project",
+    "chooseProjectFolder": "Choose folder",
+    "changeProjectFolder": "Change folder",
+    "createProject": "Create project",
+    "projectFolderRequired": "Choose a folder before creating a project.",
+    "projectDuplicateFolder": "This folder is already used by \"{{name}}\".",
+    "openExistingProject": "Open existing project",
+    "createProjectSuccess": "Project created",
+    "createProjectFailed": "Project could not be created",
+    "renameProject": "Rename project",
+    "revealProjectFolder": "Reveal folder",
+    "relinkProjectFolder": "Relink folder",
+    "convertWorkspaceToProject": "Save as project",
+    "removeProjectSuccess": "Project removed. Chats and files were kept.",
+    "removeProjectFailed": "Project could not be removed",
+    "projectActions": "Project actions"
   },
   "historySearch": {
     "tooltip": "Пошук повідомлень",
@@ -336,6 +375,9 @@
   },
   "workspace": {
     "title": "Проєкт",
+    "projectMenu": {
+      "trigger": "Проєкт"
+    },
     "pasteConfirm_title": "Вставка файлів",
     "pasteConfirm_message": "Ви впевнені, що хочете вставити «{{name}}» у вибрану папку ({{target}})?",
     "pasteConfirm_paste": "Вставити",
@@ -561,5 +603,70 @@
       }
     }
   },
-  "notFound": "Розмову не знайдено або її видалено"
+  "notFound": "Розмову не знайдено або її видалено",
+  "contextHandoff": {
+    "activeFileDescription": "Active handoff",
+    "addPinned": "Add pinned context",
+    "budget": {
+      "healthy": "Context {{percent}}",
+      "watch": "Context watch {{percent}}",
+      "compress": "Compress soon {{percent}}",
+      "too_large": "Context large {{percent}}"
+    },
+    "budgetLabel": "Budget",
+    "command": {
+      "description": "Керування, стиснення, закріплення та передавання контексту розмови",
+      "missingPinText": "Додайте текст після /context pin",
+      "unexpectedArguments": "Команда контексту містить зайві аргументи",
+      "unsupportedSubcommand": "Невідома команда контексту. Використовуйте open, compact, pin або handoff.",
+      "fallbackComplete": "Контекст оновлено за допомогою локального резервного режиму",
+      "compactSuccess": "Контекст оновлено",
+      "pinSuccess": "Контекст закріплено й оновлено",
+      "failed": "Не вдалося виконати команду контексту"
+    },
+    "contextMissing": "Context.md could not be read",
+    "continue": "Continue",
+    "continuationName": "{{name}} continuation",
+    "continueTooltip": "Start a new chat with the edited Context.md",
+    "editPinned": "Edit pinned context",
+    "emptyFileDescription": "Not created",
+    "emptyPinned": "No pinned context yet",
+    "export": "Context.md",
+    "exportFailed": "Failed to export Context.md",
+    "exportFirst": "Export Context.md before starting a continuation",
+    "exportSuccess": "Context.md exported",
+    "exportTooltip": "Export this conversation as Context.md",
+    "improve": "Improve",
+    "improvePrompt": "Improve the open Context.md handoff. Rewrite only the synthesis sections: Goal, Current State, Important Decisions, User Preferences, Open Questions, Next Step, and Do Not Forget. Preserve Files / Artifacts, Assistant Setup, and Pinned Context unless the user explicitly asks to change them.",
+    "improveTooltip": "Ask the agent to improve Context.md",
+    "newContext": "New Context",
+    "newContextTooltip": "Replace the active Context.md with a fresh export",
+    "open": "Open",
+    "openTooltip": "Open Context.md in Preview",
+    "pinContentPlaceholder": "Context to keep active in this conversation",
+    "pinnedCount": "Pinned {{count}}",
+    "pinTitlePlaceholder": "Title",
+    "pinnedTitle": "Pinned context",
+    "replaceSuccess": "Context.md replaced",
+    "sectionTitle": "Context",
+    "status": {
+      "updating": "Оновлення за допомогою ШІ...",
+      "updatedByAi": "Оновлено ШІ",
+      "rulesFallback": "Оновлено за допомогою резервних правил",
+      "stale": "Очікує оновлення",
+      "failed": "Помилка оновлення",
+      "edited": "Відредагований контекст",
+      "error": {
+        "invalidModelOutput": "ШІ повернув неочікуваний результат, тому контекст не оновлено.",
+        "providerRequestFailed": "Запит до моделі не вдався. Перевірте підключення постачальника та повторіть спробу.",
+        "providerNotFound": "Постачальника моделі не знайдено. Перевірте налаштування моделі цієї розмови.",
+        "interrupted": "Оновлення контексту було перервано до завершення.",
+        "unknown": "Оновлення контексту неочікувано завершилося помилкою. Повторіть спробу."
+      }
+    }
+  },
+  "artifact": {
+    "emptyTitle": "Немає відкритих артефактів",
+    "emptyHint": "Створені файли та документи відкриваються тут."
+  }
 }

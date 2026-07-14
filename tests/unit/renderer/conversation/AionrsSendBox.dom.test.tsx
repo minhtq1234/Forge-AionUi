@@ -40,9 +40,13 @@ type ThoughtDisplayPropsMock = {
 
 const {
   aionrsMessageState,
+  checkAndUpdateTitleMock,
   createAionrsMessageState,
   createRuntimeViewState,
+  emitMock,
+  enqueueMock,
   ensureConversationRuntimeMock,
+  messageErrorMock,
   runtimeViewState,
   sendMessageInvokeMock,
   thoughtDisplayProps,
@@ -50,6 +54,7 @@ const {
   useTeamPermissionMock,
   setSendBoxHandlerMock,
 } = vi.hoisted(() => ({
+  checkAndUpdateTitleMock: vi.fn(),
   createAionrsMessageState: (): AionrsMessageStateMock => ({
     thought: { subject: '', description: '' },
     running: false,
@@ -70,7 +75,10 @@ const {
     markStopAcknowledged: vi.fn(),
     resetLocalGate: vi.fn(),
   }),
+  emitMock: vi.fn(),
+  enqueueMock: vi.fn(),
   ensureConversationRuntimeMock: vi.fn().mockResolvedValue({ recovered: false, config_options: [], runtime: null }),
+  messageErrorMock: vi.fn(),
   aionrsMessageState: { current: undefined as AionrsMessageStateMock | undefined },
   runtimeViewState: { current: undefined as RuntimeViewStateMock | undefined },
   sendMessageInvokeMock: vi.fn().mockResolvedValue(undefined),
@@ -82,12 +90,10 @@ const {
 
 vi.mock('@/common', () => ({
   ipcBridge: {
-    aionrsConversation: {
+    conversation: {
       sendMessage: {
         invoke: sendMessageInvokeMock,
       },
-    },
-    conversation: {
       stop: {
         invoke: vi.fn().mockResolvedValue(undefined),
       },
@@ -97,21 +103,30 @@ vi.mock('@/common', () => ({
 
 vi.mock('@/renderer/components/chat/SendBox', () => ({
   default: ({
+    enableContextCommand,
     onSend,
     onChange,
     rightTools,
   }: {
+    enableContextCommand?: boolean;
     onSend: (message: string) => Promise<void>;
     onChange?: (value: string) => void;
     rightTools?: React.ReactNode;
   }) => (
     <div>
       {rightTools}
+      <span data-testid='context-command-enabled'>{String(Boolean(enableContextCommand))}</span>
       <button type='button' onClick={() => onChange?.('hello')}>
         change
       </button>
       <button type='button' onClick={() => void onSend('Hello').catch(() => {})}>
         send
+      </button>
+      <button type='button' onClick={() => void onSend('/context compact').catch(() => {})}>
+        compact context
+      </button>
+      <button type='button' onClick={() => void onSend('/context pin').catch(() => {})}>
+        invalid context
       </button>
     </div>
   ),
@@ -161,7 +176,7 @@ vi.mock('@/renderer/hooks/context/LayoutContext', () => ({
 }));
 vi.mock('@/renderer/hooks/chat/useAutoTitle', () => ({
   useAutoTitle: () => ({
-    checkAndUpdateTitle: vi.fn(),
+    checkAndUpdateTitle: checkAndUpdateTitleMock,
   }),
 }));
 vi.mock('@/renderer/hooks/chat/useSendBoxDraft', () => ({
@@ -200,7 +215,7 @@ vi.mock('@/renderer/pages/conversation/platforms/useConversationCommandQueue', (
     isPaused: false,
     isInteractionLocked: false,
     hasPendingCommands: false,
-    enqueue: vi.fn(),
+    enqueue: enqueueMock,
     remove: vi.fn(),
     clear: vi.fn(),
     reorder: vi.fn(),
@@ -240,7 +255,7 @@ vi.mock('@/renderer/services/FileService', () => ({
 }));
 vi.mock('@/renderer/utils/emitter', () => ({
   emitter: {
-    emit: vi.fn(),
+    emit: emitMock,
   },
   useAddEventListener: vi.fn(),
 }));
@@ -254,7 +269,7 @@ vi.mock('@/renderer/utils/file/messageFiles', () => ({
 vi.mock('@arco-design/web-react', () => ({
   Message: {
     warning: vi.fn(),
-    error: vi.fn(),
+    error: messageErrorMock,
     success: vi.fn(),
   },
   Tag: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
@@ -359,7 +374,6 @@ describe('AionrsSendBox', () => {
     expect(screen.getByTestId('composer-model-selector')).toBeInTheDocument();
     expect(screen.getByTestId('composer-permission-control')).toBeInTheDocument();
   });
-
   it('hides stale processing when the hydrated runtime view is idle', () => {
     aionrsMessageState.current = {
       ...createAionrsMessageState(),
@@ -393,5 +407,40 @@ describe('AionrsSendBox', () => {
 
     expect(screen.getByTestId('thought-display')).toBeInTheDocument();
     expect(thoughtDisplayProps.current?.running).toBe(true);
+  });
+
+  it('advertises the native context command in the shared slash menu', () => {
+    render(<AionrsSendBox conversation_id='conv-1' modelSelection={modelSelection} />);
+
+    expect(screen.getByTestId('context-command-enabled')).toHaveTextContent('true');
+  });
+
+  it('intercepts valid context commands before queueing or sending a chat turn', async () => {
+    render(<AionrsSendBox conversation_id='conv-1' modelSelection={modelSelection} />);
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'compact context' }).click();
+    });
+
+    expect(emitMock).toHaveBeenCalledWith('aionrs.context-command', {
+      conversationId: 'conv-1',
+      command: { action: 'compact' },
+    });
+    expect(enqueueMock).not.toHaveBeenCalled();
+    expect(sendMessageInvokeMock).not.toHaveBeenCalled();
+    expect(checkAndUpdateTitleMock).not.toHaveBeenCalled();
+  });
+
+  it('shows a localized validation error without sending invalid context commands', async () => {
+    render(<AionrsSendBox conversation_id='conv-1' modelSelection={modelSelection} />);
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'invalid context' }).click();
+    });
+
+    expect(messageErrorMock).toHaveBeenCalledWith('conversation.contextHandoff.command.missingPinText');
+    expect(emitMock).not.toHaveBeenCalledWith('aionrs.context-command', expect.anything());
+    expect(enqueueMock).not.toHaveBeenCalled();
+    expect(sendMessageInvokeMock).not.toHaveBeenCalled();
   });
 });

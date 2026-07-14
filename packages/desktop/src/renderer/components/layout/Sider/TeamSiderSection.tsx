@@ -148,7 +148,7 @@ const TeamSiderSection: React.FC<TeamSiderSectionProps> = ({
       ) : (
         <div className='shrink-0 flex flex-col gap-2px'>
           <div
-            className='group/label sider-section-label flex items-center px-12px h-28px select-none sticky top-0 z-10 mt-8px cursor-pointer'
+            className='group/label sider-section-label flex items-center pl-4px pr-12px h-28px select-none sticky top-0 z-10 mt-8px cursor-pointer'
             data-testid='team-section-toggle'
             onClick={() => setExpanded((v) => !v)}
           >
@@ -166,9 +166,9 @@ const TeamSiderSection: React.FC<TeamSiderSectionProps> = ({
                 如需修改，必须同步更新 tests/e2e/cases/teams/team-create.e2e.ts。 */}
             <Tooltip content={t('team.sider.createTeam')} position='top'>
               <Button
-                data-testid='team-create-btn'
                 aria-label={t('team.sider.createTeam')}
-                className='sider-section-action !ml-auto !w-22px !h-22px !p-0 !rounded-6px !text-t-secondary hover:!text-t-primary hover:!bg-fill-3'
+                data-testid='team-create-btn'
+                className='sider-section-add-action !ml-auto !w-22px !h-22px !p-0 !rounded-6px !text-t-secondary hover:!text-t-primary hover:!bg-fill-3'
                 size='mini'
                 type='text'
                 icon={
@@ -180,8 +180,8 @@ const TeamSiderSection: React.FC<TeamSiderSectionProps> = ({
                     style={{ lineHeight: 0 }}
                   />
                 }
-                onClick={(event) => {
-                  event.stopPropagation();
+                onClick={(e) => {
+                  e.stopPropagation();
                   setCreateTeamVisible(true);
                 }}
               />

@@ -5,7 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
-import { isErrorTipMessage, transformMessage } from '@/common/chat/chatLib';
+import { extractDiagnosticTokenEstimate, isErrorTipMessage, transformMessage } from '@/common/chat/chatLib';
 import type { IResponseMessage } from '@/common/adapter/ipcBridge';
 import type { TChatConversation, TokenUsageData } from '@/common/config/storage';
 import { uuid } from '@/common/utils';
@@ -14,12 +14,20 @@ import { useMergeLiveMessage } from '@/renderer/pages/conversation/Messages/hook
 import { logStreamTerminalObserved } from '@/renderer/pages/conversation/runtime/useConversationRuntimeView';
 import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 import { isConversationProcessing } from '@/renderer/pages/conversation/utils/conversationRuntime';
+import { emitter } from '@/renderer/utils/emitter';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { processLocalCronResponse } from './localCronCommands';
 
 type TokenUsage = {
   input_tokens?: number;
   output_tokens?: number;
+};
+
+const getTipContent = (message: IResponseMessage): unknown => {
+  if (message.type !== 'tips') return null;
+  if (typeof message.data === 'string') return message.data;
+  if (typeof message.data !== 'object' || message.data === null || Array.isArray(message.data)) return null;
+  return (message.data as { content?: unknown }).content;
 };
 
 export const useAionrsMessage = (
@@ -42,6 +50,7 @@ export const useAionrsMessage = (
     subject: '',
   });
   const [tokenUsage, setTokenUsage] = useState<TokenUsageData | null>(null);
+  const tokenUsageRef = useRef<TokenUsageData | null>(null);
   // Current active message ID to filter out events from old requests (prevents aborted request events from interfering with new ones)
   const activeMsgIdRef = useRef<string | null>(null);
   const messageBufferRef = useRef(new Map<string, string>());
@@ -123,6 +132,30 @@ export const useAionrsMessage = (
     activeMsgIdRef.current = msgId;
   }, []);
 
+  const persistTokenUsage = useCallback(
+    (newTokenUsage: TokenUsageData) => {
+      const nextTokenUsage: TokenUsageData = {
+        total_tokens: Math.max(tokenUsageRef.current?.total_tokens ?? 0, newTokenUsage.total_tokens),
+      };
+      tokenUsageRef.current = nextTokenUsage;
+      setTokenUsage(nextTokenUsage);
+      void ipcBridge.conversation.update
+        .invoke({
+          id: conversation_id,
+          updates: {
+            extra: { last_token_usage: nextTokenUsage } as TChatConversation['extra'],
+          },
+          merge_extra: true,
+        })
+        .then((ok) => {
+          if (ok) {
+            emitter.emit('aionrs.context-usage.refresh', conversation_id);
+          }
+        });
+    },
+    [conversation_id]
+  );
+
   const processCompletedAssistantMessage = useCallback(
     async (msgId: string) => {
       if (!msgId || processedCronMsgIdsRef.current.has(msgId)) {
@@ -181,6 +214,11 @@ export const useAionrsMessage = (
     return ipcBridge.conversation.responseStream.on((message) => {
       if (conversation_id !== message.conversation_id) {
         return;
+      }
+
+      const tokenEstimate = extractDiagnosticTokenEstimate(getTipContent(message));
+      if (tokenEstimate !== null) {
+        persistTokenUsage({ total_tokens: tokenEstimate });
       }
 
       if (isErrorTipMessage(message)) {
@@ -248,14 +286,7 @@ export const useAionrsMessage = (
               const newTokenUsage: TokenUsageData = {
                 total_tokens: (usageData.input_tokens || 0) + (usageData.output_tokens || 0),
               };
-              setTokenUsage(newTokenUsage);
-              void ipcBridge.conversation.update.invoke({
-                id: conversation_id,
-                updates: {
-                  extra: { last_token_usage: newTokenUsage } as TChatConversation['extra'],
-                },
-                merge_extra: true,
-              });
+              persistTokenUsage(newTokenUsage);
             }
             setStreamRunning(false);
             streamRunningRef.current = false;
@@ -365,13 +396,14 @@ export const useAionrsMessage = (
       }
     });
     // Note: hasActiveTools and streamRunning are accessed via refs to avoid re-subscription
-  }, [conversation_id, mergeLiveMessage, onError, processCompletedAssistantMessage]);
+  }, [conversation_id, mergeLiveMessage, onError, persistTokenUsage, processCompletedAssistantMessage]);
 
   useEffect(() => {
     let cancelled = false;
 
     setThought({ subject: '', description: '' });
     setTokenUsage(null);
+    tokenUsageRef.current = null;
     hasContentInTurnRef.current = false;
     setHasHydratedRunningState(false);
 
@@ -405,6 +437,7 @@ export const useAionrsMessage = (
         const { last_token_usage } = res.extra;
         if (last_token_usage.total_tokens > 0) {
           setTokenUsage(last_token_usage);
+          tokenUsageRef.current = last_token_usage;
         }
       }
       setHasHydratedRunningState(true);

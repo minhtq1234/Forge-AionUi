@@ -1,27 +1,14 @@
 {
-  "historyVersions": "歷史版本",
-  "currentFile": "當前檔案",
   "loading": "載入中...",
-  "loadHistoryFailed": "載入歷史版本失敗",
-  "noHistory": "暫無歷史版本",
-  "snapshotSaved": "已儲存快照",
-  "snapshotSaveFailed": "儲存快照失敗",
-  "historyLoaded": "已載入歷史版本內容",
-  "historyLoadFailed": "載入歷史版本失敗",
-  "tooFrequent": "操作過於頻繁，請稍後再試",
-  "saveSnapshot": "儲存當前快照",
-  "snapshotNotSupported": "當前內容不支援快照",
-  "history": "歷史",
-  "historyNotSupported": "當前內容不支援歷史版本",
   "downloadFile": "下載檔案",
   "closePreview": "關閉預覽",
   "collapsePanel": "收起面板",
   "source": "原文",
   "code": "Code",
   "preview": "預覽",
+  "split": "分屏",
   "editor": "編輯器",
   "previewEffect": "預覽效果",
-  "snapshot": "快照",
   "downloadMarkdown": "下載 Markdown 檔案",
   "downloadCode": "下載 {{language}} 檔案",
   "downloadDiff": "下載 Diff 檔案",
@@ -66,8 +53,7 @@
   "errors": {
     "missingFilePath": "未提供檔案路徑",
     "openWithoutPath": "無法開啟：未提供檔案路徑",
-    "conversionFailed": "轉換失敗",
-    "emptySnapshot": "快照內容為空"
+    "conversionFailed": "轉換失敗"
   },
   "office": {
     "installLinkText": "開啟 officecli 安裝說明",
@@ -76,11 +62,68 @@
       "installFailed": "自動安裝 officecli 失敗，請檢查後端日誌後再試一次。",
       "portTimeout": "預覽服務啟動後未能及時就緒，請重試。",
       "startFailed": "啟動 Office 預覽服務失敗。",
-      "outsideSandbox": "此檔案不在目前專案沙箱範圍內。"
+      "outsideSandbox": "此檔案不在目前專案沙箱範圍內。",
+      "originalSafe": "工作區中的原始檔案未被變更。"
     },
     "serverInstall": {
       "hint": "Forge 執行於伺服器上，預覽元件需要安裝在該伺服器上。請在伺服器執行以下指令後重試：",
       "icuNote": "若安裝後仍無法啟動，請在伺服器安裝 ICU 函式庫（Debian/Ubuntu：apt-get install -y libicu-dev）。"
+    },
+    "externalEdit": {
+      "editInDefaultApp": "在預設應用程式中編輯",
+      "editInDefaultAppTooltip": "在預設應用程式中開啟此工作區檔案",
+      "refreshPreview": "重新整理預覽",
+      "refreshPreviewTooltip": "從工作區檔案重新載入此 Forge 預覽",
+      "revealInFolder": "在資料夾中顯示",
+      "revealInFolderTooltip": "在其資料夾中顯示此工作區檔案",
+      "status": {
+        "ready": "可在預設應用程式中編輯",
+        "opening": "正在開啟預設應用程式...",
+        "editingExternally": "正在外部應用程式中編輯",
+        "refreshing": "正在重新整理預覽...",
+        "refreshed": "預覽已重新整理",
+        "openFailed": "無法開啟預設應用程式",
+        "refreshFailed": "預覽無法重新整理。檔案可能比目前檢視更新。"
+      }
+    },
+    "editor": {
+      "editSelection": "編輯選取內容",
+      "formulaBar": "公式列",
+      "apply": "套用",
+      "cancel": "取消",
+      "bold": "粗體",
+      "italic": "斜體",
+      "underline": "底線",
+      "undo": "復原",
+      "openDesktop": "在桌面應用程式中開啟",
+      "openedDesktop": "已在桌面應用程式中開啟",
+      "more": "更多",
+      "reveal": "在資料夾中顯示",
+      "refresh": "重新整理預覽",
+      "saving": "正在儲存",
+      "saved": "已儲存到工作區",
+      "saveFailed": "儲存失敗",
+      "unsavedChanges": "未儲存的修改",
+      "fileChanged": "檔案已在其他位置變更",
+      "refreshing": "正在重新整理預覽",
+      "previewOutdated": "預覽可能不是最新版本",
+      "inspecting": "正在準備編輯控制項...",
+      "selectWordToEdit": "選取文件中的文字即可編輯",
+      "selectExcelToEdit": "選取儲存格即可編輯",
+      "readyToEdit": "已準備好編輯所選內容",
+      "conflictRecovery": "你的編輯尚未儲存，並仍保留在此處。工作區檔案是安全的。",
+      "saveFailureRecovery": "你的編輯仍保留在此處，工作區檔案未被變更。",
+      "copyDraft": "複製草稿",
+      "refreshLatest": "載入最新版本",
+      "requestPlaceholder": "描述您希望 Forge 進行的變更。",
+      "askWordContext": "檔案：{{fileName}}\n段落：{{path}}\n選取文字：{{text}}\n要求：{{placeholder}}",
+      "askExcelContext": "檔案：{{fileName}}\n範圍：{{range}}\n儲存格：\n{{cells}}\n要求：{{placeholder}}"
+    },
+    "viewer": {
+      "zoomOut": "縮小",
+      "zoomIn": "放大",
+      "resetZoom": "重設縮放",
+      "fitWidth": "符合寬度"
     }
   },
   "word": {

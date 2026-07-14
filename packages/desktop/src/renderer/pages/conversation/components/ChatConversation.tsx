@@ -141,7 +141,10 @@ const _AddNewConversation: React.FC<{ conversation: TChatConversation }> = ({ co
 
 type AionrsConversation = Extract<TChatConversation, { type: 'aionrs' }>;
 
-const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation }> = ({ conversation }) => {
+const AionrsConversationPanel: React.FC<{
+  conversation: AionrsConversation;
+  sliderTitle: React.ReactNode;
+}> = ({ conversation, sliderTitle }) => {
   const runtimeView = useConversationRuntimeView(conversation.id);
   const onSelectModel = useCallback(
     async (_provider: IProvider, modelName: string) => {
@@ -201,6 +204,7 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation }> = 
 
   const chatLayoutProps = {
     title: conversation.name,
+    siderTitle: sliderTitle,
     sider: <ChatSlider conversation={conversation} />,
     headerExtra: (
       <div className='flex items-center gap-8px'>
@@ -208,6 +212,7 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation }> = 
       </div>
     ),
     workspaceEnabled,
+    workspacePresentation: 'project-menu' as const,
     workspacePath: conversation.extra?.workspace,
     isTemporaryWorkspace: (conversation.extra as { is_temporary_workspace?: boolean } | undefined)
       ?.is_temporary_workspace,
@@ -324,8 +329,16 @@ const ChatConversation: React.FC<{
     acpAssistantId,
   ]);
 
+  const sliderTitle = useMemo(() => {
+    return (
+      <div className='flex items-center justify-between'>
+        <span className='text-16px font-bold text-t-primary'>{t('conversation.workspace.title')}</span>
+      </div>
+    );
+  }, [t]);
+
   if (conversation && conversation.type === 'aionrs') {
-    return <AionrsConversationPanel key={conversation.id} conversation={conversation} />;
+    return <AionrsConversationPanel key={conversation.id} conversation={conversation} sliderTitle={sliderTitle} />;
   }
 
   // 如果有预设助手信息，使用预设助手的 logo 和名称；加载中时不进入 fallback；否则使用 backend 的 logo
@@ -357,8 +370,10 @@ const ChatConversation: React.FC<{
       title={conversation?.name}
       {...chatLayoutProps}
       headerExtra={headerExtraNode}
+      siderTitle={sliderTitle}
       sider={<ChatSlider conversation={conversation} />}
       workspaceEnabled={workspaceEnabled}
+      workspacePresentation='project-menu'
       workspacePath={conversation?.extra?.workspace}
       isTemporaryWorkspace={
         (conversation?.extra as { is_temporary_workspace?: boolean } | undefined)?.is_temporary_workspace

@@ -1,27 +1,14 @@
 {
-  "historyVersions": "نسخه‌های تاریخچه",
-  "currentFile": "فایل فعلی",
   "loading": "در حال بارگذاری...",
-  "loadHistoryFailed": "بارگذاری تاریخچه ناموفق بود",
-  "noHistory": "نسخه تاریخچه‌ای وجود ندارد",
-  "snapshotSaved": "اسنپ‌شات ذخیره شد",
-  "snapshotSaveFailed": "ذخیره اسنپ‌شات ناموفق بود",
-  "historyLoaded": "نسخه تاریخچه بارگذاری شد",
-  "historyLoadFailed": "بارگذاری نسخه تاریخچه ناموفق بود",
-  "tooFrequent": "تکرار زیاد، لطفاً بعداً تلاش کنید",
-  "saveSnapshot": "ذخیره اسنپ‌شات فعلی",
-  "snapshotNotSupported": "محتوای فعلی از اسنپ‌شات پشتیبانی نمی‌کند",
-  "history": "تاریخچه",
-  "historyNotSupported": "محتوای فعلی از تاریخچه پشتیبانی نمی‌کند",
   "downloadFile": "دانلود فایل",
   "closePreview": "بستن پیش‌نمایش",
   "collapsePanel": "جمع کردن پنل",
   "source": "منبع",
   "code": "کد",
   "preview": "پیش‌نمایش",
+  "split": "تقسیم",
   "editor": "ویرایشگر",
   "previewEffect": "پیش‌نمایش",
-  "snapshot": "اسنپ‌شات",
   "downloadMarkdown": "دانلود فایل Markdown",
   "downloadCode": "دانلود فایل {{language}}",
   "downloadDiff": "دانلود فایل Diff",
@@ -66,8 +53,7 @@
   "errors": {
     "missingFilePath": "مسیر فایل وجود ندارد",
     "openWithoutPath": "باز کردن ممکن نیست: مسیر فایل ارائه نشده است",
-    "conversionFailed": "تبدیل ناموفق بود",
-    "emptySnapshot": "محتوای اسنپ‌شات خالی است"
+    "conversionFailed": "تبدیل ناموفق بود"
   },
   "office": {
     "installLinkText": "باز کردن راهنمای نصب officecli",
@@ -76,11 +62,68 @@
       "installFailed": "نصب خودکار officecli ناموفق بود. لاگ‌های بک‌اند را بررسی کنید و دوباره تلاش کنید.",
       "portTimeout": "سرویس پیش‌نمایش شروع شد اما به‌موقع آماده نشد. دوباره تلاش کنید.",
       "startFailed": "شروع سرویس پیش‌نمایش Office ناموفق بود.",
-      "outsideSandbox": "این فایل خارج از سندباکس پروژه فعلی است."
+      "outsideSandbox": "این فایل خارج از سندباکس پروژه فعلی است.",
+      "originalSafe": "فایل اصلی فضای کاری تغییر نکرده است."
     },
     "serverInstall": {
       "hint": "Forge روی سرور اجرا می‌شود. مؤلفه پیش‌نمایش را روی همان سرور نصب کنید، سپس دوباره تلاش کنید:",
       "icuNote": "اگر همچنان شروع نشد، کتابخانه ICU را روی سرور نصب کنید (Debian/Ubuntu: apt-get install -y libicu-dev)."
+    },
+    "externalEdit": {
+      "editInDefaultApp": "ویرایش در برنامه پیش فرض",
+      "editInDefaultAppTooltip": "باز کردن این فایل فضای کاری در برنامه پیش فرض آن",
+      "refreshPreview": "تازه سازی پیش نمایش",
+      "refreshPreviewTooltip": "بارگیری دوباره این پیش نمایش Forge از فایل فضای کاری",
+      "revealInFolder": "نمایش در پوشه",
+      "revealInFolderTooltip": "نمایش این فایل فضای کاری در پوشه آن",
+      "status": {
+        "ready": "آماده ویرایش در برنامه پیش فرض",
+        "opening": "در حال باز کردن برنامه پیش فرض...",
+        "editingExternally": "در حال ویرایش در برنامه خارجی",
+        "refreshing": "در حال تازه سازی پیش نمایش...",
+        "refreshed": "پیش نمایش تازه شد",
+        "openFailed": "برنامه پیش فرض باز نشد",
+        "refreshFailed": "پیش نمایش تازه نشد. ممکن است فایل از این نما جدیدتر باشد."
+      }
+    },
+    "editor": {
+      "editSelection": "ویرایش بخش انتخاب‌شده",
+      "formulaBar": "نوار فرمول",
+      "apply": "اعمال",
+      "cancel": "لغو",
+      "bold": "ضخیم",
+      "italic": "مورب",
+      "underline": "زیرخط",
+      "undo": "واگرد",
+      "openDesktop": "باز کردن در برنامه دسکتاپ",
+      "openedDesktop": "در برنامه دسکتاپ باز شد",
+      "more": "بیشتر",
+      "reveal": "نمایش در پوشه",
+      "refresh": "تازه‌سازی پیش‌نمایش",
+      "saving": "در حال ذخیره",
+      "saved": "در فضای کاری ذخیره شد",
+      "saveFailed": "ذخیره ناموفق بود",
+      "unsavedChanges": "تغییرات ذخیره‌نشده",
+      "fileChanged": "فایل در جای دیگری تغییر کرده است",
+      "refreshing": "در حال تازه‌سازی پیش‌نمایش",
+      "previewOutdated": "ممکن است پیش‌نمایش قدیمی باشد",
+      "inspecting": "در حال آماده‌سازی ابزارهای ویرایش...",
+      "selectWordToEdit": "برای ویرایش، متن را در سند انتخاب کنید",
+      "selectExcelToEdit": "برای ویرایش، یک سلول را انتخاب کنید",
+      "readyToEdit": "محتوای انتخاب‌شده آماده ویرایش است",
+      "conflictRecovery": "ویرایش شما ذخیره نشد و همچنان اینجاست. فایل فضای کاری امن است.",
+      "saveFailureRecovery": "ویرایش شما همچنان اینجاست و فایل فضای کاری تغییر نکرده است.",
+      "copyDraft": "کپی پیش‌نویس",
+      "refreshLatest": "بارگیری آخرین نسخه",
+      "requestPlaceholder": "تغییری را که می‌خواهید Forge اعمال کند توضیح دهید.",
+      "askWordContext": "فایل: {{fileName}}\nپاراگراف: {{path}}\nمتن انتخاب‌شده: {{text}}\nدرخواست: {{placeholder}}",
+      "askExcelContext": "فایل: {{fileName}}\nمحدوده: {{range}}\nسلول‌ها:\n{{cells}}\nدرخواست: {{placeholder}}"
+    },
+    "viewer": {
+      "zoomOut": "کوچک‌نمایی",
+      "zoomIn": "بزرگ‌نمایی",
+      "resetZoom": "بازنشانی بزرگ‌نمایی",
+      "fitWidth": "تطبیق با عرض"
     }
   },
   "word": {

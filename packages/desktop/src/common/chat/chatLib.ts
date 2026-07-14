@@ -634,8 +634,25 @@ const isChatMessageStatus = (value: unknown): value is NonNullable<TMessage['sta
 // stream types handled below.
 const DIAGNOSTIC_TIP_PATTERNS = [/^\s*Token watermark override\b/i, /\blocal_estimate=\d/i];
 
+const parsePositiveInteger = (value: string | undefined): number | null => {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+export const extractDiagnosticTokenEstimate = (content: unknown): number | null => {
+  if (typeof content !== 'string') return null;
+
+  const usingEstimate = parsePositiveInteger(/\busing=(\d+)\b/i.exec(content)?.[1]);
+  if (usingEstimate !== null) return usingEstimate;
+
+  return parsePositiveInteger(/\blocal_estimate=(\d+)\b/i.exec(content)?.[1]);
+};
+
 const isDiagnosticTelemetryTip = (content: unknown): boolean =>
-  typeof content === 'string' && DIAGNOSTIC_TIP_PATTERNS.some((pattern) => pattern.test(content));
+  typeof content === 'string' &&
+  (extractDiagnosticTokenEstimate(content) !== null ||
+    DIAGNOSTIC_TIP_PATTERNS.some((pattern) => pattern.test(content)));
 
 export const transformMessage = (message: IResponseMessage): TMessage | undefined => {
   const created_at = message.created_at ?? Date.now();

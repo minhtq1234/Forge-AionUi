@@ -3,6 +3,7 @@ import path from 'path';
 
 const aliases = {
   '@/': path.resolve(__dirname, './packages/desktop/src') + '/',
+  '@aionui/web-host': path.resolve(__dirname, './packages/web-host/src/index.ts'),
   '@process/': path.resolve(__dirname, './packages/desktop/src/process') + '/',
   '@renderer/': path.resolve(__dirname, './packages/desktop/src/renderer') + '/',
   '@worker/': path.resolve(__dirname, './packages/desktop/src/process/worker') + '/',

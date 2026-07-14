@@ -76,7 +76,10 @@ export class AnthropicRotatingClient extends RotatingApiClient<Anthropic> {
       const anthropicRequest = this.converter.convertRequest(params);
 
       // Call Anthropic API
-      const anthropicResponse = await client.messages.create(anthropicRequest);
+      const anthropicResponse = await client.messages.create(
+        anthropicRequest,
+        options ? { signal: options.signal, timeout: options.timeout } : undefined
+      );
 
       // Convert Anthropic response back to OpenAI format using converter
       return this.converter.convertResponse(anthropicResponse, params.model);

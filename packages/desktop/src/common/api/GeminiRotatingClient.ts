@@ -83,7 +83,11 @@ export class GeminiRotatingClient extends RotatingApiClient<GoogleGenAI> {
       const { generationConfig, ...generateContentRequest } = geminiRequest;
       const request: GenerateContentParameters = {
         ...generateContentRequest,
-        ...(generationConfig ? { config: generationConfig } : {}),
+        config: {
+          ...generationConfig,
+          ...(options?.signal ? { abortSignal: options.signal } : {}),
+          ...(options?.timeout ? { httpOptions: { timeout: options.timeout } } : {}),
+        },
       };
       const geminiResponse = await client.models.generateContent(request);
       return this.converter.convertResponse(geminiResponse, params.model);

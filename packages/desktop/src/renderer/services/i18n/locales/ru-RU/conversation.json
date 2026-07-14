@@ -17,7 +17,25 @@
     "quickActionStar": "Нравится? Поставьте нам звезду!",
     "skillsMarket": "Маркет навыков Forge",
     "skillsMarketDesc": "Находите и активируйте навыки сообщества по запросу. Настройте один раз — доступно для всех агентов.",
-    "skillsMarketDetails": "Подробнее >>"
+    "skillsMarketDetails": "Подробнее >>",
+    "projectTitle": "What's next in {{name}}?",
+    "projectPill": "Project · {{name}}",
+    "projectModeEyebrow": "You are in a Project workspace",
+    "projectModeBody": "Unlike a regular chat, this space is connected to one local folder. New chats stay grouped here and can use the project files as working context.",
+    "projectModeBadgeFolder": "Folder-backed",
+    "projectModeBadgeChats": "Project chats",
+    "projectModeBadgeFiles": "File-aware work"
+  },
+  "projectHeader": {
+    "label": "Проект {{name}}",
+    "eyebrow": "ПРОЕКТ",
+    "tabs": {
+      "label": "Представления проекта",
+      "chat": "Чат",
+      "files": "Файлы",
+      "context": "Контекст",
+      "artifacts": "Артефакты"
+    }
   },
   "history": {
     "recents": "Недавние",
@@ -70,9 +88,30 @@
     "conversationsSection": "Чаты",
     "removeProjectTitle": "Удалить проект",
     "removeProject": "Удалить проект",
-    "removeProjectConfirm": "Удалить проект «{{name}}»? Будет также удалено {{count}} бесед(ы) в нём.",
+    "removeProjectConfirm": "Remove project \"{{name}}\" from Forge? Its {{count}} chat(s) and folder files will stay where they are.",
     "newConversationInProject": "Новая беседа в этом проекте",
-    "deleting": "Удаление..."
+    "deleting": "Удаление...",
+    "newProject": "New project",
+    "createProjectTitle": "Create project",
+    "projectNameLabel": "Project name",
+    "projectNamePlaceholder": "Name this project",
+    "projectFolderLabel": "Folder",
+    "projectFolderPlaceholder": "Choose a folder to start your project",
+    "chooseProjectFolder": "Choose folder",
+    "changeProjectFolder": "Change folder",
+    "createProject": "Create project",
+    "projectFolderRequired": "Choose a folder before creating a project.",
+    "projectDuplicateFolder": "This folder is already used by \"{{name}}\".",
+    "openExistingProject": "Open existing project",
+    "createProjectSuccess": "Project created",
+    "createProjectFailed": "Project could not be created",
+    "renameProject": "Rename project",
+    "revealProjectFolder": "Reveal folder",
+    "relinkProjectFolder": "Relink folder",
+    "convertWorkspaceToProject": "Save as project",
+    "removeProjectSuccess": "Project removed. Chats and files were kept.",
+    "removeProjectFailed": "Project could not be removed",
+    "projectActions": "Project actions"
   },
   "historySearch": {
     "tooltip": "Поиск сообщений",
@@ -336,6 +375,9 @@
   },
   "workspace": {
     "title": "Проект",
+    "projectMenu": {
+      "trigger": "Проект"
+    },
     "pasteConfirm_title": "Вставка файлов",
     "pasteConfirm_message": "Вы уверены, что хотите вставить «{{name}}» в выбранную папку ({{target}})?",
     "pasteConfirm_paste": "Вставить",
@@ -561,5 +603,70 @@
       }
     }
   },
-  "notFound": "Беседа не найдена или была удалена"
+  "notFound": "Беседа не найдена или была удалена",
+  "contextHandoff": {
+    "activeFileDescription": "Active handoff",
+    "addPinned": "Add pinned context",
+    "budget": {
+      "healthy": "Context {{percent}}",
+      "watch": "Context watch {{percent}}",
+      "compress": "Compress soon {{percent}}",
+      "too_large": "Context large {{percent}}"
+    },
+    "budgetLabel": "Budget",
+    "command": {
+      "description": "Управление, сжатие, закрепление и передача контекста беседы",
+      "missingPinText": "Добавьте текст после /context pin",
+      "unexpectedArguments": "В команде контекста есть лишние аргументы",
+      "unsupportedSubcommand": "Неизвестная команда контекста. Используйте open, compact, pin или handoff.",
+      "fallbackComplete": "Контекст обновлён с помощью локального резервного режима",
+      "compactSuccess": "Контекст обновлён",
+      "pinSuccess": "Контекст закреплён и обновлён",
+      "failed": "Не удалось выполнить команду контекста"
+    },
+    "contextMissing": "Context.md could not be read",
+    "continue": "Continue",
+    "continuationName": "{{name}} continuation",
+    "continueTooltip": "Start a new chat with the edited Context.md",
+    "editPinned": "Edit pinned context",
+    "emptyFileDescription": "Not created",
+    "emptyPinned": "No pinned context yet",
+    "export": "Context.md",
+    "exportFailed": "Failed to export Context.md",
+    "exportFirst": "Export Context.md before starting a continuation",
+    "exportSuccess": "Context.md exported",
+    "exportTooltip": "Export this conversation as Context.md",
+    "improve": "Improve",
+    "improvePrompt": "Improve the open Context.md handoff. Rewrite only the synthesis sections: Goal, Current State, Important Decisions, User Preferences, Open Questions, Next Step, and Do Not Forget. Preserve Files / Artifacts, Assistant Setup, and Pinned Context unless the user explicitly asks to change them.",
+    "improveTooltip": "Ask the agent to improve Context.md",
+    "newContext": "New Context",
+    "newContextTooltip": "Replace the active Context.md with a fresh export",
+    "open": "Open",
+    "openTooltip": "Open Context.md in Preview",
+    "pinContentPlaceholder": "Context to keep active in this conversation",
+    "pinnedCount": "Pinned {{count}}",
+    "pinTitlePlaceholder": "Title",
+    "pinnedTitle": "Pinned context",
+    "replaceSuccess": "Context.md replaced",
+    "sectionTitle": "Context",
+    "status": {
+      "updating": "Обновление с помощью ИИ...",
+      "updatedByAi": "Обновлено ИИ",
+      "rulesFallback": "Обновлено с помощью резервных правил",
+      "stale": "Ожидает обновления",
+      "failed": "Ошибка обновления",
+      "edited": "Отредактированный контекст",
+      "error": {
+        "invalidModelOutput": "ИИ вернул неожиданный результат, поэтому контекст не обновлён.",
+        "providerRequestFailed": "Запрос к модели не выполнен. Проверьте подключение провайдера и повторите попытку.",
+        "providerNotFound": "Провайдер модели не найден. Проверьте настройки модели этого разговора.",
+        "interrupted": "Обновление контекста было прервано до завершения.",
+        "unknown": "Обновление контекста неожиданно завершилось ошибкой. Повторите попытку."
+      }
+    }
+  },
+  "artifact": {
+    "emptyTitle": "Нет открытых артефактов",
+    "emptyHint": "Созданные файлы и документы открываются здесь."
+  }
 }

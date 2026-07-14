@@ -17,7 +17,19 @@
     "quickActionStar": "喜歡我們？點個星吧",
     "skillsMarket": "Forge Skills Market",
     "skillsMarketDesc": "按需搜尋並啟用社區 Skills，一次設定，所有Agent通用。",
-    "skillsMarketDetails": "詳情 >>"
+    "skillsMarketDetails": "詳情 >>",
+    "projectTitle": "What's next in {{name}}?",
+    "projectPill": "Project · {{name}}",
+    "projectModeEyebrow": "You are in a Project workspace",
+    "projectModeBody": "Unlike a regular chat, this space is connected to one local folder. New chats stay grouped here and can use the project files as working context.",
+    "projectModeBadgeFolder": "Folder-backed",
+    "projectModeBadgeChats": "Project chats",
+    "projectModeBadgeFiles": "File-aware work"
+  },
+  "projectHeader": {
+    "label": "專案 {{name}}",
+    "eyebrow": "專案",
+    "tabs": { "label": "專案檢視", "chat": "聊天", "files": "檔案", "context": "上下文", "artifacts": "成果" }
   },
   "history": {
     "recents": "最近",
@@ -70,9 +82,30 @@
     "conversationsSection": "聊天",
     "removeProjectTitle": "移除專案",
     "removeProject": "移除專案",
-    "removeProjectConfirm": "確定要移除專案「{{name}}」嗎？專案下的 {{count}} 個對話也會被一起移除。",
+    "removeProjectConfirm": "Remove project \"{{name}}\" from Forge? Its {{count}} chat(s) and folder files will stay where they are.",
     "newConversationInProject": "在此專案中新建對話",
-    "deleting": "刪除中..."
+    "deleting": "刪除中...",
+    "newProject": "New project",
+    "createProjectTitle": "Create project",
+    "projectNameLabel": "Project name",
+    "projectNamePlaceholder": "Name this project",
+    "projectFolderLabel": "Folder",
+    "projectFolderPlaceholder": "Choose a folder to start your project",
+    "chooseProjectFolder": "Choose folder",
+    "changeProjectFolder": "Change folder",
+    "createProject": "Create project",
+    "projectFolderRequired": "Choose a folder before creating a project.",
+    "projectDuplicateFolder": "This folder is already used by \"{{name}}\".",
+    "openExistingProject": "Open existing project",
+    "createProjectSuccess": "Project created",
+    "createProjectFailed": "Project could not be created",
+    "renameProject": "Rename project",
+    "revealProjectFolder": "Reveal folder",
+    "relinkProjectFolder": "Relink folder",
+    "convertWorkspaceToProject": "Save as project",
+    "removeProjectSuccess": "Project removed. Chats and files were kept.",
+    "removeProjectFailed": "Project could not be removed",
+    "projectActions": "Project actions"
   },
   "historySearch": {
     "tooltip": "搜尋訊息",
@@ -336,6 +369,9 @@
   },
   "workspace": {
     "title": "專案",
+    "projectMenu": {
+      "trigger": "專案"
+    },
     "pasteConfirm_title": "貼上檔案",
     "pasteConfirm_message": "確定要將 '{{name}}' 貼上到選中的資料夾 ({{target}}) 嗎？",
     "pasteConfirm_paste": "貼上",
@@ -561,5 +597,70 @@
       }
     }
   },
-  "notFound": "會話不存在或已被刪除"
+  "notFound": "會話不存在或已被刪除",
+  "contextHandoff": {
+    "activeFileDescription": "Active handoff",
+    "addPinned": "Add pinned context",
+    "budget": {
+      "healthy": "Context {{percent}}",
+      "watch": "Context watch {{percent}}",
+      "compress": "Compress soon {{percent}}",
+      "too_large": "Context large {{percent}}"
+    },
+    "budgetLabel": "Budget",
+    "command": {
+      "description": "管理、壓縮、釘選或交接對話上下文",
+      "missingPinText": "請在 /context pin 後輸入要釘選的內容",
+      "unexpectedArguments": "此上下文命令包含多餘參數",
+      "unsupportedSubcommand": "未知的上下文命令。請使用 open、compact、pin 或 handoff。",
+      "fallbackComplete": "已使用本機備援更新上下文",
+      "compactSuccess": "上下文已更新",
+      "pinSuccess": "上下文已釘選並更新",
+      "failed": "上下文命令失敗"
+    },
+    "contextMissing": "Context.md could not be read",
+    "continue": "Continue",
+    "continuationName": "{{name}} continuation",
+    "continueTooltip": "Start a new chat with the edited Context.md",
+    "editPinned": "Edit pinned context",
+    "emptyFileDescription": "Not created",
+    "emptyPinned": "No pinned context yet",
+    "export": "Context.md",
+    "exportFailed": "Failed to export Context.md",
+    "exportFirst": "Export Context.md before starting a continuation",
+    "exportSuccess": "Context.md exported",
+    "exportTooltip": "Export this conversation as Context.md",
+    "improve": "Improve",
+    "improvePrompt": "Improve the open Context.md handoff. Rewrite only the synthesis sections: Goal, Current State, Important Decisions, User Preferences, Open Questions, Next Step, and Do Not Forget. Preserve Files / Artifacts, Assistant Setup, and Pinned Context unless the user explicitly asks to change them.",
+    "improveTooltip": "Ask the agent to improve Context.md",
+    "newContext": "New Context",
+    "newContextTooltip": "Replace the active Context.md with a fresh export",
+    "open": "Open",
+    "openTooltip": "Open Context.md in Preview",
+    "pinContentPlaceholder": "Context to keep active in this conversation",
+    "pinnedCount": "Pinned {{count}}",
+    "pinTitlePlaceholder": "Title",
+    "pinnedTitle": "Pinned context",
+    "replaceSuccess": "Context.md replaced",
+    "sectionTitle": "Context",
+    "status": {
+      "updating": "正在使用 AI 更新...",
+      "updatedByAi": "由 AI 更新",
+      "rulesFallback": "使用規則備援更新",
+      "stale": "等待更新",
+      "failed": "更新失敗",
+      "edited": "已編輯的上下文",
+      "error": {
+        "invalidModelOutput": "AI 回傳了非預期的結果，未能更新上下文。",
+        "providerRequestFailed": "模型請求失敗。請檢查服務商連線後重試。",
+        "providerNotFound": "找不到模型服務商，請檢查此對話的模型設定。",
+        "interrupted": "上下文更新在完成前被中斷。",
+        "unknown": "上下文更新意外失敗，請重試。"
+      }
+    }
+  },
+  "artifact": {
+    "emptyTitle": "尚無開啟的工件",
+    "emptyHint": "產生的檔案和文件會在這裡開啟。"
+  }
 }

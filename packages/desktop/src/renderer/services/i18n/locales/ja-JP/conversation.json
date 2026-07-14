@@ -17,7 +17,25 @@
     "quickActionStar": "気に入った？スターをください！",
     "skillsMarket": "Forge Skills Market",
     "skillsMarketDesc": "コミュニティ Skills をオンデマンドで検索・有効化。一度設定すれば、すべてのAgentで利用可能。",
-    "skillsMarketDetails": "詳細 >>"
+    "skillsMarketDetails": "詳細 >>",
+    "projectTitle": "What's next in {{name}}?",
+    "projectPill": "Project · {{name}}",
+    "projectModeEyebrow": "You are in a Project workspace",
+    "projectModeBody": "Unlike a regular chat, this space is connected to one local folder. New chats stay grouped here and can use the project files as working context.",
+    "projectModeBadgeFolder": "Folder-backed",
+    "projectModeBadgeChats": "Project chats",
+    "projectModeBadgeFiles": "File-aware work"
+  },
+  "projectHeader": {
+    "label": "プロジェクト {{name}}",
+    "eyebrow": "プロジェクト",
+    "tabs": {
+      "label": "プロジェクトビュー",
+      "chat": "チャット",
+      "files": "ファイル",
+      "context": "コンテキスト",
+      "artifacts": "成果物"
+    }
   },
   "history": {
     "recents": "最近",
@@ -70,9 +88,30 @@
     "conversationsSection": "チャット",
     "removeProjectTitle": "プロジェクトを削除",
     "removeProject": "プロジェクトを削除",
-    "removeProjectConfirm": "プロジェクト「{{name}}」を削除しますか？プロジェクト内の {{count}} 件の会話も削除されます。",
+    "removeProjectConfirm": "Remove project \"{{name}}\" from Forge? Its {{count}} chat(s) and folder files will stay where they are.",
     "newConversationInProject": "このプロジェクト内で新しい会話",
-    "deleting": "削除中..."
+    "deleting": "削除中...",
+    "newProject": "New project",
+    "createProjectTitle": "Create project",
+    "projectNameLabel": "Project name",
+    "projectNamePlaceholder": "Name this project",
+    "projectFolderLabel": "Folder",
+    "projectFolderPlaceholder": "Choose a folder to start your project",
+    "chooseProjectFolder": "Choose folder",
+    "changeProjectFolder": "Change folder",
+    "createProject": "Create project",
+    "projectFolderRequired": "Choose a folder before creating a project.",
+    "projectDuplicateFolder": "This folder is already used by \"{{name}}\".",
+    "openExistingProject": "Open existing project",
+    "createProjectSuccess": "Project created",
+    "createProjectFailed": "Project could not be created",
+    "renameProject": "Rename project",
+    "revealProjectFolder": "Reveal folder",
+    "relinkProjectFolder": "Relink folder",
+    "convertWorkspaceToProject": "Save as project",
+    "removeProjectSuccess": "Project removed. Chats and files were kept.",
+    "removeProjectFailed": "Project could not be removed",
+    "projectActions": "Project actions"
   },
   "historySearch": {
     "tooltip": "メッセージを検索",
@@ -336,6 +375,9 @@
   },
   "workspace": {
     "title": "プロジェクト",
+    "projectMenu": {
+      "trigger": "プロジェクト"
+    },
     "pasteConfirm_title": "ファイルを貼り付け",
     "pasteConfirm_message": "'{{name}}' を選択したフォルダー ({{target}}) に貼り付けてもよろしいですか？",
     "pasteConfirm_paste": "貼り付け",
@@ -561,5 +603,70 @@
       }
     }
   },
-  "notFound": "会話が存在しないか、削除されました"
+  "notFound": "会話が存在しないか、削除されました",
+  "contextHandoff": {
+    "activeFileDescription": "Active handoff",
+    "addPinned": "Add pinned context",
+    "budget": {
+      "healthy": "Context {{percent}}",
+      "watch": "Context watch {{percent}}",
+      "compress": "Compress soon {{percent}}",
+      "too_large": "Context large {{percent}}"
+    },
+    "budgetLabel": "Budget",
+    "command": {
+      "description": "会話コンテキストの管理、圧縮、固定、引き継ぎ",
+      "missingPinText": "/context pin の後に固定する内容を入力してください",
+      "unexpectedArguments": "このコンテキストコマンドには不要な引数があります",
+      "unsupportedSubcommand": "不明なコンテキストコマンドです。open、compact、pin、handoff を使用してください。",
+      "fallbackComplete": "ローカルフォールバックでコンテキストを更新しました",
+      "compactSuccess": "コンテキストを更新しました",
+      "pinSuccess": "コンテキストを固定して更新しました",
+      "failed": "コンテキストコマンドに失敗しました"
+    },
+    "contextMissing": "Context.md could not be read",
+    "continue": "Continue",
+    "continuationName": "{{name}} continuation",
+    "continueTooltip": "Start a new chat with the edited Context.md",
+    "editPinned": "Edit pinned context",
+    "emptyFileDescription": "Not created",
+    "emptyPinned": "No pinned context yet",
+    "export": "Context.md",
+    "exportFailed": "Failed to export Context.md",
+    "exportFirst": "Export Context.md before starting a continuation",
+    "exportSuccess": "Context.md exported",
+    "exportTooltip": "Export this conversation as Context.md",
+    "improve": "Improve",
+    "improvePrompt": "Improve the open Context.md handoff. Rewrite only the synthesis sections: Goal, Current State, Important Decisions, User Preferences, Open Questions, Next Step, and Do Not Forget. Preserve Files / Artifacts, Assistant Setup, and Pinned Context unless the user explicitly asks to change them.",
+    "improveTooltip": "Ask the agent to improve Context.md",
+    "newContext": "New Context",
+    "newContextTooltip": "Replace the active Context.md with a fresh export",
+    "open": "Open",
+    "openTooltip": "Open Context.md in Preview",
+    "pinContentPlaceholder": "Context to keep active in this conversation",
+    "pinnedCount": "Pinned {{count}}",
+    "pinTitlePlaceholder": "Title",
+    "pinnedTitle": "Pinned context",
+    "replaceSuccess": "Context.md replaced",
+    "sectionTitle": "Context",
+    "status": {
+      "updating": "AI で更新中...",
+      "updatedByAi": "AI で更新済み",
+      "rulesFallback": "ルールフォールバックで更新済み",
+      "stale": "更新待ち",
+      "failed": "更新に失敗しました",
+      "edited": "編集済みコンテキスト",
+      "error": {
+        "invalidModelOutput": "AI が予期しない結果を返したため、コンテキストを更新できませんでした。",
+        "providerRequestFailed": "モデルへのリクエストに失敗しました。プロバイダーの接続を確認して再試行してください。",
+        "providerNotFound": "モデルプロバイダーが見つかりません。この会話のモデル設定を確認してください。",
+        "interrupted": "コンテキストの更新が完了前に中断されました。",
+        "unknown": "コンテキストの更新が予期せず失敗しました。再試行してください。"
+      }
+    }
+  },
+  "artifact": {
+    "emptyTitle": "開いているアーティファクトはありません",
+    "emptyHint": "生成されたファイルやドキュメントはここで開きます。"
+  }
 }

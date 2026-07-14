@@ -27,6 +27,9 @@ export interface OpenAIChatCompletionParams {
     };
   }>;
   tool_choice?: 'auto' | 'none' | { type: 'function'; function: { name: string } };
+  max_tokens?: number;
+  temperature?: number;
+  response_format?: { type: 'json_object' };
 }
 
 export interface OpenAIChatCompletionResponse {
@@ -74,6 +77,11 @@ export interface GeminiRequest {
   }>;
   generationConfig?: {
     responseModalities?: string[];
+    maxOutputTokens?: number;
+    temperature?: number;
+    responseMimeType?: string;
+    abortSignal?: AbortSignal;
+    httpOptions?: { timeout?: number };
   };
 }
 
@@ -167,8 +175,15 @@ export class OpenAI2GeminiConverter implements ProtocolConverter<
       contents: [{ role: 'user', parts }],
     };
 
+    const generationConfig: NonNullable<GeminiRequest['generationConfig']> = {};
+    if (params.max_tokens !== undefined) generationConfig.maxOutputTokens = params.max_tokens;
+    if (params.temperature !== undefined) generationConfig.temperature = params.temperature;
+    if (params.response_format?.type === 'json_object') generationConfig.responseMimeType = 'application/json';
+    if (Object.keys(generationConfig).length > 0) request.generationConfig = generationConfig;
+
     if (isImageGeneration) {
       request.generationConfig = {
+        ...request.generationConfig,
         responseModalities: ['IMAGE', 'TEXT'],
       };
     }

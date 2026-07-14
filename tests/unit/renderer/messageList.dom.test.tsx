@@ -7,7 +7,7 @@
 import React, { type PropsWithChildren } from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { IMessageText } from '@/common/chat/chatLib';
+import type { IMessageAcpToolCall, IMessageText, TMessage } from '@/common/chat/chatLib';
 import {
   MessageListLoadingProvider,
   MessageListProvider,
@@ -161,7 +161,7 @@ function Wrapper({
   children,
   messages = [createTextMessage()],
   loading = false,
-}: PropsWithChildren<{ messages?: IMessageText[]; loading?: boolean }>): JSX.Element {
+}: PropsWithChildren<{ messages?: TMessage[]; loading?: boolean }>): JSX.Element {
   return (
     <MessageListLoadingProvider value={loading}>
       <MessagePaginationProvider
@@ -268,6 +268,34 @@ describe('MessageList', () => {
     expect(screen.getByTestId('msgtext-text-a').getAttribute('data-copy-row')).toBe('true');
     // The in-progress final turn withholds its row until streaming ends.
     expect(screen.getByTestId('msgtext-text-b').getAttribute('data-copy-row')).toBe('false');
+  });
+
+  it('does not create a tool summary row for token watermark telemetry', () => {
+    const messages = [
+      {
+        id: 'token-watermark-1',
+        conversation_id: 'conversation-1',
+        type: 'acp_tool_call',
+        content: {
+          sessionId: 'session-1',
+          update: {
+            sessionUpdate: 'tool_call_update',
+            tool_call_id: 'token-watermark-1',
+            status: 'completed',
+            title: 'Token watermark override: provider=0, local_estimate=12520, using=12520',
+            kind: 'info',
+          },
+        },
+        created_at: 1,
+      } satisfies IMessageAcpToolCall,
+    ] as unknown as TMessage[];
+
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={messages}>{children}</Wrapper>,
+    });
+
+    expect(screen.queryByText('tool_summary')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Token watermark override/)).not.toBeInTheDocument();
   });
 
   it('renders the empty slot when there are no messages', () => {

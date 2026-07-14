@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { parseContextCommand } from '@/common/chat/slash/contextCommands';
 import { buildGuidSlashCommands } from '@/common/chat/slash/guidSlashCommands';
 import { buildSkillSlashCommands, mergeSlashCommands } from '@/common/chat/slash/mergeSlashCommands';
 import type { SlashCommandItem } from '@/common/chat/slash/types';
@@ -88,5 +89,76 @@ describe('buildGuidSlashCommands', () => {
     });
 
     expect(commands.map((command) => `${command.source}:${command.name}`)).toEqual(['builtin:open', 'skill:cron']);
+  });
+});
+
+describe('parseContextCommand', () => {
+  it('passes through non-context input', () => {
+    expect(parseContextCommand('hello there')).toEqual({ kind: 'not_context' });
+    expect(parseContextCommand('/open README.md')).toEqual({ kind: 'not_context' });
+    expect(parseContextCommand('/contextual')).toEqual({ kind: 'not_context' });
+  });
+
+  it('parses /context with optional surrounding whitespace', () => {
+    expect(parseContextCommand('/context')).toEqual({ kind: 'valid', command: { action: 'open' } });
+    expect(parseContextCommand('/context open')).toEqual({ kind: 'valid', command: { action: 'open' } });
+    expect(parseContextCommand('  /context   ')).toEqual({ kind: 'valid', command: { action: 'open' } });
+    expect(parseContextCommand('/context open now')).toEqual({
+      kind: 'invalid',
+      code: 'unexpected_arguments',
+      subcommand: 'open',
+    });
+  });
+
+  it('parses compact and handoff subcommands with strict extra-arg rejection', () => {
+    expect(parseContextCommand('/context compact')).toEqual({ kind: 'valid', command: { action: 'compact' } });
+    expect(parseContextCommand('/context\t handoff')).toEqual({ kind: 'valid', command: { action: 'handoff' } });
+    expect(parseContextCommand('/context compact now')).toEqual({
+      kind: 'invalid',
+      code: 'unexpected_arguments',
+      subcommand: 'compact',
+    });
+    expect(parseContextCommand('/context handoff later')).toEqual({
+      kind: 'invalid',
+      code: 'unexpected_arguments',
+      subcommand: 'handoff',
+    });
+  });
+
+  it('parses pin text while preserving internal spacing after command trimming', () => {
+    expect(parseContextCommand('/context pin Keep this note')).toEqual({
+      kind: 'valid',
+      command: { action: 'pin', text: 'Keep this note' },
+    });
+    expect(parseContextCommand('/context   pin   Keep   inner   spacing   ')).toEqual({
+      kind: 'valid',
+      command: { action: 'pin', text: 'Keep   inner   spacing' },
+    });
+  });
+
+  it('rejects pin without non-empty text', () => {
+    expect(parseContextCommand('/context pin')).toEqual({
+      kind: 'invalid',
+      code: 'missing_pin_text',
+      subcommand: 'pin',
+    });
+    expect(parseContextCommand('/context pin   \t')).toEqual({
+      kind: 'invalid',
+      code: 'missing_pin_text',
+      subcommand: 'pin',
+    });
+  });
+
+  it('rejects unsupported subcommands', () => {
+    expect(parseContextCommand('/context export')).toEqual({
+      kind: 'invalid',
+      code: 'unsupported_subcommand',
+      subcommand: 'export',
+    });
+    expect(parseContextCommand('/context compacted')).toEqual({
+      kind: 'invalid',
+      code: 'unsupported_subcommand',
+      subcommand: 'compacted',
+    });
   });
 });

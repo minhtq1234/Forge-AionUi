@@ -174,6 +174,7 @@ const SendBox: React.FC<{
   onSlashBuiltinCommand?: (name: string) => void;
   hasPendingAttachments?: boolean;
   enableBtw?: boolean;
+  enableContextCommand?: boolean;
   allowSendWhileLoading?: boolean;
   compactActions?: boolean;
   selectedWorkspaceItems?: FileSelectionItem[];
@@ -206,6 +207,7 @@ const SendBox: React.FC<{
   onSlashBuiltinCommand,
   hasPendingAttachments = false,
   enableBtw = false,
+  enableContextCommand = false,
   allowSendWhileLoading = false,
   compactActions = false,
   selectedWorkspaceItems,
@@ -435,6 +437,15 @@ const SendBox: React.FC<{
         selectionBehavior: 'insert',
       });
     }
+    if (enableContextCommand) {
+      commands.push({
+        name: 'context',
+        description: t('conversation.contextHandoff.command.description'),
+        kind: 'builtin',
+        source: 'builtin',
+        selectionBehavior: 'insert',
+      });
+    }
     if (onSlashBuiltinCommand) {
       commands.push({
         name: 'open',
@@ -456,7 +467,7 @@ const SendBox: React.FC<{
       // kept intact for a future per-platform re-enable.
     }
     return commands;
-  }, [conversationContext?.conversation_id, enableBtw, onSlashBuiltinCommand, t]);
+  }, [conversationContext?.conversation_id, enableBtw, enableContextCommand, onSlashBuiltinCommand, t]);
 
   // Skills loaded into this conversation are also invokable via slash. We reuse
   // the global skills index (shared SWR key `skills-index`) purely to attach a

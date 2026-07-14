@@ -20,7 +20,7 @@
 
 <p align="center">
   <strong>無料・オープンソースの Cowork アプリ、AI Agents と共に</strong><br>
-  <em>内蔵 Agent | ゼロ設定 | 任意の API キー | マルチ Agent | リモートアクセス | クロスプラットフォーム | 24/7 自動化</em>
+  <em>内蔵 Agent | ゼロ設定 | 任意の API キー | マルチ Agent | ローカル WebUI | クロスプラットフォーム | 24/7 自動化</em>
 </p>
 
 <p align="center">
@@ -60,7 +60,7 @@
 | :------------------------------------ | :----------------------------- | :------------------------------------------------------------------------------------------------------------------- |
 | AI がファイルを操作できる             | 限定的または不可               | **はい — 内蔵 Agent、完全なファイルアクセス**                                                                        |
 | AI がマルチステップタスクを実行できる | 限定的                         | **はい — 自律実行、あなたの承認が必要**                                                                              |
-| スマホからのリモートアクセス          | まれ                           | **WebUI + Telegram / Lark / DingTalk / WeChat**                                                                      |
+| ローカルブラウザーアクセス            | まれ                           | **WebUI**                                                                                                            |
 | スケジュール自動化                    | いいえ                         | **Cron — 24/7 無人運転**                                                                                             |
 | 複数の AI Agent を同時実行            | いいえ                         | **Claude Code、Codex、Qwen Code、Hermes Agent、Snow CLI、Cursor Agent など 13+ 個 — 自動検出、統一インターフェース** |
 | 価格                                  | 無料 / 有料                    | **無料かつオープンソース**                                                                                           |
@@ -225,11 +225,11 @@ AionUi には、事前定義された機能を持つ **21 個のプロフェッ�
 
 ---
 
-## どこからでも Cowork
+## ローカルブラウザーで Forge を使用
 
-_あなたの 24/7 AI アシスタント — あらゆるデバイス、どこからでも AionUi にアクセス。_
+Forge WebUI は、Forge が動作しているこのコンピューターのブラウザーで Forge を開きます。
 
-- **WebUI モード** — スマホ、タブレット、または任意のコンピューターからブラウザ経由でアクセス。LAN、クロスネットワーク、サーバーデプロイメントをサポート。QR コードまたはパスワードログイン。
+- LAN、スマートフォンやタブレット、リモートサーバー、リバースプロキシ、トンネルには対応していません。
 
 - **チャットプラットフォーム統合**
   - **Telegram** — Telegram から直接 AI Agent と Cowork
@@ -239,14 +239,6 @@ _あなたの 24/7 AI アシスタント — あらゆるデバイス、どこ�
   - **WeCom（企業微信）**、**Slack**、**Discord** など、さらに多くのプラットフォームが近日公開
 
 > **設定：** AionUi 設定 → WebUI 設定 → Channel、Bot Token を設定します。
-
-<p align="center">
-  <img src="../../resources/webui-remote.gif" alt="WebUI remote access demo" width="800">
-</p>
-
-<p align="center"><em>リモートでエージェントを監視・操作 — Claude、Gemini、Codex。ブラウザやスマホから、Claude Code remote のように使えます。</em></p>
-
-> [リモートインターネットアクセスのチュートリアル](https://github.com/iOfficeAI/AionUi/wiki/Remote-Internet-Access-Guide-Chinese)
 
 ## ✨ Cowork の実演
 
@@ -596,7 +588,7 @@ brew install aionui
 - [⚙️ LLM 設定ガイド](https://github.com/iOfficeAI/AionUi/wiki/LLM-Configuration) — マルチプラットフォーム AI モデル設定
 - [🤖 マルチ Agent モード設定](https://github.com/iOfficeAI/AionUi/wiki/ACP-Setup) — ターミナル AI Agent を統合
 - [🔌 MCP ツール設定](https://github.com/iOfficeAI/AionUi/wiki/MCP-Configuration-Guide) — Model Context Protocol サーバー設定
-- [🌐 WebUI 設定ガイド](https://github.com/iOfficeAI/AionUi/wiki/WebUI-Configuration-Guide) — 完全な WebUI セットアップと設定チュートリアル
+- [🌐 ローカル WebUI ガイド](../guides/webui.md) — このコンピューターのブラウザーで WebUI を使用するためのガイド
 
 **🎯 使用例**
 

@@ -271,7 +271,7 @@ describe('MessageText attachment paths', () => {
           targetLine: 10,
           targetColumn: 2,
         }),
-        { replace: true }
+        { preview: true }
       );
     });
   });
@@ -307,7 +307,7 @@ describe('MessageText attachment paths', () => {
           targetColumn: 7,
           truncated: false,
         }),
-        { replace: true }
+        { preview: true }
       );
     });
   });
@@ -343,7 +343,7 @@ describe('MessageText attachment paths', () => {
           targetColumn: undefined,
           truncated: false,
         }),
-        { replace: true }
+        { preview: true }
       );
     });
 
@@ -371,7 +371,7 @@ describe('MessageText attachment paths', () => {
           workspace: '/workspace/demo',
           language: 'pdf',
         }),
-        { replace: true }
+        { preview: true }
       );
     });
     expect(ipcBridge.fs.readFile.invoke).not.toHaveBeenCalled();
@@ -399,7 +399,7 @@ describe('MessageText attachment paths', () => {
           language: 'png',
           editable: false,
         }),
-        { replace: true }
+        { preview: true }
       );
     });
     expect(ipcBridge.fs.readFile.invoke).not.toHaveBeenCalled();
@@ -426,7 +426,7 @@ describe('MessageText attachment paths', () => {
           truncated: true,
           editable: false,
         }),
-        { replace: true }
+        { preview: true }
       );
     });
   });

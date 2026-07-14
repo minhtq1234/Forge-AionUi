@@ -33,6 +33,8 @@ import './process/bridge/feedbackBridge';
 import { wasLaunchedAtLogin } from '@process/bridge/applicationBridge';
 import { onLanguageChanged } from './process/bridge/systemSettingsBridge';
 import { setInitialLanguage } from '@process/services/i18n';
+import { installOfficePreviewSession } from '@process/services/office-artifact/officePreviewSession';
+import { disposeOfficeArtifactService } from '@process/services/office-artifact';
 import { setupApplicationMenu } from './process/utils/appMenu';
 import { startWebHost } from '@aionui/web-host';
 import { initializeZoomFactor, setupZoomForWindow } from './process/utils/zoom';
@@ -57,9 +59,10 @@ import {
 } from './process/utils/mainWindowLifecycle';
 import {
   loadUserWebUIConfig,
-  resolveRemoteAccess,
+  resolveElectronRemoteAccessRequestSources,
   resolveWebUIPort,
   restoreDesktopWebUIFromPreferences,
+  warnUnsupportedDesktopRemoteAccess,
 } from './process/utils/webuiConfig';
 import {
   createOrUpdateTray,
@@ -177,7 +180,6 @@ const getSwitchValue = (flag: string): string | undefined => {
 const hasCommand = (cmd: string) => process.argv.includes(cmd);
 
 const isWebUIMode = hasSwitch('webui');
-const isRemoteMode = hasSwitch('remote');
 const isResetPasswordMode = hasCommand('--resetpass');
 const isVersionMode = hasCommand('--version') || hasCommand('-v');
 
@@ -783,6 +785,7 @@ const handleAppReady = async (): Promise<void> => {
   // any content is loaded, so they cover the very first renderer load.
   installWebContentsSecurity();
   installContentSecurityPolicy();
+  installOfficePreviewSession();
   mark('installSecurityGuards');
 
   if (!app.isPackaged) {
@@ -942,9 +945,12 @@ const handleAppReady = async (): Promise<void> => {
       // Config file loaded from user directory
     }
     const resolvedPort = resolveWebUIPort(userConfigInfo.config, getSwitchValue);
-    // Forge desktop-only (D1): resolved but intentionally unused — startWebHost
-    // below is always called with allowRemote: false, regardless of this value.
-    const _allowRemote = resolveRemoteAccess(userConfigInfo.config, isRemoteMode);
+    const remoteAccessRequests = resolveElectronRemoteAccessRequestSources(
+      userConfigInfo.config,
+      hasSwitch('remote'),
+      getSwitchValue('remote')
+    );
+    warnUnsupportedDesktopRemoteAccess(remoteAccessRequests);
     try {
       // Inside Electron (`AionUi --webui` or packaged `aionui-web` mode that
       // launches via the Electron shell), reuse the desktop app's data-dir so
@@ -1176,6 +1182,7 @@ installQuitCleanup({
     disposeCronResumeListener?.();
     disposeCronResumeListener = null;
   },
+  disposeOfficeArtifacts: disposeOfficeArtifactService,
   // Stop aioncore subprocess — backend shutdown kills all agent children
   // transitively (no separate frontend workerTaskManager remains).
   stopBackend: () => backendManager.stop(),

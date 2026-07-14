@@ -79,3 +79,7 @@
     margin-right: 4px;
   }
 }
+.workspace-project-controller,
+.workspace-project-controller > .chat-workspace {
+  display: contents;
+}

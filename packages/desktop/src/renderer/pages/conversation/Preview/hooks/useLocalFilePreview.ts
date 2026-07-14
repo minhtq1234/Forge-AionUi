@@ -71,7 +71,7 @@ export const useLocalFilePreview = (workspace?: string) => {
             targetColumn: reference?.column,
             editable: contentType === 'markdown' || contentType === 'image' || isLargeTextTruncated ? false : undefined,
           },
-          { replace: true }
+          { preview: true }
         );
       } catch {
         openPreview(
@@ -88,7 +88,7 @@ export const useLocalFilePreview = (workspace?: string) => {
             editable: false,
             missingFile: true,
           },
-          { replace: true }
+          { preview: true }
         );
       }
     },

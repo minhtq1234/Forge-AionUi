@@ -1,27 +1,14 @@
 {
-  "historyVersions": "Versiones del historial",
-  "currentFile": "Archivo actual",
   "loading": "Cargando...",
-  "loadHistoryFailed": "Error al cargar el historial",
-  "noHistory": "Sin versiones en el historial",
-  "snapshotSaved": "Instantánea guardada",
-  "snapshotSaveFailed": "Error al guardar la instantánea",
-  "historyLoaded": "Versión del historial cargada",
-  "historyLoadFailed": "Error al cargar la versión del historial",
-  "tooFrequent": "Demasiado frecuente, intenta más tarde",
-  "saveSnapshot": "Guardar instantánea actual",
-  "snapshotNotSupported": "El contenido actual no admite instantáneas",
-  "history": "Historial",
-  "historyNotSupported": "El contenido actual no admite historial",
   "downloadFile": "Descargar archivo",
   "closePreview": "Cerrar vista previa",
   "collapsePanel": "Contraer panel",
   "source": "Fuente",
   "code": "Código",
   "preview": "Vista previa",
+  "split": "Dividir",
   "editor": "Editor",
   "previewEffect": "Vista previa",
-  "snapshot": "Instantánea",
   "downloadMarkdown": "Descargar archivo Markdown",
   "downloadCode": "Descargar archivo {{language}}",
   "downloadDiff": "Descargar archivo Diff",
@@ -66,8 +53,7 @@
   "errors": {
     "missingFilePath": "Falta la ruta del archivo",
     "openWithoutPath": "No se puede abrir: no se proporcionó la ruta del archivo",
-    "conversionFailed": "Error de conversión",
-    "emptySnapshot": "El contenido de la instantánea está vacío"
+    "conversionFailed": "Error de conversión"
   },
   "office": {
     "installLinkText": "Abrir guía de instalación de officecli",
@@ -76,11 +62,68 @@
       "installFailed": "Error al instalar officecli automáticamente. Revisa los registros del backend y reintenta.",
       "portTimeout": "El servicio de vista previa inició pero no estuvo listo a tiempo. Reintenta.",
       "startFailed": "Error al iniciar el servicio de vista previa de Office.",
-      "outsideSandbox": "Este archivo está fuera del sandbox del proyecto actual."
+      "outsideSandbox": "Este archivo está fuera del sandbox del proyecto actual.",
+      "originalSafe": "El archivo original del espacio de trabajo no se modificó."
     },
     "serverInstall": {
       "hint": "Forge se está ejecutando en un servidor. Instala el componente de vista previa en ese servidor y reintenta:",
       "icuNote": "Si sigue sin iniciar, instala la biblioteca ICU en el servidor (Debian/Ubuntu: apt-get install -y libicu-dev)."
+    },
+    "externalEdit": {
+      "editInDefaultApp": "Editar en la aplicación predeterminada",
+      "editInDefaultAppTooltip": "Abrir este archivo del espacio de trabajo en su aplicación predeterminada",
+      "refreshPreview": "Actualizar vista previa",
+      "refreshPreviewTooltip": "Volver a cargar esta vista previa de Forge desde el archivo del espacio de trabajo",
+      "revealInFolder": "Mostrar en la carpeta",
+      "revealInFolderTooltip": "Mostrar este archivo del espacio de trabajo en su carpeta",
+      "status": {
+        "ready": "Listo para editar en la aplicación predeterminada",
+        "opening": "Abriendo la aplicación predeterminada...",
+        "editingExternally": "Editando en una aplicación externa",
+        "refreshing": "Actualizando vista previa...",
+        "refreshed": "Vista previa actualizada",
+        "openFailed": "No se pudo abrir la aplicación predeterminada",
+        "refreshFailed": "No se pudo actualizar la vista previa. El archivo puede ser más reciente que esta vista."
+      }
+    },
+    "editor": {
+      "editSelection": "Editar selección",
+      "formulaBar": "Barra de fórmulas",
+      "apply": "Aplicar",
+      "cancel": "Cancelar",
+      "bold": "Negrita",
+      "italic": "Cursiva",
+      "underline": "Subrayado",
+      "undo": "Deshacer",
+      "openDesktop": "Abrir en la aplicación de escritorio",
+      "openedDesktop": "Abierto en la aplicación de escritorio",
+      "more": "Más",
+      "reveal": "Mostrar en la carpeta",
+      "refresh": "Actualizar vista previa",
+      "saving": "Guardando",
+      "saved": "Guardado en el espacio de trabajo",
+      "saveFailed": "Error al guardar",
+      "unsavedChanges": "Cambios sin guardar",
+      "fileChanged": "El archivo se modificó en otro lugar",
+      "refreshing": "Actualizando vista previa",
+      "previewOutdated": "La vista previa puede estar desactualizada",
+      "inspecting": "Preparando controles de edición...",
+      "selectWordToEdit": "Selecciona texto del documento para editarlo",
+      "selectExcelToEdit": "Selecciona una celda para editarla",
+      "readyToEdit": "El contenido seleccionado está listo para editarse",
+      "conflictRecovery": "Tu edición no se guardó y sigue aquí. El archivo del espacio de trabajo está seguro.",
+      "saveFailureRecovery": "Tu edición sigue aquí y el archivo del espacio de trabajo no se modificó.",
+      "copyDraft": "Copiar borrador",
+      "refreshLatest": "Cargar la versión más reciente",
+      "requestPlaceholder": "Describe el cambio que quieres que haga Forge.",
+      "askWordContext": "Archivo: {{fileName}}\nPárrafo: {{path}}\nTexto seleccionado: {{text}}\nSolicitud: {{placeholder}}",
+      "askExcelContext": "Archivo: {{fileName}}\nRango: {{range}}\nCeldas:\n{{cells}}\nSolicitud: {{placeholder}}"
+    },
+    "viewer": {
+      "zoomOut": "Alejar",
+      "zoomIn": "Acercar",
+      "resetZoom": "Restablecer zoom",
+      "fitWidth": "Ajustar al ancho"
     }
   },
   "word": {

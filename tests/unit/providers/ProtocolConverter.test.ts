@@ -112,6 +112,29 @@ describe('OpenAI2AnthropicConverter', () => {
       expect(result.stop_sequences).toEqual(['STOP', 'END']);
     });
 
+    it('forces an Anthropic tool call when OpenAI JSON mode is requested', () => {
+      const converter = new OpenAI2AnthropicConverter();
+      const result = converter.convertRequest({
+        model: 'claude-sonnet-4',
+        messages: [{ role: 'user', content: 'Return a JSON object.' }],
+        response_format: { type: 'json_object' },
+      });
+
+      expect(result.tool_choice).toEqual({
+        type: 'tool',
+        name: '__aionui_json_response',
+        disable_parallel_tool_use: true,
+      });
+      expect(result.tools).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: '__aionui_json_response',
+            input_schema: expect.objectContaining({ type: 'object' }),
+          }),
+        ])
+      );
+    });
+
     it('converts single stop string to array', () => {
       const converter = new OpenAI2AnthropicConverter();
       const input: OpenAIChatCompletionParams = {
@@ -169,7 +192,7 @@ describe('OpenAI2AnthropicConverter', () => {
       const result = converter.convertRequest(input);
 
       expect(result.messages[0].content).toBeInstanceOf(Array);
-      const content = result.messages[0].content as any[];
+      const content = result.messages[0].content as Array<{ type: string }>;
       expect(content).toHaveLength(2);
       expect(content[0].type).toBe('text');
       expect(content[1].type).toBe('image');
@@ -322,6 +345,35 @@ describe('OpenAI2AnthropicConverter', () => {
       const result = converter.convertResponse(anthropicResponse, 'gpt-4');
 
       expect(result.choices[0].message.content).toBe('First part. Second part.');
+    });
+
+    it('serializes the forced JSON tool input as OpenAI message content', () => {
+      const converter = new OpenAI2AnthropicConverter();
+      const result = converter.convertResponse(
+        {
+          id: 'msg_json',
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tool_json',
+              name: '__aionui_json_response',
+              input: { goal: 'Ship context management.', next_steps: ['Verify it.'] },
+            },
+          ],
+          model: 'claude-sonnet-4',
+          stop_reason: 'tool_use',
+          stop_sequence: null,
+          usage: { input_tokens: 10, output_tokens: 5 },
+        },
+        'claude-sonnet-4'
+      );
+
+      expect(JSON.parse(result.choices[0].message.content)).toEqual({
+        goal: 'Ship context management.',
+        next_steps: ['Verify it.'],
+      });
     });
   });
 

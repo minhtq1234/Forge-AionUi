@@ -17,7 +17,25 @@
     "quickActionStar": "Gefällt dir Forge? Gib uns einen Stern!",
     "skillsMarket": "Forge Skills-Markt",
     "skillsMarketDesc": "Community-Skills auf Abruf suchen und aktivieren. Einmal konfigurieren, für alle Agenten verfügbar.",
-    "skillsMarketDetails": "Mehr anzeigen >>"
+    "skillsMarketDetails": "Mehr anzeigen >>",
+    "projectTitle": "What's next in {{name}}?",
+    "projectPill": "Project · {{name}}",
+    "projectModeEyebrow": "You are in a Project workspace",
+    "projectModeBody": "Unlike a regular chat, this space is connected to one local folder. New chats stay grouped here and can use the project files as working context.",
+    "projectModeBadgeFolder": "Folder-backed",
+    "projectModeBadgeChats": "Project chats",
+    "projectModeBadgeFiles": "File-aware work"
+  },
+  "projectHeader": {
+    "label": "Projekt {{name}}",
+    "eyebrow": "PROJEKT",
+    "tabs": {
+      "label": "Projektansichten",
+      "chat": "Chat",
+      "files": "Dateien",
+      "context": "Kontext",
+      "artifacts": "Artefakte"
+    }
   },
   "history": {
     "recents": "Zuletzt",
@@ -70,9 +88,30 @@
     "conversationsSection": "Chats",
     "removeProjectTitle": "Projekt entfernen",
     "removeProject": "Projekt entfernen",
-    "removeProjectConfirm": "Projekt \"{{name}}\" entfernen? Die {{count}} zugehörige(n) Unterhaltung(en) werden ebenfalls entfernt.",
+    "removeProjectConfirm": "Remove project \"{{name}}\" from Forge? Its {{count}} chat(s) and folder files will stay where they are.",
     "newConversationInProject": "Neuer Chat in diesem Projekt",
-    "deleting": "Wird gelöscht..."
+    "deleting": "Wird gelöscht...",
+    "newProject": "New project",
+    "createProjectTitle": "Create project",
+    "projectNameLabel": "Project name",
+    "projectNamePlaceholder": "Name this project",
+    "projectFolderLabel": "Folder",
+    "projectFolderPlaceholder": "Choose a folder to start your project",
+    "chooseProjectFolder": "Choose folder",
+    "changeProjectFolder": "Change folder",
+    "createProject": "Create project",
+    "projectFolderRequired": "Choose a folder before creating a project.",
+    "projectDuplicateFolder": "This folder is already used by \"{{name}}\".",
+    "openExistingProject": "Open existing project",
+    "createProjectSuccess": "Project created",
+    "createProjectFailed": "Project could not be created",
+    "renameProject": "Rename project",
+    "revealProjectFolder": "Reveal folder",
+    "relinkProjectFolder": "Relink folder",
+    "convertWorkspaceToProject": "Save as project",
+    "removeProjectSuccess": "Project removed. Chats and files were kept.",
+    "removeProjectFailed": "Project could not be removed",
+    "projectActions": "Project actions"
   },
   "historySearch": {
     "tooltip": "Nachrichten durchsuchen",
@@ -336,6 +375,9 @@
   },
   "workspace": {
     "title": "Arbeitsbereich",
+    "projectMenu": {
+      "trigger": "Projekt"
+    },
     "pasteConfirm_title": "Dateien einfügen",
     "pasteConfirm_message": "Soll '{{name}}' wirklich in den ausgewählten Ordner ({{target}}) eingefügt werden?",
     "pasteConfirm_paste": "Einfügen",
@@ -562,5 +604,70 @@
       }
     }
   },
-  "notFound": "Unterhaltung nicht gefunden oder wurde gelöscht"
+  "notFound": "Unterhaltung nicht gefunden oder wurde gelöscht",
+  "contextHandoff": {
+    "activeFileDescription": "Active handoff",
+    "addPinned": "Add pinned context",
+    "budget": {
+      "healthy": "Context {{percent}}",
+      "watch": "Context watch {{percent}}",
+      "compress": "Compress soon {{percent}}",
+      "too_large": "Context large {{percent}}"
+    },
+    "budgetLabel": "Budget",
+    "command": {
+      "description": "Konversationskontext verwalten, komprimieren, anheften oder übergeben",
+      "missingPinText": "Text nach /context pin hinzufügen",
+      "unexpectedArguments": "Dieser Kontextbefehl enthält unerwartete Argumente",
+      "unsupportedSubcommand": "Unbekannter Kontextbefehl. Verwende open, compact, pin oder handoff.",
+      "fallbackComplete": "Kontext mit lokaler Rückfallebene aktualisiert",
+      "compactSuccess": "Kontext aktualisiert",
+      "pinSuccess": "Kontext angeheftet und aktualisiert",
+      "failed": "Kontextbefehl fehlgeschlagen"
+    },
+    "contextMissing": "Context.md could not be read",
+    "continue": "Continue",
+    "continuationName": "{{name}} continuation",
+    "continueTooltip": "Start a new chat with the edited Context.md",
+    "editPinned": "Edit pinned context",
+    "emptyFileDescription": "Not created",
+    "emptyPinned": "No pinned context yet",
+    "export": "Context.md",
+    "exportFailed": "Failed to export Context.md",
+    "exportFirst": "Export Context.md before starting a continuation",
+    "exportSuccess": "Context.md exported",
+    "exportTooltip": "Export this conversation as Context.md",
+    "improve": "Improve",
+    "improvePrompt": "Improve the open Context.md handoff. Rewrite only the synthesis sections: Goal, Current State, Important Decisions, User Preferences, Open Questions, Next Step, and Do Not Forget. Preserve Files / Artifacts, Assistant Setup, and Pinned Context unless the user explicitly asks to change them.",
+    "improveTooltip": "Ask the agent to improve Context.md",
+    "newContext": "New Context",
+    "newContextTooltip": "Replace the active Context.md with a fresh export",
+    "open": "Open",
+    "openTooltip": "Open Context.md in Preview",
+    "pinContentPlaceholder": "Context to keep active in this conversation",
+    "pinnedCount": "Pinned {{count}}",
+    "pinTitlePlaceholder": "Title",
+    "pinnedTitle": "Pinned context",
+    "replaceSuccess": "Context.md replaced",
+    "sectionTitle": "Context",
+    "status": {
+      "updating": "Wird mit KI aktualisiert...",
+      "updatedByAi": "Von KI aktualisiert",
+      "rulesFallback": "Mit regelbasierter Rückfallebene aktualisiert",
+      "stale": "Aktualisierung ausstehend",
+      "failed": "Aktualisierung fehlgeschlagen",
+      "edited": "Bearbeiteter Kontext",
+      "error": {
+        "invalidModelOutput": "Die KI hat ein unerwartetes Ergebnis geliefert, daher wurde der Kontext nicht aktualisiert.",
+        "providerRequestFailed": "Die Modellanfrage ist fehlgeschlagen. Prüfen Sie die Anbieterverbindung und versuchen Sie es erneut.",
+        "providerNotFound": "Der Modellanbieter wurde nicht gefunden. Prüfen Sie die Modelleinstellungen dieser Unterhaltung.",
+        "interrupted": "Die Kontextaktualisierung wurde vor dem Abschluss unterbrochen.",
+        "unknown": "Die Kontextaktualisierung ist unerwartet fehlgeschlagen. Bitte erneut versuchen."
+      }
+    }
+  },
+  "artifact": {
+    "emptyTitle": "Kein Artefakt geöffnet",
+    "emptyHint": "Generierte Dateien und Dokumente werden hier geöffnet."
+  }
 }

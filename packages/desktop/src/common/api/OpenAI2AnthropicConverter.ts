@@ -7,6 +7,8 @@
 import type { ProtocolConverter, ConverterConfig } from './ProtocolConverter';
 import type Anthropic from '@anthropic-ai/sdk';
 
+const JSON_RESPONSE_TOOL_NAME = '__aionui_json_response';
+
 // OpenAI types - compatible with actual OpenAI SDK types
 export interface OpenAIChatCompletionParams {
   model: string;
@@ -34,6 +36,7 @@ export interface OpenAIChatCompletionParams {
     };
   }>;
   tool_choice?: 'auto' | 'none' | { type: 'function'; function: { name: string } };
+  response_format?: { type: 'json_object' };
 }
 
 export interface OpenAIChatCompletionResponse {
@@ -130,13 +133,31 @@ export class OpenAI2AnthropicConverter implements ProtocolConverter<
       request.stop_sequences = Array.isArray(params.stop) ? params.stop : [params.stop];
     }
 
-    // Convert tools if present
-    if (params.tools && params.tools.length > 0) {
-      request.tools = params.tools.map((tool) => ({
-        name: tool.function.name,
-        description: tool.function.description || '',
-        input_schema: (tool.function.parameters as Anthropic.Tool.InputSchema) || { type: 'object', properties: {} },
-      }));
+    const tools: Anthropic.Tool[] = (params.tools ?? []).map((tool) => ({
+      name: tool.function.name,
+      description: tool.function.description || '',
+      input_schema: (tool.function.parameters as Anthropic.Tool.InputSchema) || { type: 'object', properties: {} },
+    }));
+
+    if (params.response_format?.type === 'json_object') {
+      tools.push({
+        name: JSON_RESPONSE_TOOL_NAME,
+        description: 'Return the requested response as one JSON object.',
+        input_schema: { type: 'object', properties: {}, additionalProperties: true },
+      });
+      request.tool_choice = {
+        type: 'tool',
+        name: JSON_RESPONSE_TOOL_NAME,
+        disable_parallel_tool_use: true,
+      };
+    } else if (params.tool_choice === 'auto' || params.tool_choice === 'none') {
+      request.tool_choice = { type: params.tool_choice };
+    } else if (params.tool_choice?.type === 'function') {
+      request.tool_choice = { type: 'tool', name: params.tool_choice.function.name };
+    }
+
+    if (tools.length > 0) {
+      request.tools = tools;
     }
 
     return request;
@@ -153,6 +174,9 @@ export class OpenAI2AnthropicConverter implements ProtocolConverter<
     for (const block of anthropicResponse.content) {
       if (block.type === 'text') {
         content += block.text;
+      }
+      if (block.type === 'tool_use' && block.name === JSON_RESPONSE_TOOL_NAME) {
+        content += JSON.stringify(block.input);
       }
       // Note: Anthropic doesn't return images in the same way as image generation models
     }

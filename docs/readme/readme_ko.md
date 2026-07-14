@@ -20,7 +20,7 @@
 
 <p align="center">
   <strong>무료 오픈소스 Cowork 앱, AI Agents와 함께</strong><br>
-  <em>내장 Agent | 제로 설정 | 모든 API 키 | 멀티 Agent | 원격 접근 | 크로스 플랫폼 | 24/7 자동화</em>
+  <em>내장 Agent | 제로 설정 | 모든 API 키 | 멀티 Agent | 로컬 WebUI | 크로스 플랫폼 | 24/7 자동화</em>
 </p>
 
 <p align="center">
@@ -60,7 +60,7 @@
 | :-------------------------------- | :---------------------- | :------------------------------------------------------------------------------------------------------------- |
 | AI가 파일을 조작할 수 있음        | 제한적 또는 불가        | **예 — 내장 Agent, 완전한 파일 접근**                                                                          |
 | AI가 다단계 작업을 실행할 수 있음 | 제한적                  | **예 — 자율 실행, 승인 필요**                                                                                  |
-| 스마트폰에서 원격 접근            | 거의 없음               | **WebUI + Telegram / Lark / DingTalk**                                                                         |
+| 로컬 브라우저 접속                | 거의 없음               | **WebUI**                                                                                                      |
 | 스케줄 자동화                     | 아니오                  | **Cron — 24/7 무인 운영**                                                                                      |
 | 여러 AI Agent 동시 실행           | 아니오                  | **Claude Code, Codex, Qwen Code, Hermes Agent, Snow CLI, Cursor Agent 등 13+ 개 — 자동 감지, 통합 인터페이스** |
 | 가격                              | 무료 / 유료             | **무료 및 오픈소스**                                                                                           |
@@ -212,11 +212,11 @@ AionUi는 사전 정의된 기능을 가진 **21개의 전문 어시스턴트**�
 
 ---
 
-## 어디서나 Cowork
+## 로컬 브라우저에서 Forge 사용
 
-_여러분의 24/7 AI 어시스턴트 — 어떤 기기, 어디서나 AionUi에 접근하세요._
+Forge WebUI는 Forge가 실행 중인 이 컴퓨터의 브라우저에서 Forge를 엽니다.
 
-- **WebUI 모드** — 스마트폰, 태블릿 또는 어떤 컴퓨터에서든 브라우저를 통해 접근. LAN, 크로스 네트워크 및 서버 배포를 지원. QR 코드 또는 비밀번호 로그인.
+- LAN, 휴대폰 또는 태블릿, 원격 서버, 리버스 프록시, 터널을 지원하지 않습니다.
 
 - **채팅 플랫폼 통합**
   - **Telegram** — Telegram에서 직접 AI Agent와 Cowork
@@ -226,14 +226,6 @@ _여러분의 24/7 AI 어시스턴트 — 어떤 기기, 어디서나 AionUi에 
   - **WeCom(企业微信)**, **Slack**, **Discord** 등 더 많은 플랫폼이 곧 출시됩니다
 
 > **설정:** AionUi 설정 → WebUI 설정 → Channel, Bot Token을 구성하세요.
-
-<p align="center">
-  <img src="../../resources/webui-remote.gif" alt="WebUI remote access demo" width="800">
-</p>
-
-<p align="center"><em>에이전트 원격 감시 및 제어 — Claude, Gemini, Codex. 브라우저나 휴대폰에서 Claude Code remote처럼 사용하세요.</em></p>
-
-> [원격 인터넷 접근 튜토리얼](https://github.com/iOfficeAI/AionUi/wiki/Remote-Internet-Access-Guide-Chinese)
 
 ## ✨ Cowork 실연
 
@@ -583,7 +575,7 @@ brew install aionui
 - [⚙️ LLM 구성 가이드](https://github.com/iOfficeAI/AionUi/wiki/LLM-Configuration) — 멀티 플랫폼 AI 모델 구성
 - [🤖 멀티 Agent 모드 설정](https://github.com/iOfficeAI/AionUi/wiki/ACP-Setup) — 터미널 AI Agent 통합
 - [🔌 MCP 도구 구성](https://github.com/iOfficeAI/AionUi/wiki/MCP-Configuration-Guide) — Model Context Protocol 서버 설정
-- [🌐 WebUI 구성 가이드](https://github.com/iOfficeAI/AionUi/wiki/WebUI-Configuration-Guide) — 완전한 WebUI 설정 및 구성 튜토리얼
+- [🌐 로컬 WebUI 가이드](../guides/webui.md) — 이 컴퓨터의 브라우저에서 WebUI를 사용하는 안내서
 
 **🎯 사용 사례**
 

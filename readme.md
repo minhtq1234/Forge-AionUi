@@ -20,7 +20,7 @@
 
 <p align="center">
   <strong>A free, open-source, Cowork app with AI Agents</strong><br>
-  <em>Built-in Agent | Zero Setup | Any API Key | Multi-Agents | Remote Access | Cross-Platform | 24/7 Automation</em>
+  <em>Built-in Agent | Zero Setup | Any API Key | Multi-Agents | Local WebUI | Cross-Platform | 24/7 Automation</em>
 </p>
 
 <p align="center">
@@ -60,7 +60,7 @@
 | :------------------------------ | :-------------------------- | :---------------------------------------------------------------------------------------------------------------------- |
 | AI can operate on your files    | Limited or No               | **Yes — built-in agent with full file access**                                                                          |
 | AI can execute multi-step tasks | Limited                     | **Yes — autonomous with your approval**                                                                                 |
-| Remote access from phone        | Rarely                      | **WebUI + Telegram / Lark / DingTalk / WeChat**                                                                         |
+| Local browser access            | Rarely                      | **WebUI**                                                                                                               |
 | Scheduled automation            | No                          | **Cron — 24/7 unattended**                                                                                              |
 | Multiple AI Agents at once      | No                          | **Claude Code, Codex, Qwen Code, Hermes Agent, Snow CLI, Cursor Agent and 13+ more — auto-detected, unified interface** |
 | Price                           | Free / Paid                 | **Free & Open Source**                                                                                                  |
@@ -268,11 +268,11 @@ AionUi includes **21 professional assistants** with predefined capabilities, ext
 
 ---
 
-## Cowork from Anywhere
+## Use Forge in a Local Browser
 
-_Your 24/7 AI assistant — access AionUi from any device, anywhere._
+Forge WebUI opens Forge in a browser on this computer.
 
-- **WebUI Mode** — access via browser from phone, tablet, or any computer. Supports LAN, cross-network, and server deployment. QR code or password login.
+- It does not support LAN, phones or tablets, remote servers, reverse proxies, or tunnels.
 
 - **Chat Platform Integration**
   - **Telegram** — Cowork with your AI agent directly from Telegram
@@ -282,14 +282,6 @@ _Your 24/7 AI assistant — access AionUi from any device, anywhere._
   - **WeCom (企业微信)**, **Slack**, **Discord** and more platforms coming soon
 
 > **Setup:** AionUi Settings → WebUI Settings → Channel, configure the Bot Token.
-
-<p align="center">
-  <img src="./resources/webui-remote.gif" alt="WebUI remote access demo" width="800">
-</p>
-
-<p align="center"><em>Remote control &amp; monitor your agent — Claude, Gemini, Codex. Use from browser or phone, same as Claude Code remote.</em></p>
-
-> [Remote Internet Access Tutorial](https://github.com/iOfficeAI/AionUi/wiki/Remote-Internet-Access-Guide-Chinese)
 
 ## ✨ Cowork in Action
 
@@ -551,8 +543,8 @@ A: AionUi is completely free and open source. You only pay for the API usage of 
 </details>
 
 <details>
-<summary><strong>Q: Can I run AionUi on a server (headless)?</strong></summary>
-A: Yes — AionUi WebUI mode runs as a standalone HTTP server. See the WebUI section above for setup instructions.
+<summary><strong>Q: Can I run Forge WebUI on a server (headless)?</strong></summary>
+A: No. Forge WebUI supports browser access only on the same computer where Forge is running.
 </details>
 
 <details>
@@ -644,7 +636,7 @@ brew install aionui
 - [⚙️ LLM Configuration Guide](https://github.com/iOfficeAI/AionUi/wiki/LLM-Configuration) — Multi-platform AI model configuration
 - [🤖 Multi-Agent Mode Setup](https://github.com/iOfficeAI/AionUi/wiki/ACP-Setup) — Integrate terminal AI agents
 - [🔌 MCP Tool Configuration](https://github.com/iOfficeAI/AionUi/wiki/MCP-Configuration-Guide) — Model Context Protocol server setup
-- [🌐 WebUI Configuration Guide](https://github.com/iOfficeAI/AionUi/wiki/WebUI-Configuration-Guide) — Complete WebUI setup and configuration tutorial
+- [🌐 Local WebUI Guide](./docs/guides/webui.md) — Guide to using WebUI in a browser on this computer
 
 **🎯 Use Cases**
 

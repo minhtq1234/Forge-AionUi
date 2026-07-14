@@ -6,26 +6,41 @@
 
 import type { IDirOrFile } from '@/common/adapter/ipcBridge';
 import ChatWorkspace from '@/renderer/pages/conversation/Workspace';
-import type { NodeInstance } from '@arco-design/web-react/es/Tree/interface';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-type TreeProps = {
-  onSelect?: (_keys: string[], extra: { node: NodeInstance }) => void;
-};
-
 const mocks = vi.hoisted(() => ({
+  compactContext: vi.fn(),
+  emit: vi.fn(),
   ensureNodeSelected: vi.fn(),
+  getConversationOrNull: vi.fn(),
+  handoffConversationContext: vi.fn(),
   handlePreviewFile: vi.fn(),
+  onSearch: vi.fn(),
+  refreshChanges: vi.fn(),
+  setContextMenu: vi.fn(),
+  setSearchText: vi.fn(),
+  listeners: new Map<string, (payload: unknown) => void>(),
+  messageError: vi.fn(),
+  messageSuccess: vi.fn(),
+  messageWarning: vi.fn(),
+  navigate: vi.fn(),
+  openPreview: vi.fn(),
+  pinConversationContext: vi.fn(),
+  readFile: vi.fn(),
   writeRendererLogInvoke: vi.fn(),
+  useContextCompaction: vi.fn(() => ({ compact: mocks.compactContext, isCompacting: false })),
 }));
-let latestTreeProps: TreeProps | null = null;
+let titlebarProjectSlot: HTMLDivElement | null = null;
+let workspaceTreeCollapsed = false;
+let workspaceSnapshotInfo: { branch: string } | null = null;
 
 const selectedFile: IDirOrFile = {
-  name: 'financial-wechat-miniapp.html',
-  relativePath: 'financial-wechat-miniapp.html',
-  fullPath: '/workspace/financial-wechat-miniapp.html',
+  name: 'financial-plan.xlsx',
+  relativePath: 'financial-plan.xlsx',
+  fullPath: '/workspace/financial-plan.xlsx',
+  isDir: false,
   isFile: true,
 };
 
@@ -35,10 +50,17 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => mocks.navigate,
+}));
+
 vi.mock('@/common', () => ({
   ipcBridge: {
     conversation: {
       getWorkspace: { invoke: vi.fn() },
+    },
+    fs: {
+      readFile: { invoke: mocks.readFile },
     },
     application: {
       writeRendererLog: { invoke: mocks.writeRendererLogInvoke },
@@ -51,18 +73,73 @@ vi.mock('@/renderer/components/layout/FlexFullContainer', () => ({
 }));
 
 vi.mock('@arco-design/web-react', () => ({
+  Button: ({
+    children,
+    className,
+    onClick,
+    onContextMenu,
+    role,
+    ...props
+  }: React.PropsWithChildren<{
+    className?: string;
+    onClick?: React.MouseEventHandler<HTMLButtonElement>;
+    onContextMenu?: React.MouseEventHandler<HTMLButtonElement>;
+    role?: string;
+  }>) => (
+    <button className={className} onClick={onClick} onContextMenu={onContextMenu} role={role} {...props}>
+      {children}
+    </button>
+  ),
+  Collapse: Object.assign(
+    ({ children }: { children: React.ReactNode }) => <div data-testid='workspace-sections'>{children}</div>,
+    {
+      Item: ({ header, name, children }: { header: React.ReactNode; name: string; children: React.ReactNode }) => (
+        <section data-testid={`workspace-section-${name}`}>
+          <div>{header}</div>
+          {children}
+        </section>
+      ),
+    }
+  ),
   Empty: () => <div data-testid='empty' />,
+  Input: ({
+    className,
+    onChange,
+    placeholder,
+    value,
+  }: {
+    className?: string;
+    onChange?: (value: string) => void;
+    placeholder?: string;
+    value?: string;
+  }) => (
+    <input
+      className={className}
+      onChange={(event) => onChange?.(event.currentTarget.value)}
+      placeholder={placeholder}
+      value={value}
+    />
+  ),
   Message: {
-    useMessage: () => [{ error: vi.fn(), success: vi.fn(), info: vi.fn() }, null],
-  },
-  Tree: (props: TreeProps) => {
-    latestTreeProps = props;
-    return <div data-testid='workspace-tree' />;
+    useMessage: () => [
+      {
+        error: mocks.messageError,
+        success: mocks.messageSuccess,
+        warning: mocks.messageWarning,
+        info: vi.fn(),
+      },
+      null,
+    ],
   },
 }));
 
 vi.mock('@icon-park/react', () => ({
+  BranchOne: () => <span />,
+  Down: () => <span />,
+  FileText: () => <span />,
+  FolderOpen: () => <span />,
   Right: () => <span />,
+  Search: () => <span />,
 }));
 
 vi.mock('@/renderer/hooks/context/LayoutContext', () => ({
@@ -71,13 +148,24 @@ vi.mock('@/renderer/hooks/context/LayoutContext', () => ({
 
 vi.mock('@/renderer/pages/conversation/Preview', () => ({
   usePreviewContext: () => ({
-    openPreview: vi.fn(),
+    openPreview: mocks.openPreview,
+  }),
+}));
+
+vi.mock('@/renderer/pages/conversation/utils/conversationCache', () => ({
+  getConversationOrNull: mocks.getConversationOrNull,
+}));
+
+vi.mock('@/renderer/utils/emitter', () => ({
+  emitter: { emit: mocks.emit },
+  useAddEventListener: vi.fn((event: string, listener: (payload: unknown) => void) => {
+    mocks.listeners.set(event, listener);
   }),
 }));
 
 vi.mock('@/renderer/pages/conversation/Workspace/hooks/useWorkspaceCollapse', () => ({
   useWorkspaceCollapse: () => ({
-    isWorkspaceCollapsed: false,
+    isWorkspaceCollapsed: workspaceTreeCollapsed,
     setIsWorkspaceCollapsed: vi.fn(),
   }),
 }));
@@ -120,8 +208,9 @@ vi.mock('@/renderer/pages/conversation/Workspace/hooks/useFileChanges', () => ({
     staged: [],
     unstaged: [],
     loading: false,
-    snapshotInfo: null,
-    refreshChanges: vi.fn(),
+    snapshotInfo: workspaceSnapshotInfo,
+    changeCount: 0,
+    refreshChanges: mocks.refreshChanges,
     stageFile: vi.fn(),
     stageAll: vi.fn(),
     unstageFile: vi.fn(),
@@ -152,7 +241,8 @@ vi.mock('@/renderer/pages/conversation/Workspace/hooks/useWorkspaceSearch', () =
     showSearch: false,
     searchText: '',
     setShowSearch: vi.fn(),
-    setSearchText: vi.fn(),
+    setSearchText: mocks.setSearchText,
+    onSearch: mocks.onSearch,
   }),
 }));
 
@@ -163,7 +253,7 @@ vi.mock('@/renderer/pages/conversation/Workspace/hooks/useWorkspaceModals', () =
     deleteModal: { visible: false, target: null, loading: false },
     pasteConfirm: { visible: false, file_name: '', filesToPaste: [], doNotAsk: false, targetFolder: null },
     renameLoading: false,
-    setContextMenu: vi.fn(),
+    setContextMenu: mocks.setContextMenu,
     setRenameModal: vi.fn(),
     setDeleteModal: vi.fn(),
     setPasteConfirm: vi.fn(),
@@ -192,7 +282,8 @@ vi.mock('@/renderer/pages/conversation/Workspace/components/WorkspaceTabBar', ()
 }));
 
 vi.mock('@/renderer/pages/conversation/Workspace/components/WorkspaceContextMenu', () => ({
-  default: () => null,
+  default: ({ visible, node }: { visible: boolean; node: IDirOrFile | null }) =>
+    visible ? <div data-testid='workspace-context-menu'>{node?.name}</div> : null,
 }));
 
 vi.mock('@/renderer/pages/conversation/Workspace/components/WorkspaceDialogs', () => ({
@@ -204,38 +295,76 @@ vi.mock('@/renderer/pages/conversation/Workspace/components/PasteConfirmModal', 
 }));
 
 vi.mock('@/renderer/pages/conversation/Workspace/components/FileChangeList', () => ({
-  default: () => null,
+  default: () => <div data-testid='file-change-list' />,
 }));
 
 vi.mock('@/renderer/pages/conversation/Workspace/components/FileTypeIcon', () => ({
   default: () => <span data-testid='file-type-icon' />,
 }));
 
+vi.mock('@/renderer/pages/conversation/contextHandoff/ContextHandoffPanel', () => ({
+  default: ({
+    conversationId,
+    onPreviewOpen,
+    workspace,
+  }: {
+    conversationId: string;
+    onPreviewOpen?: () => void;
+    workspace: string;
+  }) => (
+    <div data-testid='context-handoff-panel'>
+      {conversationId}:{workspace}
+      <button onClick={onPreviewOpen}>open context preview</button>
+    </div>
+  ),
+}));
+
+vi.mock('@/renderer/pages/conversation/contextHandoff/useContextCompaction', () => ({
+  useContextCompaction: mocks.useContextCompaction,
+  handoffConversationContext: mocks.handoffConversationContext,
+  pinConversationContext: mocks.pinConversationContext,
+}));
+
 describe('ChatWorkspace preview selection', () => {
   beforeEach(() => {
-    latestTreeProps = null;
+    titlebarProjectSlot = document.createElement('div');
+    titlebarProjectSlot.id = 'app-titlebar-project-slot';
+    document.body.append(titlebarProjectSlot);
+    workspaceTreeCollapsed = false;
+    workspaceSnapshotInfo = { branch: 'main' };
     vi.clearAllMocks();
+    mocks.listeners.clear();
+    mocks.compactContext.mockResolvedValue({
+      fileName: 'Context.md',
+      filePath: '/workspace/Context.md',
+      markdown: '# Context',
+      source: 'llm',
+    });
+    mocks.getConversationOrNull.mockResolvedValue(null);
+    mocks.handoffConversationContext.mockResolvedValue({
+      conversation: { id: 'conversation-2' },
+      markdown: '# Context',
+    });
+    mocks.pinConversationContext.mockResolvedValue({ pin: { id: 'pin-1' }, compaction: null });
+    mocks.readFile.mockResolvedValue('# Context');
   });
 
   afterEach(() => {
     cleanup();
+    titlebarProjectSlot?.remove();
+    titlebarProjectSlot = null;
   });
 
-  it('opens preview when the already highlighted file is clicked again', () => {
+  it('opens an artifact from the titlebar Project Files flyout', () => {
     render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' />);
 
-    expect(screen.getByTestId('workspace-tree')).toBeInTheDocument();
+    const projectTrigger = screen.getByRole('button', { name: /conversation.workspace.projectMenu.trigger/ });
+    expect(titlebarProjectSlot?.contains(projectTrigger)).toBe(true);
+    expect(document.querySelector('.chat-workspace .workspace-project-trigger')).toBeNull();
 
-    const node = {
-      key: selectedFile.relativePath,
-      props: {
-        dataRef: selectedFile,
-      },
-    } as unknown as NodeInstance;
-
-    act(() => {
-      latestTreeProps?.onSelect?.([], { node });
-    });
+    fireEvent.click(projectTrigger);
+    fireEvent.click(screen.getByRole('menuitem', { name: /conversation.workspace.changes.filesTab/ }));
+    fireEvent.click(screen.getByRole('button', { name: selectedFile.name }));
 
     expect(mocks.ensureNodeSelected).toHaveBeenCalledWith(selectedFile);
     expect(mocks.writeRendererLogInvoke).toHaveBeenCalledWith({
@@ -248,6 +377,214 @@ describe('ChatWorkspace preview selection', () => {
         hasKey: true,
       },
     });
-    expect(mocks.handlePreviewFile).toHaveBeenCalledWith(selectedFile);
+    // Single-click opens a persistent (pinned) tab so opening several files
+    // accumulates several tabs, instead of replacing a single shared preview tab.
+    expect(mocks.handlePreviewFile).toHaveBeenCalledWith(selectedFile, true);
+    expect(screen.queryByRole('menuitem', { name: /conversation.workspace.changes.filesTab/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps existing file actions available from the Files flyout', () => {
+    render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' />);
+
+    fireEvent.click(screen.getByRole('button', { name: /conversation.workspace.projectMenu.trigger/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /conversation.workspace.changes.filesTab/ }));
+    fireEvent.contextMenu(screen.getByRole('button', { name: selectedFile.name }), { clientX: 120, clientY: 80 });
+
+    expect(mocks.setContextMenu).toHaveBeenCalledWith({
+      visible: true,
+      x: 120,
+      y: 80,
+      node: selectedFile,
+    });
+  });
+
+  it('refreshes file changes when the Changes flyout opens', () => {
+    render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' />);
+
+    fireEvent.click(screen.getByRole('button', { name: /conversation.workspace.projectMenu.trigger/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /conversation.workspace.changes.tab/ }));
+
+    expect(mocks.refreshChanges).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes Changes after snapshot initialization finishes', () => {
+    workspaceSnapshotInfo = null;
+    const { rerender } = render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' />);
+
+    fireEvent.click(screen.getByRole('button', { name: /conversation.workspace.projectMenu.trigger/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /conversation.workspace.changes.tab/ }));
+    expect(mocks.refreshChanges).not.toHaveBeenCalled();
+
+    workspaceSnapshotInfo = { branch: 'main' };
+    rerender(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' />);
+
+    expect(mocks.refreshChanges).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Changes even when the legacy tree-collapse preference is set', () => {
+    workspaceTreeCollapsed = true;
+    render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' />);
+
+    fireEvent.click(screen.getByRole('button', { name: /conversation.workspace.projectMenu.trigger/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /conversation.workspace.changes.tab/ }));
+
+    expect(screen.getByTestId('file-change-list')).toBeInTheDocument();
+  });
+
+  it('requests a workspace search for files beyond the loaded tree', () => {
+    render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' />);
+
+    fireEvent.click(screen.getByRole('button', { name: /conversation.workspace.projectMenu.trigger/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /conversation.workspace.changes.filesTab/ }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'nested.xlsx' } });
+
+    expect(mocks.setSearchText).toHaveBeenCalledWith('nested.xlsx');
+    expect(mocks.onSearch).toHaveBeenCalledWith('nested.xlsx');
+  });
+
+  it('renders context management in the project panel for Aionrs workspaces', () => {
+    render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' eventPrefix='aionrs' />);
+
+    expect(mocks.useContextCompaction).toHaveBeenCalledWith({
+      conversationId: 'conversation-1',
+      workspace: '/workspace',
+      enabled: true,
+    });
+
+    expect(screen.queryByTestId('context-handoff-panel')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /conversation.workspace.projectMenu.trigger/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /conversation.contextHandoff.sectionTitle/ }));
+
+    expect(screen.getByTestId('context-handoff-panel')).toHaveTextContent('conversation-1:/workspace');
+  });
+
+  it('dismisses the Project menu after Context.md opens in Preview', async () => {
+    render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' eventPrefix='aionrs' />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /conversation.workspace.projectMenu.trigger/ }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menuitem', { name: /conversation.contextHandoff.sectionTitle/ }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'open context preview' }));
+    });
+
+    expect(
+      screen.queryByRole('menuitem', { name: /conversation.contextHandoff.sectionTitle/ })
+    ).not.toBeInTheDocument();
+  });
+
+  it('routes native context commands through the always-mounted context controller', async () => {
+    render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' eventPrefix='aionrs' />);
+
+    const listener = mocks.listeners.get('aionrs.context-command');
+    expect(listener).toBeDefined();
+
+    await act(async () => {
+      listener?.({ conversationId: 'conversation-1', command: { action: 'compact' } });
+    });
+
+    await waitFor(() => expect(mocks.compactContext).toHaveBeenCalledWith('manual'));
+  });
+
+  it('ignores context commands intended for another conversation', async () => {
+    render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' eventPrefix='aionrs' />);
+
+    await act(async () => {
+      mocks.listeners.get('aionrs.context-command')?.({
+        conversationId: 'conversation-2',
+        command: { action: 'compact' },
+      });
+    });
+
+    expect(mocks.compactContext).not.toHaveBeenCalled();
+  });
+
+  it('opens an existing Context.md in the editable Preview surface', async () => {
+    mocks.getConversationOrNull.mockResolvedValue({
+      id: 'conversation-1',
+      type: 'aionrs',
+      extra: {
+        workspace: '/workspace',
+        context_handoff: {
+          context_file_path: '/workspace/Context.md',
+          context_file_name: 'Context.md',
+        },
+      },
+    });
+    render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' eventPrefix='aionrs' />);
+
+    await act(async () => {
+      mocks.listeners.get('aionrs.context-command')?.({
+        conversationId: 'conversation-1',
+        command: { action: 'open' },
+      });
+    });
+
+    await waitFor(() =>
+      expect(mocks.openPreview).toHaveBeenCalledWith(
+        '# Context',
+        'markdown',
+        expect.objectContaining({
+          editable: true,
+          file_name: 'Context.md',
+          file_path: '/workspace/Context.md',
+        })
+      )
+    );
+    expect(mocks.compactContext).not.toHaveBeenCalled();
+  });
+
+  it('routes pin commands through protected pin persistence and compaction', async () => {
+    render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' eventPrefix='aionrs' />);
+
+    await act(async () => {
+      mocks.listeners.get('aionrs.context-command')?.({
+        conversationId: 'conversation-1',
+        command: { action: 'pin', text: 'Keep the UI compact.' },
+      });
+    });
+
+    await waitFor(() =>
+      expect(mocks.pinConversationContext).toHaveBeenCalledWith(
+        {
+          conversationId: 'conversation-1',
+          workspace: '/workspace',
+          text: 'Keep the UI compact.',
+        },
+        expect.objectContaining({ compactContext: expect.any(Function) })
+      )
+    );
+    expect(mocks.messageSuccess).toHaveBeenCalledWith('conversation.contextHandoff.command.pinSuccess');
+  });
+
+  it('deduplicates handoff commands and navigates only after creation succeeds', async () => {
+    let resolveHandoff: ((value: { conversation: { id: string }; markdown: string }) => void) | undefined;
+    mocks.handoffConversationContext.mockReturnValue(
+      new Promise((resolve) => {
+        resolveHandoff = resolve;
+      })
+    );
+    render(<ChatWorkspace conversation_id='conversation-1' workspace='/workspace' eventPrefix='aionrs' />);
+    const listener = mocks.listeners.get('aionrs.context-command');
+    const payload = { conversationId: 'conversation-1', command: { action: 'handoff' as const } };
+
+    act(() => {
+      listener?.(payload);
+      listener?.(payload);
+    });
+
+    expect(mocks.handoffConversationContext).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveHandoff?.({ conversation: { id: 'conversation-2' }, markdown: '# Context' });
+      await Promise.resolve();
+    });
+
+    expect(mocks.emit).toHaveBeenCalledWith('chat.history.refresh');
+    expect(mocks.navigate).toHaveBeenCalledWith('/conversation/conversation-2');
   });
 });

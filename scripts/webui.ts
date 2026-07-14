@@ -9,8 +9,8 @@
  *
  * Env vars:
  *   AIONUI_PORT           : static server port (default 33000)
- *   AIONUI_HOST           : listen host; set to 0.0.0.0 to imply --remote
- *   AIONUI_ALLOW_REMOTE   : "1"/"true" to expose to LAN
+ *   AIONUI_HOST           : retired remote-access compatibility input
+ *   AIONUI_ALLOW_REMOTE   : retired remote-access compatibility input
  *   AIONUI_DATA_DIR       : override userData path (default Electron-compatible)
  *   AIONUI_LOG_DIR        : override log dir (default <dataDir>/logs)
  *   AIONUI_STATIC_DIR     : override static dir (default out/renderer)
@@ -26,6 +26,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { startWebHost } from '@aionui/web-host';
 import { openBrowserUrl, shouldAutoOpenBrowser } from '../packages/web-cli/src/browser.js';
+import {
+  normalizeRemoteAccessArgs,
+  resolveRemoteAccessPolicy,
+  warnUnsupportedRemoteAccess,
+} from '../packages/web-cli/src/remoteAccessPolicy.js';
 
 // Aligned with packages/desktop/src/common/config/constants.ts WEBUI_DEFAULT_PORT.
 const DEFAULT_PORT = (() => {
@@ -103,13 +108,6 @@ function resolvePort(): number {
   const env = process.env.AIONUI_PORT ?? process.env.PORT;
   if (env && /^\d+$/.test(env)) return Number(env);
   return DEFAULT_PORT;
-}
-
-function resolveAllowRemote(): boolean {
-  if (has('--remote')) return true;
-  const host = process.env.AIONUI_HOST?.trim();
-  if (host && ['0.0.0.0', '::', '::0'].includes(host)) return true;
-  return parseBoolean(process.env.AIONUI_ALLOW_REMOTE ?? process.env.AIONUI_REMOTE);
 }
 
 function resolveStaticDir(): string {
@@ -203,9 +201,10 @@ async function main(): Promise<void> {
   augmentPathWithNvm();
   runPackageIfNeeded();
   const port = resolvePort();
-  const allowRemote = resolveAllowRemote();
+  const remoteAccessPolicy = resolveRemoteAccessPolicy(normalizeRemoteAccessArgs(args));
+  warnUnsupportedRemoteAccess(remoteAccessPolicy);
   const autoOpenBrowser = shouldAutoOpenBrowser({
-    allowRemote,
+    allowRemote: false,
     env: process.env,
     openFlag: has('--open'),
     noOpenFlag: has('--no-open'),
@@ -221,7 +220,7 @@ async function main(): Promise<void> {
   console.log('[webui] work dir   :', workDir);
   console.log('[webui] static dir :', staticDir);
   console.log('[webui] backend bin:', backendBin);
-  console.log(`[webui] launching  : port=${port} allowRemote=${allowRemote}`);
+  console.log(`[webui] launching  : port=${port} allowRemote=false`);
 
   const handle = await startWebHost({
     app: {
@@ -232,7 +231,7 @@ async function main(): Promise<void> {
     },
     staticDir,
     port,
-    allowRemote,
+    allowRemote: false,
     dataDir: workDir,
     logDir,
     // Surface the same work dir on /api/system/info so the browser UI shows

@@ -3,6 +3,24 @@ import { describe, expect, it } from 'vitest';
 import { OpenAI2GeminiConverter } from '@/common/api/OpenAI2GeminiConverter';
 
 describe('OpenAI2GeminiConverter', () => {
+  it('maps bounded JSON generation controls for background structured tasks', () => {
+    const converter = new OpenAI2GeminiConverter();
+
+    const request = converter.convertRequest({
+      model: 'gemini-2.5-flash',
+      messages: [{ role: 'user', content: 'Return JSON.' }],
+      max_tokens: 2_000,
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+    });
+
+    expect(request.generationConfig).toEqual({
+      maxOutputTokens: 2_000,
+      temperature: 0.1,
+      responseMimeType: 'application/json',
+    });
+  });
+
   it('requests image and text modalities for image generation prompts', () => {
     const converter = new OpenAI2GeminiConverter();
 

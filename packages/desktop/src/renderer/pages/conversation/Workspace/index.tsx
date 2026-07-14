@@ -6,39 +6,62 @@
 
 import { ipcBridge } from '@/common';
 import type { IDirOrFile } from '@/common/adapter/ipcBridge';
-import FlexFullContainer from '@/renderer/components/layout/FlexFullContainer';
-import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
+import type { TChatConversation } from '@/common/config/storage';
+import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
+import { useAbortUploadsOnConversationChange } from '@/renderer/hooks/file/useAbortUploadsOnConversationChange';
+import ContextHandoffPanel from '@/renderer/pages/conversation/contextHandoff/ContextHandoffPanel';
+import { resolveContextFile } from '@/renderer/pages/conversation/contextHandoff/contextFile';
+import { getConversationContextHandoffExtra } from '@/renderer/pages/conversation/contextHandoff/pinnedContext';
+import {
+  handoffConversationContext,
+  pinConversationContext,
+  useContextCompaction,
+} from '@/renderer/pages/conversation/contextHandoff/useContextCompaction';
 import { usePreviewContext } from '@/renderer/pages/conversation/Preview';
+import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
+import { emitter, useAddEventListener } from '@/renderer/utils/emitter';
 import { getWorkspaceDisplayName as getDisplayName } from '@/renderer/utils/workspace/workspace';
-import { Empty, Message, Tree } from '@arco-design/web-react';
-import { Right } from '@icon-park/react';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Message } from '@arco-design/web-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import FileChangeList from './components/FileChangeList';
 import PasteConfirmModal from './components/PasteConfirmModal';
 import WorkspaceContextMenu from './components/WorkspaceContextMenu';
 import WorkspaceDialogs from './components/WorkspaceDialogs';
-import WorkspaceToolbar from './components/WorkspaceToolbar';
-import FileTypeIcon from './components/FileTypeIcon';
+import WorkspaceProjectFilesFlyout from './components/WorkspaceProjectFilesFlyout';
+import WorkspaceProjectMenu from './components/WorkspaceProjectMenu';
 import { useFileChanges } from './hooks/useFileChanges';
-import { useWorkspaceCollapse } from './hooks/useWorkspaceCollapse';
 import { useWorkspaceDragImport } from './hooks/useWorkspaceDragImport';
 import { useWorkspaceEvents } from './hooks/useWorkspaceEvents';
 import { useWorkspaceFileOps } from './hooks/useWorkspaceFileOps';
 import { useWorkspaceModals } from './hooks/useWorkspaceModals';
 import { useWorkspacePaste } from './hooks/useWorkspacePaste';
-import { useAbortUploadsOnConversationChange } from '@/renderer/hooks/file/useAbortUploadsOnConversationChange';
 import { useWorkspaceSearch } from './hooks/useWorkspaceSearch';
 import { useWorkspaceTree } from './hooks/useWorkspaceTree';
 import type { WorkspaceProps, WorkspaceTab } from './types';
-import {
-  computeContextMenuPosition,
-  extractNodeData,
-  extractNodeKey,
-  flattenSingleRoot,
-  getTargetFolderPath,
-} from './utils/treeHelpers';
+import { computeContextMenuPosition, flattenSingleRoot, getTargetFolderPath } from './utils/treeHelpers';
 import './workspace.css';
+
+const formatProjectContextBudgetLabel = (ratio: number | null): string => {
+  if (ratio === null) return '--';
+  const percent = ratio * 100;
+  if (percent > 0 && percent < 1) return '<1%';
+  return `${Math.round(percent)}%`;
+};
+
+const getProjectContextBudgetLabel = (conversation: TChatConversation | null): string => {
+  if (!conversation || !('last_token_usage' in conversation.extra) || !('last_context_limit' in conversation.extra)) {
+    return '--';
+  }
+  const totalTokens = conversation.extra.last_token_usage?.total_tokens;
+  const contextLimit = conversation.extra.last_context_limit;
+  if (typeof totalTokens !== 'number' || totalTokens <= 0 || typeof contextLimit !== 'number' || contextLimit <= 0) {
+    return '--';
+  }
+  return formatProjectContextBudgetLabel(totalTokens / contextLimit);
+};
 
 const ChatWorkspace: React.FC<WorkspaceProps> = ({
   conversation_id,
@@ -48,17 +71,35 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
   messageApi: externalMessageApi,
 }) => {
   const { t } = useTranslation();
-  const layout = useLayoutContext();
-  const isMobile = layout?.isMobile ?? false;
+  const navigate = useNavigate();
   const { openPreview } = usePreviewContext();
+  const conversationContext = useConversationContextSafe();
+  const loadedSkills = conversationContext?.loadedSkills ?? [];
+  const loadedMcpStatuses =
+    conversationContext?.loadedMcpStatuses ??
+    (conversationContext?.loadedMcpServers ?? []).map((name) => ({
+      id: name,
+      name,
+      status: 'loaded' as const,
+    }));
+  const showContextSection = eventPrefix === 'aionrs';
+  const contextCompaction = useContextCompaction({
+    conversationId: conversation_id,
+    workspace,
+    enabled: showContextSection,
+  });
+  const contextCommandInFlightRef = useRef(false);
 
   // Message API setup
   const [internalMessageApi, messageContext] = Message.useMessage();
   const messageApi = externalMessageApi ?? internalMessageApi;
   const shouldRenderLocalMessageContext = !externalMessageApi;
 
-  // Tab state and file changes
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>('files');
+  // Project menu state and file changes
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [activeProjectPanel, setActiveProjectPanel] = useState<WorkspaceTab | null>(null);
+  const [projectMenuSlot, setProjectMenuSlot] = useState<HTMLElement | null>(null);
+  const [contextBudgetLabel, setContextBudgetLabel] = useState('--');
   const fileChangesHook = useFileChanges({ workspace });
 
   // Bind workspace uploads to the conversation lifecycle: switching the
@@ -66,7 +107,6 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
   useAbortUploadsOnConversationChange(conversation_id, 'workspace');
 
   // Initialize all hooks
-  const { isWorkspaceCollapsed, setIsWorkspaceCollapsed } = useWorkspaceCollapse();
   const treeHook = useWorkspaceTree({ workspace, conversation_id, eventPrefix });
   const modalsHook = useWorkspaceModals();
   const pasteHook = useWorkspacePaste({
@@ -132,11 +172,7 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
     closeDeleteModal: modalsHook.closeDeleteModal,
   });
 
-  // Context menu calculations
-  const hasOriginalFiles = treeHook.files.length > 0 && treeHook.files[0]?.children?.length > 0;
-  const rootName = treeHook.files[0]?.name ?? '';
-
-  // Hide root directory when there's a single root with children, as Toolbar serves as the first-level directory
+  // Hide the transport root when it has one visible workspace child.
   const treeData = flattenSingleRoot(treeHook.files);
 
   // Authoritative source: `conversation.extra.is_temporary_workspace` is
@@ -146,7 +182,7 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
   // public contract. Default to false when the prop is unavailable (e.g.
   // tests that render the panel outside a conversation).
   const isTemporaryWorkspace = isTemporaryWorkspaceProp ?? false;
-  void rootName; // reserved for future UI hints; no longer used for detection.
+  const isChangesPanelActive = projectMenuOpen && activeProjectPanel === 'changes';
 
   // Get workspace display name using shared utility
   const workspaceDisplayName = useMemo(
@@ -162,14 +198,9 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
   const openNodeContextMenu = useCallback(
     (node: IDirOrFile, x: number, y: number) => {
       treeHook.ensureNodeSelected(node);
-      modalsHook.setContextMenu({
-        visible: true,
-        x,
-        y,
-        node,
-      });
+      modalsHook.setContextMenu({ visible: true, x, y, node });
     },
-    [treeHook.ensureNodeSelected, modalsHook.setContextMenu]
+    [modalsHook.setContextMenu, treeHook.ensureNodeSelected]
   );
 
   const handleOpenChangeDiff = useCallback(
@@ -183,12 +214,248 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
     [openPreview, workspace]
   );
 
-  // Auto-refresh changes when switching to changes tab
+  const handleProjectMenuToggle = useCallback(() => {
+    setProjectMenuOpen((current) => {
+      const nextOpen = !current;
+      if (nextOpen) {
+        setActiveProjectPanel(null);
+      }
+      return nextOpen;
+    });
+  }, []);
+
+  const handleProjectPanelSelect = useCallback((panel: WorkspaceTab) => {
+    setProjectMenuOpen(true);
+    setActiveProjectPanel((current) => (current === panel ? null : panel));
+  }, []);
+
+  const handleProjectMenuClose = useCallback(() => {
+    setProjectMenuOpen(false);
+    setActiveProjectPanel(null);
+  }, []);
+
+  // Auto-refresh changes when opening the Changes flyout.
   useEffect(() => {
-    if (activeTab === 'changes') {
+    if (isChangesPanelActive && fileChangesHook.snapshotInfo) {
       fileChangesHook.refreshChanges();
     }
-  }, [activeTab, fileChangesHook.refreshChanges]);
+  }, [isChangesPanelActive, fileChangesHook.refreshChanges, fileChangesHook.snapshotInfo]);
+
+  useEffect(() => {
+    if (!showContextSection && activeProjectPanel === 'context') {
+      setActiveProjectPanel(null);
+    }
+  }, [activeProjectPanel, showContextSection]);
+
+  const refreshProjectContextBudget = useCallback(async () => {
+    if (!showContextSection) {
+      setContextBudgetLabel('--');
+      return;
+    }
+    try {
+      setContextBudgetLabel(getProjectContextBudgetLabel(await getConversationOrNull(conversation_id)));
+    } catch (error) {
+      console.error('[Workspace] Failed to load project context budget:', error);
+      setContextBudgetLabel('--');
+    }
+  }, [conversation_id, showContextSection]);
+
+  useEffect(() => {
+    void refreshProjectContextBudget();
+  }, [refreshProjectContextBudget]);
+
+  useAddEventListener(
+    'aionrs.context-usage.refresh',
+    (updatedConversationId) => {
+      if (updatedConversationId === conversation_id) {
+        void refreshProjectContextBudget();
+      }
+    },
+    [conversation_id, refreshProjectContextBudget]
+  );
+
+  const compactFromContextAction = useCallback(
+    (input: Parameters<typeof contextCompaction.compact>) => contextCompaction.compact(input[0], input[1], input[2]),
+    [contextCompaction]
+  );
+
+  const openContextFromCommand = useCallback(async () => {
+    const conversation = await getConversationOrNull(conversation_id);
+    if (conversation?.type !== 'aionrs') return;
+
+    const contextState = getConversationContextHandoffExtra(conversation);
+    const resolved = resolveContextFile(workspace);
+    let filePath = contextState.context_file_path || resolved.filePath;
+    let fileName = contextState.context_file_name || resolved.fileName;
+    let markdown = contextState.context_file_path
+      ? await ipcBridge.fs.readFile.invoke({ path: filePath, workspace })
+      : null;
+
+    if (markdown === null) {
+      const compacted = await contextCompaction.compact('manual');
+      if (!compacted) return;
+      filePath = compacted.filePath;
+      fileName = compacted.fileName;
+      markdown = compacted.markdown;
+    }
+
+    openPreview(markdown, 'markdown', {
+      title: fileName,
+      file_name: fileName,
+      file_path: filePath,
+      workspace,
+      editable: true,
+    });
+  }, [contextCompaction, conversation_id, openPreview, workspace]);
+
+  useAddEventListener(
+    'aionrs.context-command',
+    ({ conversationId, command }) => {
+      if (!showContextSection || conversationId !== conversation_id || contextCommandInFlightRef.current) return;
+      contextCommandInFlightRef.current = true;
+
+      void (async () => {
+        if (command.action === 'open') {
+          await openContextFromCommand();
+          return;
+        }
+        if (command.action === 'compact') {
+          const result = await contextCompaction.compact('manual');
+          if (result?.source === 'rules') {
+            messageApi.warning?.(t('conversation.contextHandoff.command.fallbackComplete'));
+          } else if (result) {
+            messageApi.success(t('conversation.contextHandoff.command.compactSuccess'));
+          }
+          return;
+        }
+        if (command.action === 'pin') {
+          await pinConversationContext(
+            { conversationId, workspace, text: command.text },
+            {
+              compactContext: ({ trigger, targetTurnId, budgetStatus }) =>
+                compactFromContextAction([trigger, targetTurnId, budgetStatus]),
+            }
+          );
+          messageApi.success(t('conversation.contextHandoff.command.pinSuccess'));
+          return;
+        }
+
+        const result = await handoffConversationContext(
+          { conversationId, workspace },
+          {
+            compactContext: ({ trigger, targetTurnId, budgetStatus }) =>
+              compactFromContextAction([trigger, targetTurnId, budgetStatus]),
+          }
+        );
+        emitter.emit('chat.history.refresh');
+        void navigate(`/conversation/${result.conversation.id}`);
+      })()
+        .catch((error) => {
+          console.error('[ContextHandoff] Context command failed:', error);
+          messageApi.error(t('conversation.contextHandoff.command.failed'));
+        })
+        .finally(() => {
+          contextCommandInFlightRef.current = false;
+        });
+    },
+    [
+      compactFromContextAction,
+      contextCompaction,
+      conversation_id,
+      messageApi,
+      navigate,
+      openContextFromCommand,
+      showContextSection,
+      t,
+      workspace,
+    ]
+  );
+
+  useEffect(() => {
+    const findSlot = () => document.getElementById('app-titlebar-project-slot');
+    setProjectMenuSlot(findSlot());
+
+    const observer = new MutationObserver(() => {
+      const nextSlot = findSlot();
+      setProjectMenuSlot((current) => (current === nextSlot ? current : nextSlot));
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, []);
+
+  const handleProjectFilesToggleFolder = useCallback(
+    (node: IDirOrFile) => {
+      const nodeKey = node.relativePath;
+      const isExpanded = treeHook.expandedKeys.includes(nodeKey);
+      treeHook.setExpandedKeys((current) =>
+        current.includes(nodeKey) ? current.filter((key) => key !== nodeKey) : [...current, nodeKey]
+      );
+
+      if (isExpanded || node.children !== undefined) return;
+
+      void ipcBridge.conversation.getWorkspace
+        .invoke({ conversation_id, workspace, path: node.fullPath })
+        .then((res) => {
+          const newChildren = res[0]?.children;
+          if (!newChildren) return;
+          treeHook.setFiles((current) => {
+            const assignChildren = (nodes: IDirOrFile[]): IDirOrFile[] =>
+              nodes.map((candidate) => {
+                if (candidate.relativePath === nodeKey) return { ...candidate, children: newChildren };
+                if (candidate.children) return { ...candidate, children: assignChildren(candidate.children) };
+                return candidate;
+              });
+            return assignChildren(current);
+          });
+        })
+        .catch((error) => {
+          console.error('[Workspace] Project files folder load failed:', error);
+        });
+    },
+    [conversation_id, treeHook.expandedKeys, treeHook.setExpandedKeys, treeHook.setFiles, workspace]
+  );
+
+  // 单击文件树中的文件：以固定（常驻）tab 打开，多个文件可同时累积多个 tab
+  // Clicking a file in the tree opens it as a pinned (persistent) tab — opening
+  // several files accumulates several tabs rather than replacing a single shared
+  // provisional slot. The provisional/italic preview slot is reserved for
+  // transient chat file-links (see useLocalFilePreview, which still passes
+  // `{ preview: true }`).
+  const handleProjectFileOpen = useCallback(
+    (node: IDirOrFile) => {
+      const wasSelected = treeHook.selectedKeysRef.current.includes(node.relativePath);
+      treeHook.ensureNodeSelected(node);
+      void ipcBridge.application?.writeRendererLog.invoke({
+        level: 'debug',
+        tag: 'Workspace',
+        message: 'workspace_file_preview_requested',
+        data: {
+          fileName: node.name,
+          wasSelected,
+          hasKey: Boolean(node.relativePath),
+        },
+      });
+      void fileOpsHook.handlePreviewFile(node, true);
+      handleProjectMenuClose();
+    },
+    [fileOpsHook.handlePreviewFile, handleProjectMenuClose, treeHook.ensureNodeSelected, treeHook.selectedKeysRef]
+  );
+
+  const handleProjectFileContextMenu = useCallback(
+    (node: IDirOrFile, x: number, y: number) => {
+      openNodeContextMenu(node, x, y);
+    },
+    [openNodeContextMenu]
+  );
+
+  const handleProjectSearchChange = useCallback(
+    (value: string) => {
+      searchHook.setSearchText(value);
+      searchHook.onSearch(value);
+    },
+    [searchHook.onSearch, searchHook.setSearchText]
+  );
 
   // Get target folder path for paste confirm modal
   const targetFolderPathForModal = getTargetFolderPath(
@@ -196,6 +463,69 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
     treeHook.selected,
     treeHook.files,
     workspace
+  );
+
+  const filesPanel = (
+    <WorkspaceProjectFilesFlyout
+      t={t}
+      workspaceDisplayName={workspaceDisplayName}
+      files={treeData}
+      expandedKeys={treeHook.expandedKeys}
+      onToggleFolder={handleProjectFilesToggleFolder}
+      onOpenFile={handleProjectFileOpen}
+      onOpenContextMenu={handleProjectFileContextMenu}
+      searchText={searchHook.searchText}
+      onSearchTextChange={handleProjectSearchChange}
+    />
+  );
+
+  const changesPanel = isChangesPanelActive ? (
+    <div className='workspace-section-scroll'>
+      <FileChangeList
+        t={t}
+        workspace={workspace}
+        staged={fileChangesHook.staged}
+        unstaged={fileChangesHook.unstaged}
+        loading={fileChangesHook.loading}
+        snapshotInfo={fileChangesHook.snapshotInfo}
+        onRefresh={fileChangesHook.refreshChanges}
+        onOpenDiff={handleOpenChangeDiff}
+        onStageFile={fileChangesHook.stageFile}
+        onStageAll={fileChangesHook.stageAll}
+        onUnstageFile={fileChangesHook.unstageFile}
+        onUnstageAll={fileChangesHook.unstageAll}
+        onDiscardFile={fileChangesHook.discardFile}
+        onResetFile={fileChangesHook.resetFile}
+      />
+    </div>
+  ) : null;
+
+  const contextPanel = showContextSection ? (
+    <ContextHandoffPanel
+      conversationId={conversation_id}
+      workspace={workspace}
+      loadedSkills={loadedSkills}
+      loadedMcpStatuses={loadedMcpStatuses}
+      onCreateContext={() => contextCompaction.compact('manual')}
+      onPreviewOpen={handleProjectMenuClose}
+      isCompacting={contextCompaction.isCompacting}
+    />
+  ) : undefined;
+
+  const projectMenu = (
+    <WorkspaceProjectMenu
+      t={t}
+      open={projectMenuOpen}
+      activePanel={activeProjectPanel}
+      changeCount={fileChangesHook.changeCount}
+      contextBudgetLabel={contextBudgetLabel}
+      showContext={showContextSection}
+      onToggle={handleProjectMenuToggle}
+      onSelectPanel={handleProjectPanelSelect}
+      filesPanel={filesPanel}
+      changesPanel={changesPanel}
+      contextPanel={contextPanel}
+    />
   );
 
   return (
@@ -270,243 +600,22 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
           handleDeleteConfirm={fileOpsHook.handleDeleteConfirm}
         />
 
-        {/* Toolbar: search input + directory name + action buttons */}
-        {activeTab === 'files' && (
-          <WorkspaceToolbar
-            t={t}
-            isWorkspaceCollapsed={isWorkspaceCollapsed}
-            setIsWorkspaceCollapsed={setIsWorkspaceCollapsed}
-            workspaceDisplayName={workspaceDisplayName}
-            showSearch={searchHook.showSearch}
-            searchText={searchHook.searchText}
-            setSearchText={searchHook.setSearchText}
-            onSearch={searchHook.onSearch}
-            searchInputRef={searchHook.searchInputRef}
-            loading={treeHook.loading}
-            refreshWorkspace={treeHook.refreshWorkspace}
-            handleSelectHostFiles={pasteHook.handleSelectHostFiles}
-            handleUploadDeviceFiles={pasteHook.handleUploadDeviceFiles}
-            setShowHostFileSelector={searchHook.setShowHostFileSelector}
-            workspacePath={workspace}
-            isTemporaryWorkspace={isTemporaryWorkspace}
-          />
-        )}
+        <WorkspaceContextMenu
+          visible={modalsHook.contextMenu.visible}
+          style={contextMenuStyle}
+          node={modalsHook.contextMenu.node}
+          t={t}
+          handleAddToChat={fileOpsHook.handleAddToChat}
+          handleOpenNode={fileOpsHook.handleOpenNode}
+          handleRevealNode={fileOpsHook.handleRevealNode}
+          handlePreviewFile={fileOpsHook.handlePreviewFile}
+          handleDownloadFile={fileOpsHook.handleDownloadFile}
+          handleDeleteNode={fileOpsHook.handleDeleteNode}
+          openRenameModal={fileOpsHook.openRenameModal}
+          closeContextMenu={modalsHook.closeContextMenu}
+        />
 
-        {/* Main content area */}
-        {!isWorkspaceCollapsed && activeTab === 'files' && (
-          <FlexFullContainer containerClassName='overflow-y-auto'>
-            {/* Context Menu */}
-            <WorkspaceContextMenu
-              visible={modalsHook.contextMenu.visible}
-              style={contextMenuStyle}
-              node={modalsHook.contextMenu.node}
-              t={t}
-              handleAddToChat={fileOpsHook.handleAddToChat}
-              handleOpenNode={fileOpsHook.handleOpenNode}
-              handleRevealNode={fileOpsHook.handleRevealNode}
-              handlePreviewFile={fileOpsHook.handlePreviewFile}
-              handleDownloadFile={fileOpsHook.handleDownloadFile}
-              handleDeleteNode={fileOpsHook.handleDeleteNode}
-              openRenameModal={fileOpsHook.openRenameModal}
-              closeContextMenu={modalsHook.closeContextMenu}
-            />
-
-            {/* Empty state or Tree */}
-            {!hasOriginalFiles ? (
-              <div className=' flex-1 size-full flex items-center justify-center px-12px box-border'>
-                <Empty
-                  description={
-                    <div>
-                      <span className='text-t-secondary font-bold text-14px'>
-                        {searchHook.searchText
-                          ? t('conversation.workspace.search.empty')
-                          : t('conversation.workspace.empty')}
-                      </span>
-                      <div className='text-t-secondary'>
-                        {searchHook.searchText ? '' : t('conversation.workspace.emptyDescription')}
-                      </div>
-                    </div>
-                  }
-                />
-              </div>
-            ) : (
-              <Tree
-                className={`${isMobile ? '!pl-12px !pr-8px chat-workspace-tree--mobile' : '!pl-16px !pr-16px'} workspace-tree`}
-                key={treeHook.treeKey}
-                selectedKeys={treeHook.selected}
-                expandedKeys={treeHook.expandedKeys}
-                actionOnClick={['select', 'expand']}
-                // VSCode-style explorer: no connector lines, a chevron switcher
-                // for folders (none for files), and per-type icons via FileTypeIcon.
-                // Reuse the chevron as the lazy-load icon so the switcher doesn't
-                // flash a spinner on first expand of each folder.
-                icons={(nodeProps) => {
-                  if (nodeProps.dataRef?.isFile) return { switcherIcon: null };
-                  // Rotation is owned by CSS (.workspace-tree-chevron): right when
-                  // collapsed, down when expanded — overriding Arco's default.
-                  const chevron = (
-                    <Right theme='outline' size={14} fill='currentColor' className='workspace-tree-chevron' />
-                  );
-                  return { switcherIcon: chevron, loadingIcon: chevron };
-                }}
-                treeData={treeData}
-                fieldNames={{
-                  children: 'children',
-                  title: 'name',
-                  key: 'relativePath',
-                  isLeaf: 'isFile',
-                }}
-                multiple
-                renderTitle={(node) => {
-                  const relativePath = node.dataRef.relativePath;
-                  const isFile = node.dataRef.isFile;
-                  const isPasteTarget = !isFile && pasteHook.pasteTargetFolder === relativePath;
-                  const nodeData = node.dataRef as IDirOrFile;
-
-                  return (
-                    <div
-                      className='flex items-center justify-between gap-6px min-w-0'
-                      style={{ color: 'inherit' }}
-                      onDoubleClick={() => {
-                        if (isFile) {
-                          fileOpsHook.handleAddToChat(nodeData);
-                        }
-                      }}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        openNodeContextMenu(nodeData, event.clientX, event.clientY);
-                      }}
-                    >
-                      <span className='flex items-center gap-4px min-w-0'>
-                        <FileTypeIcon node={nodeData} expanded={treeHook.expandedKeys.includes(relativePath)} />
-                        <span className='overflow-hidden text-ellipsis whitespace-nowrap'>{node.title}</span>
-                        {isPasteTarget && (
-                          <span className='ml-1 text-xs text-blue-700 font-bold bg-blue-500 text-white px-1.5 py-0.5 rounded'>
-                            PASTE
-                          </span>
-                        )}
-                      </span>
-                      {isMobile && (
-                        <button
-                          type='button'
-                          className='workspace-header__toggle workspace-node-more-btn h-24px w-24px rd-6px flex items-center justify-center text-t-secondary hover:text-t-primary active:text-t-primary flex-shrink-0'
-                          aria-label={t('common.more')}
-                          onMouseDown={(event) => {
-                            event.stopPropagation();
-                          }}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            const rect = (event.currentTarget as HTMLButtonElement).getBoundingClientRect();
-                            const menuWidth = 220;
-                            const menuHeight = 220;
-                            const maxX =
-                              typeof window !== 'undefined'
-                                ? Math.max(8, window.innerWidth - menuWidth - 8)
-                                : rect.left;
-                            const maxY =
-                              typeof window !== 'undefined'
-                                ? Math.max(8, window.innerHeight - menuHeight - 8)
-                                : rect.bottom;
-                            const menuX = Math.min(Math.max(8, rect.left - menuWidth + rect.width), maxX);
-                            const menuY = Math.min(Math.max(8, rect.bottom + 4), maxY);
-                            openNodeContextMenu(nodeData, menuX, menuY);
-                          }}
-                        >
-                          <div
-                            className='flex flex-col gap-1.5px items-center justify-center'
-                            style={{ width: '10px', height: '10px' }}
-                          >
-                            <div className='w-1.5px h-1.5px rounded-full bg-current'></div>
-                            <div className='w-1.5px h-1.5px rounded-full bg-current'></div>
-                            <div className='w-1.5px h-1.5px rounded-full bg-current'></div>
-                          </div>
-                        </button>
-                      )}
-                    </div>
-                  );
-                }}
-                onSelect={(_keys, extra) => {
-                  const clickedKey = extractNodeKey(extra?.node);
-                  const nodeData = extra && extra.node ? extractNodeData(extra.node) : null;
-                  const isFileNode = Boolean(nodeData?.isFile);
-                  const wasSelected = clickedKey ? treeHook.selectedKeysRef.current.includes(clickedKey) : false;
-
-                  if (isFileNode) {
-                    // Single-click a file: highlight it as the sole selection and open its preview.
-                    if (nodeData) {
-                      treeHook.ensureNodeSelected(nodeData);
-                    }
-                    if (nodeData) {
-                      void ipcBridge.application?.writeRendererLog.invoke({
-                        level: 'debug',
-                        tag: 'Workspace',
-                        message: 'workspace_file_preview_requested',
-                        data: {
-                          fileName: nodeData.name,
-                          wasSelected,
-                          hasKey: Boolean(clickedKey),
-                        },
-                      });
-                      void fileOpsHook.handlePreviewFile(nodeData);
-                    }
-                    return;
-                  }
-                  // Folder: actionOnClick={['select','expand']} on the Tree
-                  // already toggles expand via onExpand. Right-click menu
-                  // remains the entry point for "Add to Chat".
-                }}
-                onExpand={(keys) => {
-                  treeHook.setExpandedKeys(keys);
-                }}
-                loadMore={(treeNode) => {
-                  const path = treeNode.props.dataRef.fullPath;
-                  const targetRelPath = treeNode.props.dataRef.relativePath;
-                  return ipcBridge.conversation.getWorkspace
-                    .invoke({ conversation_id, workspace, path })
-                    .then((res) => {
-                      const newChildren = res[0]?.children;
-                      if (!newChildren?.length) return;
-                      treeHook.setFiles((prev) => {
-                        const assign = (nodes: IDirOrFile[]): IDirOrFile[] =>
-                          nodes.map((n) => {
-                            if (n.relativePath === targetRelPath) return { ...n, children: newChildren };
-                            if (n.children) return { ...n, children: assign(n.children) };
-                            return n;
-                          });
-                        return assign(prev);
-                      });
-                    })
-                    .catch((err) => {
-                      console.error('[Workspace] loadMore failed:', err);
-                    });
-                }}
-              ></Tree>
-            )}
-          </FlexFullContainer>
-        )}
-
-        {/* Changes tab content */}
-        {!isWorkspaceCollapsed && activeTab === 'changes' && (
-          <FlexFullContainer containerClassName='overflow-y-auto'>
-            <FileChangeList
-              t={t}
-              workspace={workspace}
-              staged={fileChangesHook.staged}
-              unstaged={fileChangesHook.unstaged}
-              loading={fileChangesHook.loading}
-              snapshotInfo={fileChangesHook.snapshotInfo}
-              onRefresh={fileChangesHook.refreshChanges}
-              onOpenDiff={handleOpenChangeDiff}
-              onStageFile={fileChangesHook.stageFile}
-              onStageAll={fileChangesHook.stageAll}
-              onUnstageFile={fileChangesHook.unstageFile}
-              onUnstageAll={fileChangesHook.unstageAll}
-              onDiscardFile={fileChangesHook.discardFile}
-              onResetFile={fileChangesHook.resetFile}
-            />
-          </FlexFullContainer>
-        )}
+        {projectMenuSlot ? createPortal(projectMenu, projectMenuSlot) : projectMenu}
       </div>
     </>
   );

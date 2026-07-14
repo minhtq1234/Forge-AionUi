@@ -20,7 +20,7 @@
 
 <p align="center">
   <strong>Una app Cowork gratuita y de código abierto con AI Agents</strong><br>
-  <em>Agent integrado | Configuración cero | Cualquier clave API | Multi-Agents | Acceso remoto | Multiplataforma | Automatización 24/7</em>
+  <em>Agent integrado | Configuración cero | Cualquier clave API | Multi-Agents | WebUI local | Multiplataforma | Automatización 24/7</em>
 </p>
 
 <p align="center">
@@ -60,7 +60,7 @@
 | :------------------------------------------ | :-------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------- |
 | AI puede operar en tus archivos             | Limitado o No                     | **Sí — Agent integrado con acceso completo a archivos**                                                                            |
 | AI puede ejecutar tareas de múltiples pasos | Limitado                          | **Sí — autónomo con tu aprobación**                                                                                                |
-| Acceso remoto desde el teléfono             | Raramente                         | **WebUI + Telegram / Lark / DingTalk**                                                                                             |
+| Acceso desde el navegador local             | Raramente                         | **WebUI**                                                                                                                          |
 | Automatización programada                   | No                                | **Cron — 24/7 sin supervisión**                                                                                                    |
 | Múltiples AI Agents a la vez                | No                                | **Claude Code, Codex, Qwen Code, Hermes Agent, Snow CLI, Cursor Agent y 13+ más — detectados automáticamente, interfaz unificada** |
 | Precio                                      | Gratis / Pago                     | **Gratis y de código abierto**                                                                                                     |
@@ -212,11 +212,11 @@ AionUi incluye **21 asistentes profesionales** con capacidades predefinidas, ext
 
 ---
 
-## Cowork desde cualquier lugar
+## Usa Forge en un navegador local
 
-_Tu asistente AI 24/7 — accede a AionUi desde cualquier dispositivo, en cualquier lugar._
+Forge WebUI abre Forge en un navegador de este mismo equipo donde se ejecuta Forge.
 
-- **Modo WebUI** — accede a través del navegador desde teléfono, tableta o cualquier computadora. Admite LAN, red cruzada y despliegue en servidor. Inicio de sesión con código QR o contraseña.
+- No admite LAN, teléfonos ni tabletas, servidores remotos, proxies inversos ni túneles.
 
 - **Integración de plataformas de chat**
   - **Telegram** — Haz Cowork con tu AI Agent directamente desde Telegram
@@ -226,14 +226,6 @@ _Tu asistente AI 24/7 — accede a AionUi desde cualquier dispositivo, en cualqu
   - **WeCom (企业微信), Slack, Discord** y más plataformas próximamente
 
 > **Configuración:** AionUi Settings → WebUI Settings → Channel, configura el Bot Token.
-
-<p align="center">
-  <img src="../../resources/webui-remote.gif" alt="WebUI remote access demo" width="800">
-</p>
-
-<p align="center"><em>Controla y supervisa tu agente en remoto — Claude, Gemini, Codex. Desde el navegador o el móvil, como Claude Code remote.</em></p>
-
-> [Tutorial de acceso remoto a Internet](https://github.com/iOfficeAI/AionUi/wiki/Remote-Internet-Access-Guide-Chinese)
 
 ## ✨ Cowork en acción
 
@@ -583,7 +575,7 @@ brew install aionui
 - [⚙️ Guía de configuración LLM](https://github.com/iOfficeAI/AionUi/wiki/LLM-Configuration) — Configuración de modelos AI multiplataforma
 - [🤖 Configuración del modo Multi-Agent](https://github.com/iOfficeAI/AionUi/wiki/ACP-Setup) — Integrar Agents AI de terminal
 - [🔌 Configuración de herramientas MCP](https://github.com/iOfficeAI/AionUi/wiki/MCP-Configuration-Guide) — Configuración del servidor Model Context Protocol
-- [🌐 Guía de configuración WebUI](https://github.com/iOfficeAI/AionUi/wiki/WebUI-Configuration-Guide) — Tutorial completo de configuración y configuración de WebUI
+- [🌐 Guía de WebUI local](../guides/webui.md) — Guía para usar WebUI en un navegador de este equipo
 
 **🎯 Casos de uso**
 

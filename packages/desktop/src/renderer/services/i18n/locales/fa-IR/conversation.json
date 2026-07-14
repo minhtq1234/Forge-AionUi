@@ -17,7 +17,25 @@
     "quickActionStar": "خوشتان آمد؟ به ما ستاره بدهید!",
     "skillsMarket": "بازار مهارت‌های Forge",
     "skillsMarketDesc": "مهارت‌های جامعه را جستجو و فعال کنید. یک‌بار پیکربندی کنید، برای همه ایجنت‌ها در دسترس باشد.",
-    "skillsMarketDetails": "مشاهده بیشتر >>"
+    "skillsMarketDetails": "مشاهده بیشتر >>",
+    "projectTitle": "What's next in {{name}}?",
+    "projectPill": "Project · {{name}}",
+    "projectModeEyebrow": "You are in a Project workspace",
+    "projectModeBody": "Unlike a regular chat, this space is connected to one local folder. New chats stay grouped here and can use the project files as working context.",
+    "projectModeBadgeFolder": "Folder-backed",
+    "projectModeBadgeChats": "Project chats",
+    "projectModeBadgeFiles": "File-aware work"
+  },
+  "projectHeader": {
+    "label": "پروژه {{name}}",
+    "eyebrow": "پروژه",
+    "tabs": {
+      "label": "نماهای پروژه",
+      "chat": "گفتگو",
+      "files": "فایل‌ها",
+      "context": "زمینه",
+      "artifacts": "خروجی‌ها"
+    }
   },
   "history": {
     "recents": "اخیر",
@@ -70,9 +88,30 @@
     "conversationsSection": "چت‌ها",
     "removeProjectTitle": "حذف پروژه",
     "removeProject": "حذف پروژه",
-    "removeProjectConfirm": "پروژه «{{name}}» حذف شود؟ {{count}} مکالمه مرتبط نیز حذف خواهند شد.",
+    "removeProjectConfirm": "Remove project \"{{name}}\" from Forge? Its {{count}} chat(s) and folder files will stay where they are.",
     "newConversationInProject": "چت جدید در این پروژه",
-    "deleting": "در حال حذف..."
+    "deleting": "در حال حذف...",
+    "newProject": "New project",
+    "createProjectTitle": "Create project",
+    "projectNameLabel": "Project name",
+    "projectNamePlaceholder": "Name this project",
+    "projectFolderLabel": "Folder",
+    "projectFolderPlaceholder": "Choose a folder to start your project",
+    "chooseProjectFolder": "Choose folder",
+    "changeProjectFolder": "Change folder",
+    "createProject": "Create project",
+    "projectFolderRequired": "Choose a folder before creating a project.",
+    "projectDuplicateFolder": "This folder is already used by \"{{name}}\".",
+    "openExistingProject": "Open existing project",
+    "createProjectSuccess": "Project created",
+    "createProjectFailed": "Project could not be created",
+    "renameProject": "Rename project",
+    "revealProjectFolder": "Reveal folder",
+    "relinkProjectFolder": "Relink folder",
+    "convertWorkspaceToProject": "Save as project",
+    "removeProjectSuccess": "Project removed. Chats and files were kept.",
+    "removeProjectFailed": "Project could not be removed",
+    "projectActions": "Project actions"
   },
   "historySearch": {
     "tooltip": "جستجوی پیام‌ها",
@@ -336,6 +375,9 @@
   },
   "workspace": {
     "title": "پروژه",
+    "projectMenu": {
+      "trigger": "پروژه"
+    },
     "pasteConfirm_title": "جای‌گذاری فایل‌ها",
     "pasteConfirm_message": "آیا مطمئن هستید که می‌خواهید «{{name}}» را در پوشه انتخاب‌شده ({{target}}) جای‌گذاری کنید؟",
     "pasteConfirm_paste": "جای‌گذاری",
@@ -561,5 +603,70 @@
       }
     }
   },
-  "notFound": "مکالمه یافت نشد یا حذف شده است"
+  "notFound": "مکالمه یافت نشد یا حذف شده است",
+  "contextHandoff": {
+    "activeFileDescription": "Active handoff",
+    "addPinned": "Add pinned context",
+    "budget": {
+      "healthy": "Context {{percent}}",
+      "watch": "Context watch {{percent}}",
+      "compress": "Compress soon {{percent}}",
+      "too_large": "Context large {{percent}}"
+    },
+    "budgetLabel": "Budget",
+    "command": {
+      "description": "مدیریت، فشرده‌سازی، سنجاق‌کردن یا انتقال زمینهٔ گفتگو",
+      "missingPinText": "پس از /context pin متن موردنظر را وارد کنید",
+      "unexpectedArguments": "این فرمان زمینه آرگومان‌های اضافی دارد",
+      "unsupportedSubcommand": "فرمان زمینه ناشناخته است. از open، compact، pin یا handoff استفاده کنید.",
+      "fallbackComplete": "زمینه با روش جایگزین محلی به‌روزرسانی شد",
+      "compactSuccess": "زمینه به‌روزرسانی شد",
+      "pinSuccess": "زمینه سنجاق و به‌روزرسانی شد",
+      "failed": "فرمان زمینه ناموفق بود"
+    },
+    "contextMissing": "Context.md could not be read",
+    "continue": "Continue",
+    "continuationName": "{{name}} continuation",
+    "continueTooltip": "Start a new chat with the edited Context.md",
+    "editPinned": "Edit pinned context",
+    "emptyFileDescription": "Not created",
+    "emptyPinned": "No pinned context yet",
+    "export": "Context.md",
+    "exportFailed": "Failed to export Context.md",
+    "exportFirst": "Export Context.md before starting a continuation",
+    "exportSuccess": "Context.md exported",
+    "exportTooltip": "Export this conversation as Context.md",
+    "improve": "Improve",
+    "improvePrompt": "Improve the open Context.md handoff. Rewrite only the synthesis sections: Goal, Current State, Important Decisions, User Preferences, Open Questions, Next Step, and Do Not Forget. Preserve Files / Artifacts, Assistant Setup, and Pinned Context unless the user explicitly asks to change them.",
+    "improveTooltip": "Ask the agent to improve Context.md",
+    "newContext": "New Context",
+    "newContextTooltip": "Replace the active Context.md with a fresh export",
+    "open": "Open",
+    "openTooltip": "Open Context.md in Preview",
+    "pinContentPlaceholder": "Context to keep active in this conversation",
+    "pinnedCount": "Pinned {{count}}",
+    "pinTitlePlaceholder": "Title",
+    "pinnedTitle": "Pinned context",
+    "replaceSuccess": "Context.md replaced",
+    "sectionTitle": "Context",
+    "status": {
+      "updating": "در حال به‌روزرسانی با هوش مصنوعی...",
+      "updatedByAi": "به‌روزرسانی‌شده با هوش مصنوعی",
+      "rulesFallback": "به‌روزرسانی‌شده با قواعد جایگزین",
+      "stale": "در انتظار به‌روزرسانی",
+      "failed": "به‌روزرسانی ناموفق بود",
+      "edited": "زمینهٔ ویرایش‌شده",
+      "error": {
+        "invalidModelOutput": "هوش مصنوعی نتیجه‌ای غیرمنتظره برگرداند، بنابراین زمینه به‌روزرسانی نشد.",
+        "providerRequestFailed": "درخواست مدل ناموفق بود. اتصال ارائه‌دهنده را بررسی کرده و دوباره تلاش کنید.",
+        "providerNotFound": "ارائه‌دهنده مدل پیدا نشد. تنظیمات مدل این گفتگو را بررسی کنید.",
+        "interrupted": "به‌روزرسانی زمینه پیش از اتمام قطع شد.",
+        "unknown": "به‌روزرسانی زمینه به‌طور غیرمنتظره ناموفق بود. دوباره تلاش کنید."
+      }
+    }
+  },
+  "artifact": {
+    "emptyTitle": "آرتیفکتی باز نیست",
+    "emptyHint": "فایل‌ها و اسناد تولیدشده اینجا باز می‌شوند."
+  }
 }

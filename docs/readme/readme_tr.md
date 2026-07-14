@@ -20,7 +20,7 @@
 
 <p align="center">
   <strong>AI Agents ile ücretsiz, açık kaynaklı Cowork uygulaması</strong><br>
-  <em>Yerleşik Agent | Sıfır Kurulum | Herhangi bir API Anahtarı | Çoklu Agent | Uzaktan Erişim | Çapraz Platform | 7/24 Otomasyon</em>
+  <em>Yerleşik Agent | Sıfır Kurulum | Herhangi bir API Anahtarı | Çoklu Agent | Yerel WebUI | Çapraz Platform | 7/24 Otomasyon</em>
 </p>
 
 <p align="center">
@@ -60,7 +60,7 @@
 | :------------------------------------- | :------------------------------- | :------------------------------------------------------------------------------------------------------------------------------ |
 | AI dosyalarınızda işlem yapabilir      | Sınırlı veya Yok                 | **Evet — tam dosya erişimi ile yerleşik Agent**                                                                                 |
 | AI çok adımlı görevleri çalıştırabilir | Sınırlı                          | **Evet — onayınızla özerk**                                                                                                     |
-| Telefondan uzaktan erişim              | Nadiren                          | **WebUI + Telegram / Lark / DingTalk**                                                                                          |
+| Yerel tarayıcı erişimi                 | Nadiren                          | **WebUI**                                                                                                                       |
 | Zamanlanmış otomasyon                  | Hayır                            | **Cron — 7/24 gözetimsiz**                                                                                                      |
 | Aynı anda birden fazla AI Agent        | Hayır                            | **Claude Code, Codex, Qwen Code, Hermes Agent, Snow CLI, Cursor Agent ve 13+ daha fazla — otomatik algılanan, birleşik arayüz** |
 | Fiyat                                  | Ücretsiz / Ücretli               | **Ücretsiz ve Açık Kaynak**                                                                                                     |
@@ -212,11 +212,11 @@ AionUi önceden tanımlanmış yeteneklere sahip **21 profesyonel asistan** içe
 
 ---
 
-## Her Yerden Cowork
+## Forge'u yerel tarayıcıda kullanın
 
-_7/24 AI asistanınız — AionUi'ye herhangi bir cihazdan, her yerden erişin._
+Forge WebUI, Forge'u Forge'un çalıştığı aynı bilgisayardaki bir tarayıcıda açar.
 
-- **WebUI Modu** — telefondan, tabletten veya herhangi bir bilgisayardan tarayıcı aracılığıyla erişin. LAN, çapraz ağ ve sunucu dağıtımını destekler. QR kod veya şifre girişi.
+- LAN, telefon veya tabletler, uzak sunucular, ters proxy'ler veya tüneller desteklenmez.
 
 - **Sohbet Platformu Entegrasyonu**
   - **Telegram** — AI Agent'ınızla doğrudan Telegram'dan Cowork yapın
@@ -226,14 +226,6 @@ _7/24 AI asistanınız — AionUi'ye herhangi bir cihazdan, her yerden erişin._
   - **WeCom (企业微信), Slack, Discord** ve yakında daha fazla platform
 
 > **Kurulum:** AionUi Ayarları → WebUI Ayarları → Kanal, Bot Token'ı yapılandırın.
-
-<p align="center">
-  <img src="../../resources/webui-remote.gif" alt="WebUI remote access demo" width="800">
-</p>
-
-<p align="center"><em>Agent'ınızı uzaktan kontrol edin ve izleyin — Claude, Gemini, Codex. Tarayıcı veya telefondan, Claude Code remote gibi.</em></p>
-
-> [Uzaktan İnternet Erişimi Öğreticisi](https://github.com/iOfficeAI/AionUi/wiki/Remote-Internet-Access-Guide-Chinese)
 
 ## ✨ Cowork Eylemde
 
@@ -583,7 +575,7 @@ brew install aionui
 - [⚙️ LLM Yapılandırma Kılavuzu](https://github.com/iOfficeAI/AionUi/wiki/LLM-Configuration) — Çoklu platform AI model yapılandırması
 - [🤖 Çoklu Agent Modu Kurulumu](https://github.com/iOfficeAI/AionUi/wiki/ACP-Setup) — Terminal AI Agent'larını entegre edin
 - [🔌 MCP Araç Yapılandırması](https://github.com/iOfficeAI/AionUi/wiki/MCP-Configuration-Guide) — Model Context Protocol sunucu kurulumu
-- [🌐 WebUI Yapılandırma Kılavuzu](https://github.com/iOfficeAI/AionUi/wiki/WebUI-Configuration-Guide) — Tam WebUI kurulum ve yapılandırma öğreticisi
+- [🌐 Yerel WebUI Kılavuzu](../guides/webui.md) — WebUI'yi bu bilgisayardaki tarayıcıda kullanma kılavuzu
 
 **🎯 Kullanım Senaryoları**
 

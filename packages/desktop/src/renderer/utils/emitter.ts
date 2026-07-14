@@ -9,6 +9,7 @@ import type { DependencyList } from 'react';
 import { useEffect } from 'react';
 import type { FileOrFolderItem } from '@/renderer/utils/file/fileTypes';
 import type { PreviewContentType } from '@/common/types/office/preview';
+import type { ContextCommand } from '@/common/chat/slash/contextCommands';
 
 export type ReplyQuote = {
   messageId: string;
@@ -21,6 +22,8 @@ interface EventTypes {
   'aionrs.selected.file.append': [Array<string | FileOrFolderItem>];
   'aionrs.selected.file.clear': void;
   'aionrs.workspace.refresh': void;
+  'aionrs.context-usage.refresh': [string];
+  'aionrs.context-command': [{ conversationId: string; command: ContextCommand }];
   'acp.selected.file': [Array<string | FileOrFolderItem>];
   'acp.selected.file.append': [Array<string | FileOrFolderItem>];
   'acp.selected.file.clear': void;

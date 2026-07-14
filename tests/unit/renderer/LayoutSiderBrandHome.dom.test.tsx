@@ -58,6 +58,7 @@ import Layout from '@renderer/components/layout/Layout';
 const renderLayout = () => render(<Layout sider={<div>sider</div>} />);
 
 const BACK_KEY = 'common.back';
+const BRAND_KEY = 'login.brand';
 
 describe('Layout sider brand Home button', () => {
   beforeEach(() => {

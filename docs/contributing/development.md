@@ -145,10 +145,10 @@ Use the Rust MSVC toolchain and install Microsoft C++ Build Tools. After install
 | `bun start`                 | Start Electron app in development mode (desktop)                                                               |
 | `bun run start:multi`       | Start a second Electron instance alongside an existing one (see [Multi-Instance](#multi-instance-development)) |
 | `bun run cli`               | Alias for `bun start`                                                                                          |
-| `bun run webui`             | Start in WebUI mode (browser-based, no Electron window)                                                        |
-| `bun run webui:remote`      | Start in WebUI mode with remote access enabled                                                                 |
-| `bun run webui:prod`        | Start WebUI in production mode                                                                                 |
-| `bun run webui:prod:remote` | Start WebUI in production mode with remote access                                                              |
+| `bun run webui`             | Start local-only WebUI mode (browser-based, no Electron window)                                                |
+| `bun run webui:remote`      | Retired compatibility alias; starts local-only WebUI and warns                                                 |
+| `bun run webui:prod`        | Start local-only WebUI in production mode                                                                      |
+| `bun run webui:prod:remote` | Retired compatibility alias; starts local-only WebUI in production mode and warns                              |
 | `bun run resetpass`         | Reset user password via CLI                                                                                    |
 
 ### Build & Distribution
@@ -169,19 +169,6 @@ Use the Rust MSVC toolchain and install Microsoft C++ Build Tools. After install
 | `bun run build-win:x64`   | Build Windows distributable for x64                     |
 | `bun run build-deb`       | Build Linux (.deb) distributable                        |
 | `bun run build`           | Alias for `bun run build-mac`                           |
-
-### Standalone Server (non-Electron)
-
-| Command                            | Description                                                 |
-| ---------------------------------- | ----------------------------------------------------------- |
-| `bun run build:renderer:web`       | Build renderer for standalone web deployment                |
-| `bun run build:server`             | Build standalone server bundle to `dist-server/`            |
-| `bun run server:start`             | Run standalone server in development mode                   |
-| `bun run server:start:remote`      | Run standalone server with remote access                    |
-| `bun run server:start:prod`        | Run standalone server in production mode                    |
-| `bun run server:start:prod:remote` | Run standalone server in production mode with remote access |
-| `bun run server:resetpass`         | Reset password via standalone server CLI                    |
-| `bun run server:resetpass:prod`    | Reset password via standalone server CLI (production)       |
 
 ### Code Quality
 
@@ -205,7 +192,6 @@ Use the Rust MSVC toolchain and install Microsoft C++ Build Tools. After install
 | `bun run test:bun`           | Run Bun-specific database driver tests            |
 | `bun run test:e2e`           | Run end-to-end tests (Playwright)                 |
 | `bun run test:packaged:i18n` | Run i18n integration tests against packaged build |
-| `bun run test:packaged:bun`  | Run Bun packaged integration tests                |
 
 ### Debug
 

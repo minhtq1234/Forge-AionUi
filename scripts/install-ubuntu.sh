@@ -205,7 +205,7 @@ start() {
     cd "$WORKDIR" || exit 1
 
     nohup xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-        /usr/bin/AionUi --webui --remote --no-sandbox \
+        /usr/bin/AionUi --webui --no-sandbox \
         > "$LOGFILE" 2>&1 &
 
     echo $! > "$PIDFILE"
@@ -213,9 +213,8 @@ start() {
 
     if kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
         echo "✅ AionUi 啟動成功 (PID: $(cat "$PIDFILE"))"
-        local ip
-        ip=$(hostname -I 2>/dev/null | awk '{print $1}')
-        echo "🌐 WebUI: http://${ip:-localhost}:25808"
+        echo "🌐 WebUI: http://127.0.0.1:25808"
+        echo "⚠️  不支援遠端部署；WebUI 僅限在此電腦上使用"
     else
         echo "❌ AionUi 啟動失敗，請查看日誌: $LOGFILE"
         rm -f "$PIDFILE"
@@ -309,7 +308,7 @@ Wants=network-online.target
 Type=simple
 User=root
 WorkingDirectory=/root
-ExecStart=/usr/bin/xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" /usr/bin/AionUi --webui --remote --no-sandbox
+ExecStart=/usr/bin/xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" /usr/bin/AionUi --webui --no-sandbox
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
@@ -381,7 +380,8 @@ print_summary() {
             echo "    sudo systemctl enable aionui  # 開機自啟"
             echo ""
         fi
-        echo "    # WebUI 預設監聽 http://localhost:25808"
+        echo "    # WebUI 僅限本機: http://127.0.0.1:25808"
+        echo "    # 不支援遠端部署"
         echo ""
     else
         echo -e "  ${BOLD}🖥️  桌面模式使用方式:${NC}"
@@ -400,8 +400,8 @@ print_summary() {
     if [[ "${MODE}" == "headless" ]]; then
         echo -e "  ${YELLOW}💡 提示:${NC}"
         echo "     • 設定工作目錄: export AIONUI_WORKDIR=/path/to/workspace"
-        echo "     • 遠端存取方式: SSH 隧道 / ngrok / 直接開放 25808 端口"
-        echo "     • 詳細指南: docs/guides/deploy-server.md"
+        echo "     • WebUI 僅限在安裝 Forge 的這台電腦上使用"
+        echo "     • 不支援遠端部署、SSH 隧道、公開隧道或開放 WebUI 端口"
         echo ""
     fi
 }

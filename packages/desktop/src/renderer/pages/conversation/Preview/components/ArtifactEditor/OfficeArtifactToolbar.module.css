@@ -1,0 +1,285 @@
+.toolbarFrame {
+  container-type: inline-size;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  width: 100%;
+}
+
+.toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 48px;
+  padding: 0 20px 0 12px;
+  gap: 8px;
+  overflow: hidden;
+  color: var(--text-primary);
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--border-base);
+}
+
+.statusStrip {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-base);
+}
+
+.statusMarker {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  border-radius: 50%;
+}
+
+.statusNeutral {
+  color: var(--text-secondary);
+  background: var(--bg-2);
+}
+
+.statusProgress {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg-1));
+  border-bottom-color: color-mix(in srgb, var(--primary) 22%, var(--border-base));
+}
+
+.statusSuccess {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 8%, var(--bg-1));
+  border-bottom-color: color-mix(in srgb, var(--success) 22%, var(--border-base));
+}
+
+.statusError {
+  color: var(--color-danger-6);
+  background: color-mix(in srgb, var(--color-danger-6) 8%, var(--bg-1));
+  border-bottom-color: color-mix(in srgb, var(--color-danger-6) 22%, var(--border-base));
+}
+
+.leftActions,
+.rightActions,
+.selectionEditor,
+.formattingActions,
+.formulaEditor {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.leftActions {
+  flex: 1 1 auto;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.rightActions,
+.selectionEditor,
+.formattingActions {
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.formulaEditor {
+  flex: 1 1 420px;
+  max-width: 520px;
+  gap: 6px;
+}
+
+.formulaInput {
+  width: clamp(120px, 28cqw, 320px);
+}
+
+.formulaApply {
+  flex: 0 0 auto;
+}
+
+.actionsMenu {
+  min-width: 176px;
+  padding: 4px;
+}
+
+/* Compact, deliberate rows: 32px tall, 13px text, rounded hover surface —
+   overriding Arco's airy 36px/14px dropdown defaults. */
+.actionsMenu :global(.arco-dropdown-menu-item) {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+  line-height: 32px;
+  border-radius: 6px;
+}
+
+/* Disabled rows mute icon and label together (icon-park strokes are
+   hardcoded, so color alone leaves the icon dark). */
+.actionsMenu :global(.arco-dropdown-menu-item.arco-dropdown-menu-disabled) {
+  opacity: 0.45;
+}
+
+.menuItemInner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menuItemInner :global(.i-icon) {
+  flex: 0 0 auto;
+  font-size: 0;
+}
+
+.cellLabel,
+.rangeLabel {
+  flex: 0 1 auto;
+  max-width: 140px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.rangeLabel {
+  max-width: 240px;
+}
+
+.status,
+.errorStatus,
+.zeroState {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  color: inherit;
+  font-size: 12px;
+}
+
+.zeroState {
+  max-width: 100%;
+}
+
+.errorStatus {
+  color: inherit;
+}
+
+.actionButton,
+.iconButton {
+  flex: 0 0 auto;
+}
+
+.iconButton {
+  width: 32px;
+  padding-inline: 0;
+}
+
+.wordEditor {
+  width: min(360px, calc(100vw - 32px));
+}
+
+.wordEditorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.recoveryBanner {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-2));
+  border-bottom: 1px solid color-mix(in srgb, var(--warning) 28%, var(--border-base));
+}
+
+.recoveryIcon {
+  flex: 0 0 auto;
+  color: var(--warning);
+}
+
+.recoveryText {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.recoveryActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+@container (max-width: 519px) {
+  .actionLabel,
+  .cellLabel {
+    display: none;
+  }
+
+  .actionButton,
+  .iconButton,
+  .formulaApply {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    padding-inline: 0;
+  }
+
+  .formulaEditor {
+    flex-basis: auto;
+  }
+
+  .formulaInput {
+    width: min(42cqw, 180px);
+  }
+
+  .recoveryBanner {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .recoveryText {
+    min-width: calc(100% - 24px);
+  }
+
+  .recoveryActions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 519px) {
+  .actionLabel,
+  .cellLabel {
+    display: none;
+  }
+
+  .actionButton,
+  .iconButton,
+  .formulaApply {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    padding-inline: 0;
+  }
+
+  .formulaInput {
+    width: min(42vw, 180px);
+  }
+
+  .recoveryBanner {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .recoveryText {
+    min-width: calc(100% - 24px);
+  }
+
+  .recoveryActions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

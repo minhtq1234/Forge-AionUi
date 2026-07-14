@@ -1,27 +1,14 @@
 {
-  "historyVersions": "履歴バージョン",
-  "currentFile": "現在のファイル",
   "loading": "読み込み中...",
-  "loadHistoryFailed": "履歴の読み込みに失敗しました",
-  "noHistory": "履歴バージョンはありません",
-  "snapshotSaved": "スナップショットを保存しました",
-  "snapshotSaveFailed": "スナップショットの保存に失敗しました",
-  "historyLoaded": "履歴バージョンを読み込みました",
-  "historyLoadFailed": "履歴バージョンの読み込みに失敗しました",
-  "tooFrequent": "操作が頻繁すぎます。しばらくしてから再試行してください",
-  "saveSnapshot": "現在のスナップショットを保存",
-  "snapshotNotSupported": "現在のコンテンツはスナップショットをサポートしていません",
-  "history": "履歴",
-  "historyNotSupported": "現在のコンテンツは履歴をサポートしていません",
   "downloadFile": "ファイルをダウンロード",
   "closePreview": "プレビューを閉じる",
   "collapsePanel": "パネルを閉じる",
   "source": "ソース",
   "code": "Code",
   "preview": "プレビュー",
+  "split": "分割",
   "editor": "エディタ",
   "previewEffect": "プレビュー",
-  "snapshot": "スナップショット",
   "downloadMarkdown": "Markdown ファイルをダウンロード",
   "downloadCode": "{{language}} ファイルをダウンロード",
   "downloadDiff": "Diff ファイルをダウンロード",
@@ -66,8 +53,7 @@
   "errors": {
     "missingFilePath": "ファイルパスが指定されていません",
     "openWithoutPath": "ファイルパスがないため開けません",
-    "conversionFailed": "変換に失敗しました",
-    "emptySnapshot": "スナップショット内容が空です"
+    "conversionFailed": "変換に失敗しました"
   },
   "office": {
     "installLinkText": "officecli のインストール手順を開く",
@@ -76,11 +62,68 @@
       "installFailed": "officecli の自動インストールに失敗しました。バックエンドログを確認して再試行してください。",
       "portTimeout": "プレビューサービスは起動しましたが、時間内に準備完了になりませんでした。再試行してください。",
       "startFailed": "Office プレビューサービスの起動に失敗しました。",
-      "outsideSandbox": "このファイルは現在のプロジェクトサンドボックスの外にあります。"
+      "outsideSandbox": "このファイルは現在のプロジェクトサンドボックスの外にあります。",
+      "originalSafe": "元のワークスペースファイルは変更されていません。"
     },
     "serverInstall": {
       "hint": "Forge はサーバー上で動作しています。プレビューコンポーネントはそのサーバーにインストールする必要があります。サーバーで次のコマンドを実行してから再試行してください：",
       "icuNote": "それでも起動しない場合は、サーバーに ICU ライブラリをインストールしてください（Debian/Ubuntu：apt-get install -y libicu-dev）。"
+    },
+    "externalEdit": {
+      "editInDefaultApp": "既定のアプリで編集",
+      "editInDefaultAppTooltip": "このワークスペース ファイルを既定のアプリで開く",
+      "refreshPreview": "プレビューを更新",
+      "refreshPreviewTooltip": "この Forge プレビューをワークスペース ファイルから再読み込み",
+      "revealInFolder": "フォルダーに表示",
+      "revealInFolderTooltip": "このワークスペース ファイルを含むフォルダーに表示",
+      "status": {
+        "ready": "既定のアプリで編集できます",
+        "opening": "既定のアプリを開いています...",
+        "editingExternally": "外部アプリで編集中",
+        "refreshing": "プレビューを更新しています...",
+        "refreshed": "プレビューを更新しました",
+        "openFailed": "既定のアプリを開けませんでした",
+        "refreshFailed": "プレビューを更新できませんでした。ファイルがこの表示より新しい可能性があります。"
+      }
+    },
+    "editor": {
+      "editSelection": "選択範囲を編集",
+      "formulaBar": "数式バー",
+      "apply": "適用",
+      "cancel": "キャンセル",
+      "bold": "太字",
+      "italic": "斜体",
+      "underline": "下線",
+      "undo": "元に戻す",
+      "openDesktop": "デスクトップアプリで開く",
+      "openedDesktop": "デスクトップアプリで開きました",
+      "more": "その他",
+      "reveal": "フォルダーに表示",
+      "refresh": "プレビューを更新",
+      "saving": "保存中",
+      "saved": "ワークスペースに保存しました",
+      "saveFailed": "保存に失敗しました",
+      "unsavedChanges": "未保存の変更",
+      "fileChanged": "ファイルが外部で変更されました",
+      "refreshing": "プレビューを更新中",
+      "previewOutdated": "プレビューが最新でない可能性があります",
+      "inspecting": "編集コントロールを準備しています...",
+      "selectWordToEdit": "ドキュメント内のテキストを選択して編集",
+      "selectExcelToEdit": "セルを選択して編集",
+      "readyToEdit": "選択した内容を編集できます",
+      "conflictRecovery": "編集内容は保存されていませんが、ここに残っています。ワークスペースのファイルは安全です。",
+      "saveFailureRecovery": "編集内容はここに残っており、ワークスペースのファイルは変更されていません。",
+      "copyDraft": "下書きをコピー",
+      "refreshLatest": "最新版を読み込む",
+      "requestPlaceholder": "Forge に適用してほしい変更を入力してください。",
+      "askWordContext": "ファイル：{{fileName}}\n段落：{{path}}\n選択したテキスト：{{text}}\n依頼：{{placeholder}}",
+      "askExcelContext": "ファイル：{{fileName}}\n範囲：{{range}}\nセル：\n{{cells}}\n依頼：{{placeholder}}"
+    },
+    "viewer": {
+      "zoomOut": "縮小",
+      "zoomIn": "拡大",
+      "resetZoom": "ズームをリセット",
+      "fitWidth": "幅に合わせる"
     }
   },
   "word": {

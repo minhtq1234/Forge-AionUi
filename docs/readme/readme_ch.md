@@ -20,7 +20,7 @@
 
 <p align="center">
   <strong>免费、开源，与AI Agents协作的Cowork App</strong><br>
-  <em>内置 Agent | 零配置 | 任意 API 密钥 | 多 Agent | 远程访问 | 跨平台 | 24/7 自动化</em>
+  <em>内置 Agent | 零配置 | 任意 API 密钥 | 多 Agent | 本机 WebUI | 跨平台 | 24/7 自动化</em>
 </p>
 
 <p align="center">
@@ -60,7 +60,7 @@
 | :-------------------- | :----------------- | :----------------------------------------------------------------------------------------------------- |
 | AI 可以操作您的文件   | 有限或不可用       | **是 — 内置 Agent，完全文件访问**                                                                      |
 | AI 可以执行多步骤任务 | 有限               | **是 — 自主执行，需您批准**                                                                            |
-| 从手机远程访问        | 很少               | **WebUI + Telegram / Lark / DingTalk / WeChat**                                                        |
+| 本机浏览器访问        | 很少               | **WebUI**                                                                                              |
 | 定时自动化            | 否                 | **Cron — 24/7 无人值守**                                                                               |
 | 同时运行多个 AI Agent | 否                 | **Claude Code、Codex、Qwen Code、Hermes Agent、Snow CLI、Cursor Agent 等 13+ 个 — 自动检测，统一界面** |
 | 价格                  | 免费 / 付费        | **免费且开源**                                                                                         |
@@ -266,11 +266,11 @@ AionUi 内置 **21 个专业助手**，每个都有独特能力，还能通过�
 
 ---
 
-## 随时随地，想用就用
+## 在本机浏览器中使用 Forge
 
-_你的 24/7 AI 助手 — 手机、平板、电脑，随时随地都能用。_
+Forge WebUI 会在运行 Forge 的这台电脑上的浏览器中打开 Forge。
 
-- **WebUI 模式** — 用浏览器就能访问，手机、平板、电脑都行。支持局域网、跨网络和服务器部署，扫码或密码登录，简单方便。
+- 它不支持局域网、手机或平板、远程服务器、反向代理或隧道。
 
 - **聊天平台集成**
   - **Telegram** — 直接在 Telegram 中与 AI Agent Cowork
@@ -280,14 +280,6 @@ _你的 24/7 AI 助手 — 手机、平板、电脑，随时随地都能用。_
   - **WeCom（企业微信）**、**Slack**、**Discord** 等更多平台即将推出
 
 > **设置：** AionUi 设置 → WebUI 设置 → Channel，配置 Bot Token。
-
-<p align="center">
-  <img src="../../resources/webui-remote.gif" alt="WebUI remote access demo" width="800">
-</p>
-
-<p align="center"><em>远程监管你的 Agent — Claude、Gemini、Codex，浏览器或手机即可远程控制与查看，如同 Claude Code remote。</em></p>
-
-> [远程互联网访问教程](https://github.com/iOfficeAI/AionUi/wiki/Remote-Internet-Access-Guide-Chinese)
 
 ## ✨ Cowork 演示
 
@@ -637,7 +629,7 @@ brew install aionui
 - [⚙️ LLM 配置指南](https://github.com/iOfficeAI/AionUi/wiki/LLM-Configuration) — 多平台 AI 模型怎么配置
 - [🤖 多 Agent 模式设置](https://github.com/iOfficeAI/AionUi/wiki/ACP-Setup) — 把终端 AI Agent 集成进来
 - [🔌 MCP 工具配置](https://github.com/iOfficeAI/AionUi/wiki/MCP-Configuration-Guide) — 模型上下文协议服务器设置
-- [🌐 WebUI 配置指南](https://github.com/iOfficeAI/AionUi/wiki/WebUI-Configuration-Guide) — WebUI 完整设置教程
+- [🌐 本机 WebUI 使用指南](../guides/webui.md) — 在此电脑浏览器中使用 WebUI 的指南
 
 **🎯 使用场景**
 

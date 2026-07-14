@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { IResponseMessage } from '@/common/adapter/ipcBridge';
-import { transformMessage } from '@/common/chat/chatLib';
+import { extractDiagnosticTokenEstimate, transformMessage } from '@/common/chat/chatLib';
 
 const tip = (content: string, type: 'success' | 'info' | 'warning' | 'error' = 'success'): IResponseMessage => ({
   type: 'tips',
@@ -31,5 +31,19 @@ describe('transformMessage — aioncore diagnostic tips are filtered out', () =>
     expect(result).toBeDefined();
     expect(result?.type).toBe('tips');
     expect((result as { content: { content: string } }).content.content).toBe('Your report is ready to download.');
+  });
+
+  it('extracts the active token watermark from diagnostic telemetry', () => {
+    expect(
+      extractDiagnosticTokenEstimate('Token watermark override: provider=0, local_estimate=19756, using=92412')
+    ).toBe(92412);
+  });
+
+  it('falls back to the local token estimate when using is absent', () => {
+    expect(extractDiagnosticTokenEstimate('provider=0, local_estimate=20198')).toBe(20198);
+  });
+
+  it('ignores ordinary user-facing tips for token accounting', () => {
+    expect(extractDiagnosticTokenEstimate('Your report is ready to download.')).toBeNull();
   });
 });

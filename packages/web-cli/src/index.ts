@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openBrowserUrl, shouldAutoOpenBrowser } from './browser.js';
 import { ensureAdminPassword } from './ensureAdminPassword.js';
+import { resolveRemoteAccessPolicy, warnUnsupportedRemoteAccess } from './remoteAccessPolicy.js';
 
 // tarball layout:
 //   aionui-web/
@@ -113,12 +114,6 @@ function resolvePort(flags: Map<string, string | true>): number {
   return DEFAULT_PORT;
 }
 
-export function resolveAllowRemote(_flags: Map<string, string | true>): boolean {
-  // Forge is desktop-only (decision D1). Remote binding is disabled; the flag and
-  // AIONUI_ALLOW_REMOTE / AIONUI_REMOTE env vars are intentionally ignored.
-  return false;
-}
-
 function readPackageVersion(): string {
   try {
     const pkgPath = path.join(cliRoot, 'package.json');
@@ -137,7 +132,9 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
   const logDir = resolveLogDir(flags, dataDir);
   fs.mkdirSync(logDir, { recursive: true });
   const port = resolvePort(flags);
-  const allowRemote = resolveAllowRemote(flags);
+  const remoteAccessPolicy = resolveRemoteAccessPolicy(flags);
+  warnUnsupportedRemoteAccess(remoteAccessPolicy);
+  const { allowRemote } = remoteAccessPolicy;
   const version = readPackageVersion();
   const autoOpenBrowser = shouldAutoOpenBrowser({
     allowRemote,

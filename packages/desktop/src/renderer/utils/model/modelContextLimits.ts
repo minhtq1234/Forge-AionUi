@@ -51,6 +51,9 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   'claude-3.5-haiku': 200_000,
   'claude-3-opus': 200_000,
   'claude-3-haiku': 200_000,
+
+  // MiniMax 系列
+  'minimax-m2.5': 192_000,
 };
 
 /**
@@ -59,22 +62,27 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
 export const DEFAULT_CONTEXT_LIMIT = 1_048_576;
 
 /**
- * 根据模型名称获取 context limit
+ * 根据模型名称获取已知的 context limit，未命中时返回 undefined
  * 支持模糊匹配，例如 "gemini-2.5-pro-latest" 会匹配 "gemini-2.5-pro"
+ *
+ * Returns the mapped context window for a known model, or `undefined` when the
+ * model is not recognized. Callers that need a graceful "--" (e.g. the context
+ * budget indicator) use this so an unknown model stays truly unknown instead of
+ * silently inheriting the default window.
  */
-export function getModelContextLimit(modelName: string | undefined | null): number {
-  if (!modelName) return DEFAULT_CONTEXT_LIMIT;
+export function getKnownModelContextLimit(modelName: string | undefined | null): number | undefined {
+  if (!modelName) return undefined;
 
   const lowerModelName = modelName.toLowerCase();
 
-  // 精确匹配
+  // 精确匹配 / exact match
   if (MODEL_CONTEXT_LIMITS[lowerModelName]) {
     return MODEL_CONTEXT_LIMITS[lowerModelName];
   }
 
-  // 模糊匹配：查找最长匹配的模型名
+  // 模糊匹配：查找最长匹配的模型名 / fuzzy match: longest matching key wins
   let bestMatch = '';
-  let bestLimit = DEFAULT_CONTEXT_LIMIT;
+  let bestLimit: number | undefined;
 
   for (const [key, limit] of Object.entries(MODEL_CONTEXT_LIMITS)) {
     if (lowerModelName.includes(key) && key.length > bestMatch.length) {
@@ -84,4 +92,12 @@ export function getModelContextLimit(modelName: string | undefined | null): numb
   }
 
   return bestLimit;
+}
+
+/**
+ * 根据模型名称获取 context limit，未知模型回退到默认值
+ * 支持模糊匹配，例如 "gemini-2.5-pro-latest" 会匹配 "gemini-2.5-pro"
+ */
+export function getModelContextLimit(modelName: string | undefined | null): number {
+  return getKnownModelContextLimit(modelName) ?? DEFAULT_CONTEXT_LIMIT;
 }
