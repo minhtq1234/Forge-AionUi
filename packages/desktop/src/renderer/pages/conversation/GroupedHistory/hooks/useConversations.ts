@@ -57,14 +57,8 @@ export const useConversations = () => {
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<string[]>(() => readExpandedWorkspaces());
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => readCollapsedSections());
   const { id } = useParams();
-  const {
-    conversations,
-    isConversationGenerating,
-    hasCompletionUnread,
-    clearCompletionUnread,
-    setActiveConversation,
-    groupedHistory,
-  } = useConversationHistoryContext();
+  const { conversations, isConversationGenerating, getRecentCompletionAt, refreshConversationRuntime, groupedHistory } =
+    useConversationHistoryContext();
 
   const { pinnedConversations, timelineSections } = groupedHistory;
 
@@ -85,6 +79,12 @@ export const useConversations = () => {
     });
   }, []);
 
+  useEffect(() => {
+    if (id) {
+      refreshConversationRuntime(id);
+    }
+  }, [id, refreshConversationRuntime]);
+
   // Reveal + scroll the active conversation into view.
   // Depends on the grouped data because on a cold start (opening the app
   // directly on a conversation URL) the list loads asynchronously — we re-run
@@ -93,13 +93,9 @@ export const useConversations = () => {
   // like CronJobSiderSection) to render before computing the scroll position.
   useEffect(() => {
     if (!id) {
-      setActiveConversation(null);
       revealedIdRef.current = null;
       return;
     }
-
-    setActiveConversation(id);
-    clearCompletionUnread(id);
 
     if (revealedIdRef.current === id) return;
 
@@ -137,7 +133,7 @@ export const useConversations = () => {
       cancelAnimationFrame(outerRafId);
       cancelAnimationFrame(innerRafId);
     };
-  }, [clearCompletionUnread, id, setActiveConversation, pinnedConversations, timelineSections]);
+  }, [id, pinnedConversations, timelineSections]);
 
   // Persist workspace expansion state
   useEffect(() => {
@@ -209,7 +205,7 @@ export const useConversations = () => {
   return {
     conversations,
     isConversationGenerating,
-    hasCompletionUnread,
+    getRecentCompletionAt,
     expandedWorkspaces,
     pinnedConversations,
     timelineSections,

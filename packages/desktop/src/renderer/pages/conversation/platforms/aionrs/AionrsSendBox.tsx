@@ -8,6 +8,7 @@ import { ipcBridge } from '@/common';
 import { parseContextCommand, type ContextCommandInvalidCode } from '@/common/chat/slash/contextCommands';
 import type { IConversationMcpStatus } from '@/common/config/storage';
 import AgentModeSelector from '@/renderer/components/agent/AgentModeSelector';
+import ContextUsageIndicator from '@/renderer/components/agent/ContextUsageIndicator';
 import CommandQueuePanel from '@/renderer/components/chat/CommandQueuePanel';
 import MobileActionSheet, {
   type MobileActionSheetEntry,
@@ -27,7 +28,9 @@ import { getSendBoxDraftHook, type FileOrFolderItem } from '@/renderer/hooks/cha
 import { createSetUploadFile, useSendBoxFiles } from '@/renderer/hooks/chat/useSendBoxFiles';
 import { useSlashCommands } from '@/renderer/hooks/chat/useSlashCommands';
 import { useOpenFileSelector } from '@/renderer/hooks/file/useOpenFileSelector';
+import { useLocalTokenUsage } from '@/renderer/hooks/useLocalTokenUsage';
 import { useLatestRef } from '@/renderer/hooks/ui/useLatestRef';
+import { getKnownModelContextLimit } from '@/renderer/utils/model/modelContextLimits';
 import {
   shouldEnqueueConversationCommand,
   useConversationCommandQueue,
@@ -149,17 +152,22 @@ const AionrsSendBox: React.FC<{
   const { t } = useTranslation();
   const { checkAndUpdateTitle } = useAutoTitle();
   const { current_model } = modelSelection;
+  const contextLimit = getKnownModelContextLimit(current_model?.use_model);
   const teamPermission = useTeamPermission();
   const propagateMode = teamPermission?.propagateMode;
 
-  const { thought, running, setActiveMsgId, setWaitingResponse, resetState } = useAionrsMessage(conversation_id, {
-    onConfigChanged: (capabilities) => {
-      const modes = (capabilities as { modes?: string[] })?.modes;
-      if (modes && modes.length > 0) {
-        setDynamicModes(modeOptionsFromCapabilities(modes));
-      }
-    },
-  });
+  const { thought, running, setActiveMsgId, setWaitingResponse, resetState, tokenUsage } = useAionrsMessage(
+    conversation_id,
+    {
+      onConfigChanged: (capabilities) => {
+        const modes = (capabilities as { modes?: string[] })?.modes;
+        if (modes && modes.length > 0) {
+          setDynamicModes(modeOptionsFromCapabilities(modes));
+        }
+      },
+    }
+  );
+  const localUsage = useLocalTokenUsage();
   const runtimeView = useConversationRuntimeView(conversation_id);
 
   const { atPath, uploadFile, setAtPath, setUploadFile, content, setContent } = useSendBoxDraft(conversation_id);
@@ -710,6 +718,7 @@ const AionrsSendBox: React.FC<{
               onModeChanged={propagateMode}
               beforeRuntimeSync={prepareRuntimeConfig}
             />
+            <ContextUsageIndicator tokenUsage={tokenUsage} localUsage={localUsage} context_limit={contextLimit} />
           </div>
         }
         prefix={

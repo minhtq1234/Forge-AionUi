@@ -530,7 +530,15 @@
     "queueTooLarge": "佇列資料過大，無法安全快取，請先移除部分排隊指令。"
   },
   "contextUsage": {
-    "contextUsed": "上下文已使用"
+    "contextUsed": "上下文已使用",
+    "contextWindow": "上下文視窗",
+    "percentUsed": "已使用 {{percent}}%",
+    "tokenCount": "{{used}} / {{limit}} 個詞元",
+    "localTokenUsage": "本機詞元用量",
+    "today": "今天",
+    "weekToDate": "本週至今",
+    "monthToDate": "本月至今",
+    "triggerLabel": "顯示上下文用量"
   },
   "skill_generator": {
     "title": "Generate Skill/Rule",
@@ -571,6 +579,9 @@
       "failed": "失敗",
       "unsupported": "不支援"
     }
+  },
+  "status": {
+    "waitingApproval": "等待你的核准"
   },
   "runtimePreparing": {
     "sendboxHint": "正在準備執行環境。首次啟動可能會稍慢一些。"

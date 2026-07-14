@@ -537,7 +537,15 @@
     "queueTooLarge": "Los datos de la cola son demasiado grandes para persistir de forma segura. Quita algunos comandos primero."
   },
   "contextUsage": {
-    "contextUsed": "contexto usado"
+    "contextUsed": "contexto usado",
+    "contextWindow": "Ventana de contexto",
+    "percentUsed": "{{percent}} % usado",
+    "tokenCount": "{{used}} de {{limit}} tokens",
+    "localTokenUsage": "Uso local de tokens",
+    "today": "Hoy",
+    "weekToDate": "Semana hasta la fecha",
+    "monthToDate": "Mes hasta la fecha",
+    "triggerLabel": "Mostrar uso del contexto"
   },
   "skill_generator": {
     "title": "Generar habilidad/regla",
@@ -578,6 +586,9 @@
       "failed": "Falló",
       "unsupported": "No compatible"
     }
+  },
+  "status": {
+    "waitingApproval": "Esperando tu aprobación"
   },
   "runtimePreparing": {
     "sendboxHint": "Preparando el entorno de ejecución. El primer inicio puede tardar un poco más."
