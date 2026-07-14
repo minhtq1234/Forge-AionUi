@@ -391,12 +391,13 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
           break;
         }
         case 'acp_context_usage': {
-          const usageData = message.data as { used: number; size: number };
-          if (usageData && typeof usageData.used === 'number') {
+          // This payload is a context snapshot, not turn usage for the local ledger.
+          const usageData = message.data as { used?: unknown; size?: unknown } | null;
+          if (typeof usageData?.used === 'number' && Number.isFinite(usageData.used) && usageData.used >= 0) {
             setTokenUsage({ total_tokens: usageData.used });
-            if (usageData.size > 0) {
-              setContextLimit(usageData.size);
-            }
+          }
+          if (typeof usageData?.size === 'number' && Number.isFinite(usageData.size) && usageData.size > 0) {
+            setContextLimit(usageData.size);
           }
           break;
         }

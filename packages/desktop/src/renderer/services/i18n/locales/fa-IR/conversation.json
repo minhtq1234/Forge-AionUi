@@ -536,7 +536,15 @@
     "queueTooLarge": "داده صف برای ذخیره‌سازی امن بسیار بزرگ است. ابتدا برخی دستورات صف‌شده را حذف کنید."
   },
   "contextUsage": {
-    "contextUsed": "زمینه استفاده‌شده"
+    "contextUsed": "زمینه استفاده‌شده",
+    "contextWindow": "پنجره زمینه",
+    "percentUsed": "{{percent}}٪ استفاده‌شده",
+    "tokenCount": "{{used}} از {{limit}} توکن",
+    "localTokenUsage": "استفاده محلی از توکن‌ها",
+    "today": "امروز",
+    "weekToDate": "از ابتدای هفته",
+    "monthToDate": "از ابتدای ماه",
+    "triggerLabel": "نمایش استفاده از زمینه"
   },
   "skill_generator": {
     "title": "ساخت مهارت/قانون",

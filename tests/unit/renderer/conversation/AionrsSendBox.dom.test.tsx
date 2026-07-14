@@ -13,6 +13,7 @@ type AionrsMessageStateMock = {
   setActiveMsgId: ReturnType<typeof vi.fn>;
   setWaitingResponse: ReturnType<typeof vi.fn>;
   resetState: ReturnType<typeof vi.fn>;
+  tokenUsage: { total_tokens: number } | null;
 };
 
 type RuntimeViewStateMock = {
@@ -53,6 +54,8 @@ const {
   translateMock,
   useTeamPermissionMock,
   setSendBoxHandlerMock,
+  contextUsageIndicatorProps,
+  sendBoxProps,
 } = vi.hoisted(() => ({
   checkAndUpdateTitleMock: vi.fn(),
   createAionrsMessageState: (): AionrsMessageStateMock => ({
@@ -61,6 +64,7 @@ const {
     setActiveMsgId: vi.fn(),
     setWaitingResponse: vi.fn(),
     resetState: vi.fn(),
+    tokenUsage: null,
   }),
   createRuntimeViewState: (): RuntimeViewStateMock => ({
     hydrated: true,
@@ -86,6 +90,20 @@ const {
   translateMock: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
   useTeamPermissionMock: vi.fn(),
   setSendBoxHandlerMock: vi.fn(),
+  contextUsageIndicatorProps: {
+    current: null as {
+      tokenUsage: { total_tokens: number } | null;
+      localUsage: { today: number; weekToDate: number; monthToDate: number };
+      context_limit?: number;
+    } | null,
+  },
+  sendBoxProps: {
+    current: null as {
+      tokenUsage?: unknown;
+      localUsage?: unknown;
+      context_limit?: unknown;
+    } | null,
+  },
 }));
 
 vi.mock('@/common', () => ({
@@ -107,33 +125,48 @@ vi.mock('@/renderer/components/chat/SendBox', () => ({
     onSend,
     onChange,
     rightTools,
+    ...props
   }: {
     enableContextCommand?: boolean;
     onSend: (message: string) => Promise<void>;
     onChange?: (value: string) => void;
     rightTools?: React.ReactNode;
-  }) => (
-    <div>
-      {rightTools}
-      <span data-testid='context-command-enabled'>{String(Boolean(enableContextCommand))}</span>
-      <button type='button' onClick={() => onChange?.('hello')}>
-        change
-      </button>
-      <button type='button' onClick={() => void onSend('Hello').catch(() => {})}>
-        send
-      </button>
-      <button type='button' onClick={() => void onSend('/context compact').catch(() => {})}>
-        compact context
-      </button>
-      <button type='button' onClick={() => void onSend('/context pin').catch(() => {})}>
-        invalid context
-      </button>
-    </div>
-  ),
+  }) =>
+    (() => {
+      sendBoxProps.current = props;
+      return (
+        <div>
+          {rightTools}
+          <span data-testid='context-command-enabled'>{String(Boolean(enableContextCommand))}</span>
+          <button type='button' onClick={() => onChange?.('hello')}>
+            change
+          </button>
+          <button type='button' onClick={() => void onSend('Hello').catch(() => {})}>
+            send
+          </button>
+          <button type='button' onClick={() => void onSend('/context compact').catch(() => {})}>
+            compact context
+          </button>
+          <button type='button' onClick={() => void onSend('/context pin').catch(() => {})}>
+            invalid context
+          </button>
+        </div>
+      );
+    })(),
 }));
 
 vi.mock('@/renderer/components/agent/AgentModeSelector', () => ({
   default: () => <span data-testid='composer-permission-control' />,
+}));
+vi.mock('@/renderer/components/agent/ContextUsageIndicator', () => ({
+  default: (props: {
+    tokenUsage: { total_tokens: number } | null;
+    localUsage: { today: number; weekToDate: number; monthToDate: number };
+    context_limit?: number;
+  }) => {
+    contextUsageIndicatorProps.current = props;
+    return props.tokenUsage ? <span data-testid='context-usage-indicator' /> : null;
+  },
 }));
 vi.mock('@/renderer/components/chat/CommandQueuePanel', () => ({ default: () => null }));
 vi.mock('@/renderer/components/chat/MobileActionSheet', () => ({
@@ -173,6 +206,9 @@ vi.mock('@/renderer/hooks/context/ConversationContext', () => ({
 }));
 vi.mock('@/renderer/hooks/context/LayoutContext', () => ({
   useLayoutContext: () => ({ isMobile: false }),
+}));
+vi.mock('@/renderer/hooks/useLocalTokenUsage', () => ({
+  useLocalTokenUsage: () => ({ today: 120, weekToDate: 560, monthToDate: 1_240 }),
 }));
 vi.mock('@/renderer/hooks/chat/useAutoTitle', () => ({
   useAutoTitle: () => ({
@@ -300,6 +336,8 @@ describe('AionrsSendBox', () => {
     aionrsMessageState.current = createAionrsMessageState();
     runtimeViewState.current = createRuntimeViewState();
     thoughtDisplayProps.current = null;
+    contextUsageIndicatorProps.current = null;
+    sendBoxProps.current = null;
     ensureConversationRuntimeMock.mockResolvedValue({ recovered: false, config_options: [], runtime: null });
     useTeamPermissionMock.mockReturnValue(null);
   });
@@ -373,6 +411,40 @@ describe('AionrsSendBox', () => {
 
     expect(screen.getByTestId('composer-model-selector')).toBeInTheDocument();
     expect(screen.getByTestId('composer-permission-control')).toBeInTheDocument();
+  });
+
+  it('renders the context usage meter in right tools with AionRS usage data', () => {
+    aionrsMessageState.current = {
+      ...createAionrsMessageState(),
+      tokenUsage: { total_tokens: 12_000 },
+    };
+
+    const miniMaxSelection = {
+      current_model: {
+        provider_id: 'minimax',
+        model: 'MiniMax-M2.5',
+        use_model: 'minimax/MiniMax-M2.5',
+      },
+    } as AionrsModelSelection;
+
+    render(<AionrsSendBox conversation_id='conv-1' modelSelection={miniMaxSelection} />);
+
+    expect(screen.getByTestId('context-usage-indicator')).toBeInTheDocument();
+    expect(contextUsageIndicatorProps.current).toEqual({
+      tokenUsage: { total_tokens: 12_000 },
+      localUsage: { today: 120, weekToDate: 560, monthToDate: 1_240 },
+      context_limit: 204_800,
+    });
+    expect(screen.getByRole('button', { name: 'send' })).toBeInTheDocument();
+    expect(sendBoxProps.current).not.toHaveProperty('tokenUsage');
+    expect(sendBoxProps.current).not.toHaveProperty('localUsage');
+    expect(sendBoxProps.current).not.toHaveProperty('context_limit');
+  });
+
+  it('does not render a context usage meter when AionRS usage is unavailable', () => {
+    render(<AionrsSendBox conversation_id='conv-1' modelSelection={modelSelection} />);
+
+    expect(screen.queryByTestId('context-usage-indicator')).not.toBeInTheDocument();
   });
   it('hides stale processing when the hydrated runtime view is idle', () => {
     aionrsMessageState.current = {

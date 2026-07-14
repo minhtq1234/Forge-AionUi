@@ -542,7 +542,15 @@
     "queueTooLarge": "Os dados na fila são muito grandes para serem persistidos com segurança. Remova alguns comandos na fila primeiro."
   },
   "contextUsage": {
-    "contextUsed": "contexto usado"
+    "contextUsed": "contexto usado",
+    "contextWindow": "Janela de contexto",
+    "percentUsed": "{{percent}}% usado",
+    "tokenCount": "{{used}} de {{limit}} tokens",
+    "localTokenUsage": "Uso local de tokens",
+    "today": "Hoje",
+    "weekToDate": "Semana até hoje",
+    "monthToDate": "Mês até hoje",
+    "triggerLabel": "Mostrar uso do contexto"
   },
   "skill_generator": {
     "title": "Gerar Habilidade/Regra",

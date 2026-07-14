@@ -21,6 +21,8 @@ const {
   useTeamPermissionMock,
   isMobileMock,
   mobileActionSheetEntries,
+  contextUsageIndicatorProps,
+  sendBoxProps,
 } = vi.hoisted(() => ({
   sendMessageInvokeMock: vi.fn(),
   addOrUpdateMessageMock: vi.fn(),
@@ -37,6 +39,20 @@ const {
         onSelect?: (value: string) => void;
       };
     }>,
+  },
+  contextUsageIndicatorProps: {
+    current: null as {
+      tokenUsage: { total_tokens: number } | null;
+      localUsage: { today: number; weekToDate: number; monthToDate: number };
+      context_limit?: number;
+    } | null,
+  },
+  sendBoxProps: {
+    current: null as {
+      tokenUsage?: unknown;
+      localUsage?: unknown;
+      context_limit?: unknown;
+    } | null,
   },
 }));
 
@@ -60,30 +76,45 @@ vi.mock('@/renderer/components/chat/SendBox', () => ({
     onSend,
     onChange,
     rightTools,
+    ...props
   }: {
     onSend: (message: string) => Promise<void>;
     onChange?: (value: string) => void;
     rightTools?: React.ReactNode;
-  }) => (
-    <div>
-      {rightTools}
-      <button type='button' onClick={() => onChange?.('hello')}>
-        change
-      </button>
-      <button
-        type='button'
-        onClick={() => {
-          void onSend('Hello').catch(() => {});
-        }}
-      >
-        send
-      </button>
-    </div>
-  ),
+  }) =>
+    (() => {
+      sendBoxProps.current = props;
+      return (
+        <div>
+          {rightTools}
+          <button type='button' onClick={() => onChange?.('hello')}>
+            change
+          </button>
+          <button
+            type='button'
+            onClick={() => {
+              void onSend('Hello').catch(() => {});
+            }}
+          >
+            send
+          </button>
+        </div>
+      );
+    })(),
 }));
 
 vi.mock('@/renderer/components/agent/AgentModeSelector', () => ({
   default: () => <span data-testid='composer-permission-control' />,
+}));
+vi.mock('@/renderer/components/agent/ContextUsageIndicator', () => ({
+  default: (props: {
+    tokenUsage: { total_tokens: number } | null;
+    localUsage: { today: number; weekToDate: number; monthToDate: number };
+    context_limit?: number;
+  }) => {
+    contextUsageIndicatorProps.current = props;
+    return props.tokenUsage ? <span data-testid='context-usage-indicator' /> : null;
+  },
 }));
 vi.mock('@/renderer/components/chat/CommandQueuePanel', () => ({ default: () => null }));
 vi.mock('@/renderer/components/chat/MobileActionSheet', () => ({
@@ -146,6 +177,9 @@ vi.mock('@/renderer/hooks/context/ConversationContext', () => ({
 }));
 vi.mock('@/renderer/hooks/context/LayoutContext', () => ({
   useLayoutContext: () => ({ isMobile: isMobileMock.current }),
+}));
+vi.mock('@/renderer/hooks/useLocalTokenUsage', () => ({
+  useLocalTokenUsage: () => ({ today: 120, weekToDate: 560, monthToDate: 1_240 }),
 }));
 vi.mock('@/renderer/hooks/file/useOpenFileSelector', () => ({
   useOpenFileSelector: () => ({
@@ -211,7 +245,7 @@ vi.mock('@arco-design/web-react', () => ({
   Tag: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
 }));
 
-const makeMessageState = (): UseAcpMessageReturn => ({
+const makeMessageState = (overrides: Partial<UseAcpMessageReturn> = {}): UseAcpMessageReturn => ({
   thought: { subject: '', description: '' },
   setThought: vi.fn(),
   running: true,
@@ -225,6 +259,7 @@ const makeMessageState = (): UseAcpMessageReturn => ({
   hasThinkingMessage: false,
   slashCommands: [],
   fetchSlashCommands: vi.fn(),
+  ...overrides,
 });
 
 describe('AcpSendBox', () => {
@@ -232,6 +267,8 @@ describe('AcpSendBox', () => {
     vi.clearAllMocks();
     isMobileMock.current = false;
     mobileActionSheetEntries.current = [];
+    contextUsageIndicatorProps.current = null;
+    sendBoxProps.current = null;
     useTeamPermissionMock.mockReturnValue(null);
     useAcpConfigOptionsMock.mockReturnValue({
       setStatus: { state: 'idle' },
@@ -391,6 +428,55 @@ describe('AcpSendBox', () => {
 
     expect(screen.getByTestId('composer-model-selector')).toBeInTheDocument();
     expect(screen.getByTestId('composer-permission-control')).toBeInTheDocument();
+  });
+
+  it('renders the context usage meter in right tools with ACP usage data', () => {
+    render(
+      <AcpSendBox
+        conversation_id='conv-1'
+        backend='codex'
+        messageState={makeMessageState({
+          tokenUsage: { total_tokens: 12_000 },
+          context_limit: 32_000,
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('context-usage-indicator')).toBeInTheDocument();
+    expect(contextUsageIndicatorProps.current).toEqual({
+      tokenUsage: { total_tokens: 12_000 },
+      context_limit: 32_000,
+      localUsage: { today: 120, weekToDate: 560, monthToDate: 1_240 },
+    });
+    expect(screen.getByRole('button', { name: 'send' })).toBeInTheDocument();
+    expect(sendBoxProps.current).not.toHaveProperty('tokenUsage');
+    expect(sendBoxProps.current).not.toHaveProperty('localUsage');
+    expect(sendBoxProps.current).not.toHaveProperty('context_limit');
+  });
+
+  it('does not invent a context limit when ACP reports zero', () => {
+    render(
+      <AcpSendBox
+        conversation_id='conv-1'
+        backend='codex'
+        messageState={makeMessageState({
+          tokenUsage: { total_tokens: 12_000 },
+          context_limit: 0,
+        })}
+      />
+    );
+
+    expect(contextUsageIndicatorProps.current).toEqual({
+      tokenUsage: { total_tokens: 12_000 },
+      context_limit: undefined,
+      localUsage: { today: 120, weekToDate: 560, monthToDate: 1_240 },
+    });
+  });
+
+  it('does not render a context usage meter when ACP usage is unavailable', () => {
+    render(<AcpSendBox conversation_id='conv-1' backend='codex' messageState={makeMessageState()} />);
+
+    expect(screen.queryByTestId('context-usage-indicator')).not.toBeInTheDocument();
   });
 
   it('applies runtime thought level from the mobile action sheet without persisting a global preference', async () => {

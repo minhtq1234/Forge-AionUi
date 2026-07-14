@@ -536,7 +536,15 @@
     "queueTooLarge": "Дані черги занадто великі для безпечного збереження. Спочатку видаліть кілька команд."
   },
   "contextUsage": {
-    "contextUsed": "контексту використано"
+    "contextUsed": "контексту використано",
+    "contextWindow": "Контекстне вікно",
+    "percentUsed": "Використано {{percent}}%",
+    "tokenCount": "{{used}} із {{limit}} токенів",
+    "localTokenUsage": "Локальне використання токенів",
+    "today": "Сьогодні",
+    "weekToDate": "З початку тижня",
+    "monthToDate": "З початку місяця",
+    "triggerLabel": "Показати використання контексту"
   },
   "skill_generator": {
     "title": "Створити Навичку/Правило",

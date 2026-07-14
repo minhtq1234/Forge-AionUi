@@ -536,7 +536,15 @@
     "queueTooLarge": "Данные очереди слишком большие для безопасного сохранения. Сначала удалите несколько команд."
   },
   "contextUsage": {
-    "contextUsed": "контекст использован"
+    "contextUsed": "контекст использован",
+    "contextWindow": "Контекстное окно",
+    "percentUsed": "Использовано {{percent}}%",
+    "tokenCount": "{{used}} из {{limit}} токенов",
+    "localTokenUsage": "Локальное использование токенов",
+    "today": "Сегодня",
+    "weekToDate": "С начала недели",
+    "monthToDate": "С начала месяца",
+    "triggerLabel": "Показать использование контекста"
   },
   "skill_generator": {
     "title": "Создать навык/правило",

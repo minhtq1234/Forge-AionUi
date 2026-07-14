@@ -15,6 +15,7 @@ import { logStreamTerminalObserved } from '@/renderer/pages/conversation/runtime
 import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 import { isConversationProcessing } from '@/renderer/pages/conversation/utils/conversationRuntime';
 import { emitter } from '@/renderer/utils/emitter';
+import { recordLocalTokenUsage } from '@/renderer/pages/conversation/utils/localTokenUsage';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { processLocalCronResponse } from './localCronCommands';
 
@@ -22,6 +23,9 @@ type TokenUsage = {
   input_tokens?: number;
   output_tokens?: number;
 };
+
+const isValidTokenCount = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0;
 
 const getTipContent = (message: IResponseMessage): unknown => {
   if (message.type !== 'tips') return null;
@@ -51,6 +55,7 @@ export const useAionrsMessage = (
   });
   const [tokenUsage, setTokenUsage] = useState<TokenUsageData | null>(null);
   const tokenUsageRef = useRef<TokenUsageData | null>(null);
+  const pendingDiagnosticTokenEstimateRef = useRef<number | null>(null);
   // Current active message ID to filter out events from old requests (prevents aborted request events from interfering with new ones)
   const activeMsgIdRef = useRef<string | null>(null);
   const messageBufferRef = useRef(new Map<string, string>());
@@ -218,6 +223,7 @@ export const useAionrsMessage = (
 
       const tokenEstimate = extractDiagnosticTokenEstimate(getTipContent(message));
       if (tokenEstimate !== null) {
+        pendingDiagnosticTokenEstimateRef.current = tokenEstimate;
         persistTokenUsage({ total_tokens: tokenEstimate });
       }
 
@@ -230,6 +236,7 @@ export const useAionrsMessage = (
         hasActiveToolsRef.current = false;
         setThought({ subject: '', description: '' });
         hasContentInTurnRef.current = false;
+        pendingDiagnosticTokenEstimateRef.current = null;
         const transformedMessage = transformMessage(message);
         if (transformedMessage) {
           mergeLiveMessage(transformedMessage);
@@ -282,11 +289,32 @@ export const useAionrsMessage = (
             logStreamTerminalObserved(conversation_id, message.turn_id, 'aionrs', message.type);
             // aionrs stream_end carries usage in data field
             const usageData = message.data as TokenUsage | undefined;
-            if (usageData && typeof usageData === 'object' && 'input_tokens' in usageData) {
+            const hasValidInputTokens = isValidTokenCount(usageData?.input_tokens);
+            const hasValidOutputTokens = isValidTokenCount(usageData?.output_tokens);
+            const inputTokens = hasValidInputTokens ? usageData.input_tokens : 0;
+            const outputTokens = hasValidOutputTokens ? usageData.output_tokens : 0;
+            const diagnosticTokenEstimate = pendingDiagnosticTokenEstimateRef.current;
+            pendingDiagnosticTokenEstimateRef.current = null;
+            if (hasValidInputTokens) {
               const newTokenUsage: TokenUsageData = {
-                total_tokens: (usageData.input_tokens || 0) + (usageData.output_tokens || 0),
+                total_tokens: inputTokens + outputTokens,
               };
               persistTokenUsage(newTokenUsage);
+            }
+            if (hasValidInputTokens || hasValidOutputTokens) {
+              recordLocalTokenUsage({
+                id: `${conversation_id}:${message.turn_id ?? message.msg_id}`,
+                inputTokens,
+                outputTokens,
+                occurredAt: Date.now(),
+              });
+            } else if (diagnosticTokenEstimate !== null) {
+              recordLocalTokenUsage({
+                id: `${conversation_id}:${message.turn_id ?? message.msg_id}:estimate:${diagnosticTokenEstimate}`,
+                inputTokens: diagnosticTokenEstimate,
+                outputTokens: 0,
+                occurredAt: Date.now(),
+              });
             }
             setStreamRunning(false);
             streamRunningRef.current = false;
@@ -374,6 +402,7 @@ export const useAionrsMessage = (
             setWaitingResponse(false);
             waitingResponseRef.current = false;
             setThought({ subject: '', description: '' });
+            pendingDiagnosticTokenEstimateRef.current = null;
             onError?.(message as IResponseMessage);
           } else {
             // Mark that current turn has content output (exclude error type)
@@ -404,6 +433,7 @@ export const useAionrsMessage = (
     setThought({ subject: '', description: '' });
     setTokenUsage(null);
     tokenUsageRef.current = null;
+    pendingDiagnosticTokenEstimateRef.current = null;
     hasContentInTurnRef.current = false;
     setHasHydratedRunningState(false);
 
@@ -457,6 +487,7 @@ export const useAionrsMessage = (
     hasActiveToolsRef.current = false;
     setThought({ subject: '', description: '' });
     hasContentInTurnRef.current = false;
+    pendingDiagnosticTokenEstimateRef.current = null;
     // Clear active message ID to prevent filtering events from new messages after stop
     activeMsgIdRef.current = null;
   }, []);
