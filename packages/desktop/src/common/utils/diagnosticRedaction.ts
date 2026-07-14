@@ -9,6 +9,7 @@ export const DIAGNOSTIC_TRUNCATION_MARKER = '[TRUNCATED]';
 
 const CIRCULAR_MARKER = '[CIRCULAR]';
 const UNSUPPORTED_MARKER = '[UNSUPPORTED]';
+const UTF8_ENCODER = new TextEncoder();
 
 export type DiagnosticRedactionLimits = {
   maxArrayItems: number;
@@ -50,20 +51,44 @@ function isSensitiveKey(key: string): boolean {
   return SENSITIVE_KEYS.has(key.replace(/[^a-z0-9]/gi, '').toLowerCase());
 }
 
-function truncate(text: string, maxLength: number): string {
-  return text.length > maxLength ? `${text.slice(0, maxLength)}${DIAGNOSTIC_TRUNCATION_MARKER}` : text;
+function fitUtf8Prefix(text: string, maxBytes: number): string {
+  let byteLength = 0;
+  let codeUnitLength = 0;
+  for (const character of text) {
+    const characterBytes = UTF8_ENCODER.encode(character).byteLength;
+    if (byteLength + characterBytes > maxBytes) break;
+    byteLength += characterBytes;
+    codeUnitLength += character.length;
+  }
+  return text.slice(0, codeUnitLength);
 }
 
 export function redactDiagnosticText(text: string, maxLength = DEFAULT_LIMITS.maxStringLength): string {
-  const redacted = text
+  const truncated = text.length > maxLength;
+  const boundedText = truncated ? text.slice(0, maxLength) : text;
+  const redacted = boundedText
     .replace(/(\b(?:proxy[_-]?authorization|authorization)\s*[=:]\s*)[^\r\n]*/gi, `$1${DIAGNOSTIC_REDACTION_MARKER}`)
     .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, `$1 ${DIAGNOSTIC_REDACTION_MARKER}`)
-    .replace(/([a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:)[^@\s/]+@/gi, `$1${DIAGNOSTIC_REDACTION_MARKER}@`)
+    .replace(/\b([a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:)[^@\s/]+@/gi, `$1${DIAGNOSTIC_REDACTION_MARKER}@`)
     .replace(
-      /(["']?(?:authorization|proxy[_-]?authorization|x[_-]?api[_-]?key|api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|token|password|passwd|client[_-]?secret|secret|cookie|session(?:[_-]?(?:id|token))?|jwt(?:[_-]?token)?)["']?\s*[=:]\s*)(["']?)[^\s"',;}]+\2/gi,
+      /(["']?(?:authorization|proxy[_-]?authorization|x[_-]?api[_-]?key|api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|token|password|passwd|client[_-]?secret|secret|cookie|session(?:[_-]?(?:id|token))?|jwt(?:[_-]?token)?)["']?\s*[=:]\s*)(?:"(?:\\[^\r\n]|[^"\\\r\n])*"|'(?:\\[^\r\n]|[^'\\\r\n])*'|[^\s"',;}]+)/gi,
       `$1${DIAGNOSTIC_REDACTION_MARKER}`
     );
-  return truncate(redacted, maxLength);
+  return truncated ? `${redacted}${DIAGNOSTIC_TRUNCATION_MARKER}` : redacted;
+}
+
+export function redactDiagnosticTextToUtf8Bytes(text: string, maxBytes: number): string {
+  const normalizedMaxBytes = Math.max(0, Math.floor(maxBytes));
+  const redacted = redactDiagnosticText(text, normalizedMaxBytes);
+  if (UTF8_ENCODER.encode(redacted).byteLength <= normalizedMaxBytes) return redacted;
+
+  const markerBytes = UTF8_ENCODER.encode(DIAGNOSTIC_TRUNCATION_MARKER).byteLength;
+  if (normalizedMaxBytes <= markerBytes) {
+    return DIAGNOSTIC_TRUNCATION_MARKER.slice(0, normalizedMaxBytes);
+  }
+
+  const prefix = fitUtf8Prefix(redacted, normalizedMaxBytes - markerBytes);
+  return `${prefix}${DIAGNOSTIC_TRUNCATION_MARKER}`;
 }
 
 export function redactDiagnosticValue(value: unknown, limits: Partial<DiagnosticRedactionLimits> = {}): unknown {

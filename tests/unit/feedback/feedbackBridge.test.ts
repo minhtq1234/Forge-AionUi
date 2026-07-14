@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -115,6 +115,7 @@ vi.mock('node:fs', async () => {
     ...actual,
     closeSync: vi.fn(actual.closeSync),
     fstatSync: vi.fn(actual.fstatSync),
+    lstatSync: vi.fn(actual.lstatSync),
     openSync: vi.fn(actual.openSync),
     readSync: vi.fn(actual.readSync),
   };
@@ -354,6 +355,29 @@ describe('feedback logs', () => {
     }
   });
 
+  it('rejects real symlinked log files and dated directories', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-symlink-logs-'));
+    const outsideDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-symlink-targets-'));
+    try {
+      const linkedFileTarget = path.join(outsideDir, 'outside.log');
+      writeFileSync(linkedFileTarget, 'linked-file-secret\n');
+      if (process.platform !== 'win32') {
+        symlinkSync(linkedFileTarget, path.join(logsDir, '2026-07-14.log'), 'file');
+      }
+
+      const linkedYearTarget = path.join(outsideDir, '2026');
+      const linkedDayTarget = path.join(linkedYearTarget, '07', '14');
+      mkdirSync(linkedDayTarget, { recursive: true });
+      writeFileSync(path.join(linkedDayTarget, '2026-07-14.aioncore.log'), 'linked-directory-secret\n');
+      symlinkSync(linkedYearTarget, path.join(logsDir, '2026'), process.platform === 'win32' ? 'junction' : 'dir');
+
+      expect(collectFeedbackLogAttachment(logsDir)).toBeNull();
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+      rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
   it('redacts secrets before compressing recent logs', () => {
     const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-redaction-'));
     try {
@@ -575,13 +599,40 @@ describe('feedback logs', () => {
 
       collectFeedbackLogAttachment(logsDir, { maxFileBytes: 32 });
 
-      expect(fs.openSync).toHaveBeenCalledWith(logPath, 'r');
+      const expectedOpenFlags =
+        typeof fs.constants.O_NOFOLLOW === 'number'
+          ? fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW
+          : fs.constants.O_RDONLY;
+      expect(fs.openSync).toHaveBeenCalledWith(logPath, expectedOpenFlags);
       expect(fs.fstatSync).toHaveBeenCalledOnce();
       expect(fs.readSync).toHaveBeenCalledWith(expect.any(Number), expect.any(Buffer), 0, 32, 64);
       const tailRead = fs.readSync.mock.calls.find(([, buffer, offset, length, position]) => {
         return buffer.length === 32 && offset === 0 && length === 32 && position === 64;
       });
       expect(tailRead?.[1]).toHaveLength(32);
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a selected log when its opened descriptor identity has changed', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-swapped-log-'));
+    try {
+      const logPath = path.join(logsDir, '2026-07-14.log');
+      writeFileSync(logPath, 'must not be collected\n');
+      const selectedStat = fs.lstatSync(logPath);
+      const swappedStat = Object.create(
+        Object.getPrototypeOf(selectedStat),
+        Object.getOwnPropertyDescriptors(selectedStat)
+      ) as fs.Stats;
+      Object.defineProperty(swappedStat, 'ino', { configurable: true, value: selectedStat.ino + 1 });
+      vi.clearAllMocks();
+      vi.mocked(fs.fstatSync).mockReturnValueOnce(swappedStat);
+
+      expect(collectFeedbackLogAttachment(logsDir)).toBeNull();
+
+      expect(fs.closeSync).toHaveBeenCalledOnce();
+      expect(fs.readSync).not.toHaveBeenCalled();
     } finally {
       rmSync(logsDir, { recursive: true, force: true });
     }
@@ -649,6 +700,52 @@ describe('feedbackBridge — renderer-log', () => {
     expect(serializedCalls).toContain('[TRUNCATED]');
   });
 
+  it('accepts an authorized renderer message at exactly 4,096 UTF-8 bytes', () => {
+    const infoLog = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const message = 'x'.repeat(4_096);
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({ level: 'info', message })
+    );
+
+    const loggedMessage = infoLog.mock.calls[0]?.[0];
+    expect(loggedMessage).toBe(`[FeedbackReport:renderer] ${message}`);
+    expect(Buffer.byteLength(String(loggedMessage).slice('[FeedbackReport:renderer] '.length), 'utf8')).toBe(4_096);
+  });
+
+  it('fits a multibyte renderer message and truncation marker within 4,096 UTF-8 bytes', () => {
+    const infoLog = vi.spyOn(console, 'info').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({ level: 'info', message: '\u{1F4A5}'.repeat(2_048) })
+    );
+
+    const loggedMessage = String(infoLog.mock.calls[0]?.[0]).slice('[FeedbackReport:renderer] '.length);
+    expect(Buffer.byteLength(loggedMessage, 'utf8')).toBeLessThanOrEqual(4_096);
+    expect(loggedMessage.endsWith(DIAGNOSTIC_TRUNCATION_MARKER)).toBe(true);
+    expect(loggedMessage).not.toContain('\uFFFD');
+  });
+
+  it('accepts a renderer log envelope at exactly 64 KiB', () => {
+    const infoLog = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const basePayload = JSON.stringify({ level: 'info', message: 'envelope boundary', padding: '' });
+    const payload = JSON.stringify({
+      level: 'info',
+      message: 'envelope boundary',
+      padding: 'x'.repeat(64 * 1024 - Buffer.byteLength(basePayload, 'utf8')),
+    });
+    expect(Buffer.byteLength(payload, 'utf8')).toBe(64 * 1024);
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.({ sender: allowedWindow.webContents }, payload);
+
+    expect(infoLog).toHaveBeenCalledWith('[FeedbackReport:renderer] envelope boundary');
+  });
+
   it('drops a renderer log larger than 64 KiB before parsing', () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
     initFeedbackBridgeWithWindow(allowedWindow as never);
@@ -683,6 +780,20 @@ describe('feedbackBridge — renderer-log', () => {
     );
 
     expect(infoLog).toHaveBeenCalledWith('[FeedbackReport:renderer] feedback message', DIAGNOSTIC_TRUNCATION_MARKER);
+  });
+
+  it('accepts details whose serialized value is exactly 32 KiB', () => {
+    const infoLog = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const details = 'x'.repeat(32 * 1024 - 2);
+    expect(Buffer.byteLength(JSON.stringify(details), 'utf8')).toBe(32 * 1024);
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({ level: 'info', message: 'feedback message', details })
+    );
+
+    expect(infoLog).toHaveBeenCalledWith('[FeedbackReport:renderer] feedback message', details);
   });
 
   it('drops a valid JSON primitive renderer log payload', () => {

@@ -8,7 +8,9 @@ import { describe, it, expect } from 'vitest';
 import { uuid, parseError, resolveLocaleKey } from '@/common/utils/utils';
 import {
   DIAGNOSTIC_REDACTION_MARKER,
+  DIAGNOSTIC_TRUNCATION_MARKER,
   redactDiagnosticText,
+  redactDiagnosticTextToUtf8Bytes,
   redactDiagnosticValue,
 } from '@/common/utils/diagnosticRedaction';
 
@@ -233,6 +235,44 @@ describe('utils', () => {
       const result = redactDiagnosticText('Authorization: Token credentials-that-must-not-leak');
 
       expect(result).toBe(`Authorization: ${DIAGNOSTIC_REDACTION_MARKER}`);
+    });
+
+    it('bounds long safe alphabetic input before applying redaction patterns', { timeout: 5_000 }, () => {
+      const startedAt = performance.now();
+      const result = redactDiagnosticText('a'.repeat(50_000));
+      const elapsedMs = performance.now() - startedAt;
+
+      expect(result).toBe(`${'a'.repeat(16_384)}${DIAGNOSTIC_TRUNCATION_MARKER}`);
+      expect(elapsedMs).toBeLessThan(1_000);
+    });
+
+    it('redacts complete quoted secret assignments containing whitespace and escapes', () => {
+      const result = redactDiagnosticText(
+        String.raw`password="alpha beta \"secret\"" client_secret='gamma delta \'secret\''`
+      );
+
+      expect(result).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER} client_secret=${DIAGNOSTIC_REDACTION_MARKER}`);
+    });
+
+    it('redacts proxy authorization assignments directly', () => {
+      const result = redactDiagnosticText('Proxy-Authorization: Basic proxy-secret');
+
+      expect(result).toBe(`Proxy-Authorization: ${DIAGNOSTIC_REDACTION_MARKER}`);
+    });
+
+    it('accepts diagnostic text at exactly 4,096 UTF-8 bytes', () => {
+      const result = redactDiagnosticTextToUtf8Bytes('x'.repeat(4_096), 4_096);
+
+      expect(new TextEncoder().encode(result)).toHaveLength(4_096);
+      expect(result).not.toContain(DIAGNOSTIC_TRUNCATION_MARKER);
+    });
+
+    it('fits multibyte diagnostic text and its truncation marker within 4,096 UTF-8 bytes', () => {
+      const result = redactDiagnosticTextToUtf8Bytes('\u{1F4A5}'.repeat(2_048), 4_096);
+
+      expect(new TextEncoder().encode(result).byteLength).toBeLessThanOrEqual(4_096);
+      expect(result.endsWith(DIAGNOSTIC_TRUNCATION_MARKER)).toBe(true);
+      expect(result).not.toContain('\uFFFD');
     });
 
     it('normalizes errors without preserving secrets', () => {

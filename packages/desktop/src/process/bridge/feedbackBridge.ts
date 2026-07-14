@@ -14,7 +14,7 @@ import type { BrowserWindow, WebContents } from 'electron';
 import * as path from 'path';
 import {
   DIAGNOSTIC_TRUNCATION_MARKER,
-  redactDiagnosticText,
+  redactDiagnosticTextToUtf8Bytes,
   redactDiagnosticValue,
 } from '@/common/utils/diagnosticRedaction';
 import { collectFeedbackLogAttachment } from '../feedback/logs';
@@ -67,7 +67,7 @@ function parseRendererFeedbackLogPayload(payload: unknown): RendererFeedbackLogP
 
   const record = parsed as Record<string, unknown>;
   const level = record.level === 'warn' || record.level === 'error' ? record.level : 'info';
-  const message = redactDiagnosticText(
+  const message = redactDiagnosticTextToUtf8Bytes(
     typeof record.message === 'string' && record.message.trim() ? record.message : 'feedback log',
     MAX_RENDERER_MESSAGE_LENGTH
   );

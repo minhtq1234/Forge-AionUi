@@ -3,6 +3,7 @@ import { httpRequest } from '@/common/adapter/httpBridge';
 import {
   DIAGNOSTIC_TRUNCATION_MARKER,
   redactDiagnosticText,
+  redactDiagnosticTextToUtf8Bytes,
   redactDiagnosticValue,
 } from '@/common/utils/diagnosticRedaction';
 
@@ -11,6 +12,7 @@ const LOG_PREFIX = '[FeedbackReport]';
 const MAX_DB_DIAGNOSTICS_BYTES = 1024 * 1024;
 const MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024;
 const MAX_SCREENSHOTS = 3;
+const MAX_ATTACHMENT_CANDIDATES = 100;
 const MAX_TAG_VALUE_LENGTH = 1024;
 const RESERVED_AUTOMATIC_ATTACHMENT_FILENAMES = new Set(['logs.gz', 'db-diagnostics.json', 'db-diagnostics.json.gz']);
 const typedArrayByteLengthGetter = Object.getOwnPropertyDescriptor(
@@ -109,7 +111,7 @@ function normalizeLogDetails(details: unknown): unknown {
 }
 
 export function logFeedbackReport(level: FeedbackLogLevel, message: string, details?: unknown): void {
-  const safeMessage = redactDiagnosticText(message, 4 * 1024);
+  const safeMessage = redactDiagnosticTextToUtf8Bytes(message, 4 * 1024);
   const safeDetails = details === undefined ? undefined : redactDiagnosticValue(normalizeLogDetails(details));
   const consoleMessage = `${LOG_PREFIX} ${safeMessage}`;
   if (level === 'error') {
@@ -326,7 +328,8 @@ function selectUserScreenshots(attachments: unknown): FeedbackAttachment[] {
   if (!Number.isSafeInteger(length) || length < 0) return [];
 
   const screenshots: FeedbackAttachment[] = [];
-  for (let index = 0; index < length && screenshots.length < MAX_SCREENSHOTS; index++) {
+  const inspectedLength = Math.min(length, MAX_ATTACHMENT_CANDIDATES);
+  for (let index = 0; index < inspectedLength && screenshots.length < MAX_SCREENSHOTS; index++) {
     try {
       const screenshot = selectUserScreenshot(attachments[index]);
       if (screenshot) screenshots.push(screenshot);
@@ -377,7 +380,7 @@ export async function submitFeedbackReport(input: SubmitFeedbackReportInput): Pr
 
     Sentry.withScope((scope) => {
       scope.setTag('type', 'user-feedback');
-      scope.setTag('module', input.module);
+      scope.setTag('module', sanitizeTagValue(input.module));
       Object.entries(input.tags ?? {}).forEach(([key, value]) => {
         if (value.trim()) {
           scope.setTag(key, sanitizeTagValue(value));

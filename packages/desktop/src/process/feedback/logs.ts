@@ -41,8 +41,9 @@ type FeedbackLogCandidate = {
 
 type BoundedFileSystem = {
   closeSync: (fd: number) => void;
-  fstatSync: (fd: number) => { size: number };
-  openSync: (filePath: string, flags: string) => number;
+  fstatSync: (fd: number) => fs.Stats;
+  lstatSync: (filePath: fs.PathLike) => fs.Stats;
+  openSync: (filePath: fs.PathLike, flags: number) => number;
   readSync: (fd: number, buffer: Buffer, offset: number, length: number, position: number) => number;
 };
 
@@ -101,7 +102,8 @@ function collectFeedbackLogCandidates(logsDir: string): FeedbackLogCandidate[] {
   for (const name of yearsOrFiles) {
     const fullPath = path.join(logsDir, name);
     try {
-      const stat = fs.statSync(fullPath);
+      const stat = fs.lstatSync(fullPath);
+      if (stat.isSymbolicLink()) continue;
       if (stat.isFile()) {
         const match = DATE_PATTERN.exec(name);
         if (match && isFeedbackLogFileForDate(name, match[0])) {
@@ -163,7 +165,8 @@ function readDirNames(dir: string): string[] {
 
 function isDirectory(filePath: string): boolean {
   try {
-    return fs.statSync(filePath).isDirectory();
+    const stat = fs.lstatSync(filePath);
+    return !stat.isSymbolicLink() && stat.isDirectory();
   } catch {
     return false;
   }
@@ -171,7 +174,8 @@ function isDirectory(filePath: string): boolean {
 
 function isFile(filePath: string): boolean {
   try {
-    return fs.statSync(filePath).isFile();
+    const stat = fs.lstatSync(filePath);
+    return !stat.isSymbolicLink() && stat.isFile();
   } catch {
     return false;
   }
@@ -190,10 +194,25 @@ function getLogHeaderName(logPath: string, rootDir: string, showRelativePath: bo
   return relativePath.split(path.sep).join('/');
 }
 
-function readBoundedLogTail(filePath: string, maxBytes: number, fileSystem: BoundedFileSystem = fs): BoundedLogText {
-  const fd = fileSystem.openSync(filePath, 'r');
+function getReadOnlyNoFollowFlags(): number {
+  const noFollow = fs.constants.O_NOFOLLOW;
+  return fs.constants.O_RDONLY | (typeof noFollow === 'number' ? noFollow : 0);
+}
+
+function readBoundedLogTail(
+  filePath: string,
+  maxBytes: number,
+  fileSystem: BoundedFileSystem = fs
+): BoundedLogText | null {
+  const selectedStat = fileSystem.lstatSync(filePath);
+  if (selectedStat.isSymbolicLink() || !selectedStat.isFile()) return null;
+
+  const fd = fileSystem.openSync(filePath, getReadOnlyNoFollowFlags());
   try {
-    const size = fileSystem.fstatSync(fd).size;
+    const openedStat = fileSystem.fstatSync(fd);
+    if (!openedStat.isFile() || openedStat.dev !== selectedStat.dev || openedStat.ino !== selectedStat.ino) return null;
+
+    const size = openedStat.size;
     const bytesToRead = Math.min(size, maxBytes);
     const position = Math.max(0, size - bytesToRead);
     const precedingByte = Buffer.alloc(1);
@@ -275,6 +294,7 @@ export function collectFeedbackLogAttachment(
   for (const logPath of logPaths.slice(0, resolvedLimits.maxCandidateFiles)) {
     const basename = getLogHeaderName(logPath, normalizedDirs[0], true);
     const logTail = readBoundedLogTail(logPath, resolvedLimits.maxFileBytes);
+    if (!logTail) continue;
     const logText =
       logTail.truncated && !logTail.beginsAtLineBoundary ? discardFirstPartialLine(logTail.text) : logTail.text;
     const truncationNotice = logTail.truncated ? '[TRUNCATED: recent tail retained]\n' : '';
@@ -293,6 +313,8 @@ export function collectFeedbackLogAttachment(
     parts.push(section);
     aggregateBytes += sectionBytes;
   }
+
+  if (parts.length === 0) return null;
 
   return {
     filename: 'logs.gz',

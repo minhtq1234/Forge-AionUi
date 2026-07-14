@@ -30,7 +30,11 @@ export type { FeedbackEventExtra, FeedbackEventTags } from '@/renderer/services/
 
 const DESCRIPTION_MAX_LENGTH = 2000;
 const MAX_SCREENSHOTS = 3;
-const ACCEPTED_IMAGE_TYPES = '.png,.jpg,.jpeg,.gif';
+const MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024;
+const ACCEPTED_IMAGE_TYPES = '.png';
+
+const isAcceptedScreenshotFile = (file: File): boolean =>
+  file.type === 'image/png' && file.size > 0 && file.size <= MAX_SCREENSHOT_BYTES;
 
 const getUploadItemKey = (item: Pick<UploadItem, 'name' | 'originFile'>) =>
   `${item.originFile?.name ?? item.name}_${item.originFile?.size ?? 0}`;
@@ -50,6 +54,11 @@ export type PrefilledScreenshot = {
   data: Uint8Array;
   type: string;
 };
+
+const isAcceptedPrefilledScreenshot = (screenshot: PrefilledScreenshot): boolean =>
+  screenshot.type === 'image/png' &&
+  screenshot.data.byteLength > 0 &&
+  screenshot.data.byteLength <= MAX_SCREENSHOT_BYTES;
 
 type FeedbackReportModalProps = {
   visible: boolean;
@@ -111,18 +120,21 @@ const FeedbackReportModal: React.FC<FeedbackReportModalProps> = ({
     if (!visible) return;
     setModule(defaultModule);
     if (prefilledScreenshots && prefilledScreenshots.length > 0) {
-      const items: UploadItem[] = prefilledScreenshots.slice(0, MAX_SCREENSHOTS).map((shot, index) => {
-        // Normalize into a Blob so the BlobPart typing accepts SharedArrayBuffer-backed
-        // Uint8Array values returned over IPC on some Electron/TS target combos.
-        const blob = new Blob([shot.data.slice().buffer as ArrayBuffer], { type: shot.type });
-        const file = new File([blob], shot.filename, { type: shot.type });
-        return {
-          uid: `prefilled-${Date.now()}-${index}`,
-          name: shot.filename,
-          originFile: file,
-          status: 'done',
-        };
-      });
+      const items: UploadItem[] = prefilledScreenshots
+        .filter(isAcceptedPrefilledScreenshot)
+        .slice(0, MAX_SCREENSHOTS)
+        .map((shot, index) => {
+          // Normalize into a Blob so the BlobPart typing accepts SharedArrayBuffer-backed
+          // Uint8Array values returned over IPC on some Electron/TS target combos.
+          const blob = new Blob([shot.data.slice().buffer as ArrayBuffer], { type: shot.type });
+          const file = new File([blob], shot.filename, { type: shot.type });
+          return {
+            uid: `prefilled-${Date.now()}-${index}`,
+            name: shot.filename,
+            originFile: file,
+            status: 'done',
+          };
+        });
       setScreenshots(items);
     }
   }, [visible, defaultModule, prefilledScreenshots]);
@@ -249,7 +261,7 @@ const FeedbackReportModal: React.FC<FeedbackReportModalProps> = ({
       const seen = new Set(current.map(getUploadItemKey));
 
       files.forEach((file, index) => {
-        if (merged.length >= MAX_SCREENSHOTS) {
+        if (merged.length >= MAX_SCREENSHOTS || !isAcceptedScreenshotFile(file)) {
           return;
         }
 
@@ -284,6 +296,7 @@ const FeedbackReportModal: React.FC<FeedbackReportModalProps> = ({
     // Deduplicate by file name + size, then mark as 'done' to hide progress indicators
     const seen = new Set<string>();
     const deduped = fileList.filter((f) => {
+      if (!f.originFile || !isAcceptedScreenshotFile(f.originFile)) return false;
       const key = `${f.originFile?.name ?? f.name}_${f.originFile?.size ?? 0}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -294,7 +307,7 @@ const FeedbackReportModal: React.FC<FeedbackReportModalProps> = ({
 
   const handlePaste = useCallback(
     (event: ClipboardEvent) => {
-      const files = Array.from(event.clipboardData?.files ?? []).filter((file) => file.type.startsWith('image/'));
+      const files = Array.from(event.clipboardData?.files ?? []).filter(isAcceptedScreenshotFile);
       if (files.length === 0) {
         return;
       }

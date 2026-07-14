@@ -177,6 +177,32 @@ describe('submitFeedbackReport', () => {
     consoleError.mockRestore();
   });
 
+  it('emits a renderer feedback message at exactly 4,096 UTF-8 bytes', () => {
+    const logFeedbackEvent = vi.fn();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.stubGlobal('window', { electronAPI: { logFeedbackEvent } });
+    const message = 'x'.repeat(4_096);
+
+    logFeedbackReport('info', message);
+
+    const emittedMessage = logFeedbackEvent.mock.calls[0]?.[0]?.message as string;
+    expect(new TextEncoder().encode(emittedMessage)).toHaveLength(4_096);
+    expect(emittedMessage).toBe(message);
+  });
+
+  it('fits a multibyte renderer feedback message and marker within 4,096 UTF-8 bytes', () => {
+    const logFeedbackEvent = vi.fn();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.stubGlobal('window', { electronAPI: { logFeedbackEvent } });
+
+    logFeedbackReport('info', '\u{1F4A5}'.repeat(2_048));
+
+    const emittedMessage = logFeedbackEvent.mock.calls[0]?.[0]?.message as string;
+    expect(new TextEncoder().encode(emittedMessage).byteLength).toBeLessThanOrEqual(4_096);
+    expect(emittedMessage.endsWith(DIAGNOSTIC_TRUNCATION_MARKER)).toBe(true);
+    expect(emittedMessage).not.toContain('\uFFFD');
+  });
+
   for (const compressionMode of compressionModes) {
     it(`redacts DB diagnostics when ${compressionMode.name}`, async () => {
       compressionMode.setup();
@@ -240,6 +266,17 @@ describe('submitFeedbackReport', () => {
     );
     expect(sentryMocks.setTag.mock.calls.find(([key]) => key === 'exact_limit')?.[1]).toHaveLength(1024);
     expect(sentryMocks.setTag.mock.calls.find(([key]) => key === 'too_long')?.[1]).toHaveLength(1024);
+  });
+
+  it('redacts the built-in module tag with the caller tag sanitizer', async () => {
+    await submitFeedbackReport({
+      description: 'Module sanitization',
+      module: String.raw`password="module secret"`,
+      moduleLabel: 'Conversation & Sessions',
+    });
+
+    expect(sentryMocks.setTag).toHaveBeenCalledWith('module', `password=${DIAGNOSTIC_REDACTION_MARKER}`);
+    expect(JSON.stringify(sentryMocks.setTag.mock.calls)).not.toContain('module secret');
   });
 
   it('redacts extra fields while preserving the normalized user description over extra.description', async () => {
@@ -347,6 +384,36 @@ describe('submitFeedbackReport', () => {
     ).resolves.toBeUndefined();
 
     expect(getCapturedAttachments()).toEqual([]);
+  });
+
+  it('bounds attachment candidate inspection even when a proxy reports an enormous length', async () => {
+    const visitedIndexes: number[] = [];
+    const candidates = new Map<number, FeedbackAttachment>([
+      [0, { filename: 'first.png', data: new Uint8Array([1]), contentType: 'image/png' }],
+      [99, { filename: 'second.png', data: new Uint8Array([2]), contentType: 'image/png' }],
+      [100, { filename: 'outside-window.png', data: new Uint8Array([3]), contentType: 'image/png' }],
+    ]);
+    const attachments = new Proxy([], {
+      get: (target, property, receiver) => {
+        if (property === 'length') return Number.MAX_SAFE_INTEGER;
+        if (typeof property === 'string' && /^\d+$/u.test(property)) {
+          const index = Number(property);
+          visitedIndexes.push(index);
+          return candidates.get(index);
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    await submitFeedbackReport({
+      attachments: attachments as FeedbackAttachment[],
+      description: 'Bounded attachment inspection',
+      module: 'conversation-session',
+      moduleLabel: 'Conversation & Sessions',
+    });
+
+    expect(getCapturedAttachments().map((attachment) => attachment.filename)).toEqual(['first.png', 'second.png']);
+    expect(Math.max(...visitedIndexes)).toBe(99);
   });
 
   it('submits an independent screenshot snapshot when the caller mutates the original during log collection', async () => {
