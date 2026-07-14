@@ -95,12 +95,18 @@
         "generic": "Proje adımı ({{count}})"
       },
       "outcome": {
-        "active": "Tamamlandı: {{completed}} / {{total}}; tamamlanmadı: {{unfinished}} (başarısız: {{failed}}, durduruldu: {{canceled}}, kalan: {{pending}}).",
-        "completed": "Tamamlandı: {{completed}} / {{total}}.",
-        "recovered": "Tamamlandı: {{completed}} / {{total}}; yeniden deneme: {{retries}}.",
-        "partial": "Tamamlandı: {{completed}} / {{total}}; tamamlanmadı: {{unfinished}} (başarısız: {{failed}}, durduruldu: {{canceled}}, bekleyen: {{pending}}).",
-        "failed": "Tamamlandı: {{completed}} / {{total}}; tamamlanmadı: {{unfinished}} (başarısız: {{failed}}, durduruldu: {{canceled}}, bekleyen: {{pending}}).",
-        "canceled": "Çalışma durduruldu: tamamlandı {{completed}} / {{total}}; tamamlanmadı: {{unfinished}} (başarısız: {{failed}}, durduruldu: {{canceled}}, bekleyen: {{pending}})."
+        "active": "Şimdiye kadar {{completed}} / {{total}} tamamlandı ve kalan çalışma hâlâ sürüyor.",
+        "activeWithFailure": "Şimdiye kadar {{completed}} / {{total}} tamamlandı; bazı çalışmaların yeniden denenmesi gerekiyor, kalan çalışma ise sürüyor.",
+        "activeWithCanceled": "Şimdiye kadar {{completed}} / {{total}} tamamlandı; bazı çalışmalar durduruldu, kalan çalışma ise sürüyor.",
+        "activeWithFailureAndCanceled": "Şimdiye kadar {{completed}} / {{total}} tamamlandı; bazı çalışmaların yeniden denenmesi gerekiyor, bazıları durduruldu ve kalan çalışma sürüyor.",
+        "completed": "Bu tur için planlanan her şeyi tamamladım.",
+        "recoveredOneRetry": "Bu tur için planlanan her şeyi bir yeniden denemeden sonra tamamladım.",
+        "recoveredManyRetries": "Bu tur için planlanan her şeyi {{retries}} yeniden denemeden sonra tamamladım.",
+        "partial": "Planlanan çalışmanın bir kısmını tamamladım, ancak bazı çalışmaların yeniden denenmesi gerekiyor.",
+        "partialWithCanceled": "Planlanan çalışmanın bir kısmını tamamladım, ancak bazı çalışmaların yeniden denenmesi gerekiyor ve bazıları durduruldu.",
+        "failed": "Planlanan çalışmayı tamamlayamadım ve bazı çalışmaların yeniden denenmesi gerekiyor.",
+        "failedWithCanceled": "Planlanan çalışmayı tamamlayamadım; bazı çalışmaların yeniden denenmesi gerekiyor ve bazıları durduruldu.",
+        "canceled": "Planlanan tüm çalışma tamamlanmadan bu turu durdurdum."
       }
     },
     "attempt": "({{n}}. deneme)",

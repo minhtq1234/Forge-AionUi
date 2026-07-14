@@ -95,12 +95,18 @@
         "generic": "プロジェクト手順 ({{count}})"
       },
       "outcome": {
-        "active": "完了: {{completed}} / {{total}}、未完了: {{unfinished}} (失敗: {{failed}}、停止: {{canceled}}、残り: {{pending}})。",
-        "completed": "完了: {{completed}} / {{total}}。",
-        "recovered": "完了: {{completed}} / {{total}}、再試行: {{retries}}。",
-        "partial": "完了: {{completed}} / {{total}}、未完了: {{unfinished}} (失敗: {{failed}}、停止: {{canceled}}、保留: {{pending}})。",
-        "failed": "完了: {{completed}} / {{total}}、未完了: {{unfinished}} (失敗: {{failed}}、停止: {{canceled}}、保留: {{pending}})。",
-        "canceled": "作業を停止しました: 完了 {{completed}} / {{total}}、未完了: {{unfinished}} (失敗: {{failed}}、停止: {{canceled}}、保留: {{pending}})。"
+        "active": "ここまで {{completed}} / {{total}} を完了し、残りの作業はまだ進行中です。",
+        "activeWithFailure": "ここまで {{completed}} / {{total}} を完了し、一部の作業は再試行が必要ですが、残りは進行中です。",
+        "activeWithCanceled": "ここまで {{completed}} / {{total}} を完了し、一部の作業は停止されましたが、残りは進行中です。",
+        "activeWithFailureAndCanceled": "ここまで {{completed}} / {{total}} を完了し、一部は再試行が必要で、一部は停止され、残りは進行中です。",
+        "completed": "このターンで予定した作業をすべて完了しました。",
+        "recoveredOneRetry": "このターンで予定した作業を、1 回の再試行後にすべて完了しました。",
+        "recoveredManyRetries": "このターンで予定した作業を、{{retries}} 回の再試行後にすべて完了しました。",
+        "partial": "予定した作業の一部を完了しましたが、一部は再試行が必要です。",
+        "partialWithCanceled": "予定した作業の一部を完了しましたが、一部は再試行が必要で、一部は停止されました。",
+        "failed": "予定した作業を完了できず、一部は再試行が必要です。",
+        "failedWithCanceled": "予定した作業を完了できず、一部は再試行が必要で、一部は停止されました。",
+        "canceled": "予定した作業をすべて完了する前に、このターンを停止しました。"
       }
     },
     "attempt": "（{{n}} 回目の試行）",

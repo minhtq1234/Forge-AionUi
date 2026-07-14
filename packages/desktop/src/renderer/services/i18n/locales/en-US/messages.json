@@ -95,12 +95,18 @@
         "generic": "Project step ({{count}})"
       },
       "outcome": {
-        "active": "Completed: {{completed}} of {{total}}; unfinished: {{unfinished}} (failed: {{failed}}, stopped: {{canceled}}, remaining: {{pending}}).",
-        "completed": "Completed: {{completed}} of {{total}}.",
-        "recovered": "Completed: {{completed}} of {{total}}; retries: {{retries}}.",
-        "partial": "Completed: {{completed}} of {{total}}; unfinished: {{unfinished}} (failed: {{failed}}, stopped: {{canceled}}, pending: {{pending}}).",
-        "failed": "Completed: {{completed}} of {{total}}; unfinished: {{unfinished}} (failed: {{failed}}, stopped: {{canceled}}, pending: {{pending}}).",
-        "canceled": "Work stopped: completed {{completed}} of {{total}}; unfinished: {{unfinished}} (failed: {{failed}}, stopped: {{canceled}}, pending: {{pending}})."
+        "active": "I've completed {{completed}} of {{total}} so far, and the remaining work is still underway.",
+        "activeWithFailure": "I've completed {{completed}} of {{total}} so far; some work needs another attempt while the remaining work is still underway.",
+        "activeWithCanceled": "I've completed {{completed}} of {{total}} so far; some work was stopped while the remaining work is still underway.",
+        "activeWithFailureAndCanceled": "I've completed {{completed}} of {{total}} so far; some work needs another attempt, some was stopped, and the remaining work is still underway.",
+        "completed": "I completed everything planned for this turn.",
+        "recoveredOneRetry": "I completed everything planned for this turn after one retry.",
+        "recoveredManyRetries": "I completed everything planned for this turn after {{retries}} retries.",
+        "partial": "I completed part of the planned work, but some work still needs another attempt.",
+        "partialWithCanceled": "I completed part of the planned work, but some work needs another attempt and some was stopped.",
+        "failed": "I couldn't complete the planned work, and some work still needs another attempt.",
+        "failedWithCanceled": "I couldn't complete the planned work; some work needs another attempt and some was stopped.",
+        "canceled": "I stopped this turn before all planned work was completed."
       }
     },
     "attempt": "(attempt {{n}})",

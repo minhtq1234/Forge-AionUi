@@ -95,12 +95,18 @@
         "generic": "Projektschritt ({{count}})"
       },
       "outcome": {
-        "active": "Abgeschlossen: {{completed}} von {{total}}; offen: {{unfinished}} (fehlgeschlagen: {{failed}}, gestoppt: {{canceled}}, verbleibend: {{pending}}).",
-        "completed": "Abgeschlossen: {{completed}} von {{total}}.",
-        "recovered": "Abgeschlossen: {{completed}} von {{total}}; Wiederholungen: {{retries}}.",
-        "partial": "Abgeschlossen: {{completed}} von {{total}}; offen: {{unfinished}} (fehlgeschlagen: {{failed}}, gestoppt: {{canceled}}, ausstehend: {{pending}}).",
-        "failed": "Abgeschlossen: {{completed}} von {{total}}; offen: {{unfinished}} (fehlgeschlagen: {{failed}}, gestoppt: {{canceled}}, ausstehend: {{pending}}).",
-        "canceled": "Arbeit gestoppt: abgeschlossen {{completed}} von {{total}}; offen: {{unfinished}} (fehlgeschlagen: {{failed}}, gestoppt: {{canceled}}, ausstehend: {{pending}})."
+        "active": "Ich habe bisher {{completed}} von {{total}} abgeschlossen, und die restliche Arbeit läuft noch.",
+        "activeWithFailure": "Ich habe bisher {{completed}} von {{total}} abgeschlossen; manche Arbeit braucht einen weiteren Versuch, während der Rest noch läuft.",
+        "activeWithCanceled": "Ich habe bisher {{completed}} von {{total}} abgeschlossen; manche Arbeit wurde gestoppt, während der Rest noch läuft.",
+        "activeWithFailureAndCanceled": "Ich habe bisher {{completed}} von {{total}} abgeschlossen; manche Arbeit braucht einen weiteren Versuch, manche wurde gestoppt, und der Rest läuft noch.",
+        "completed": "Ich habe alles für diesen Turn Geplante abgeschlossen.",
+        "recoveredOneRetry": "Ich habe alles für diesen Turn Geplante nach einem weiteren Versuch abgeschlossen.",
+        "recoveredManyRetries": "Ich habe alles für diesen Turn Geplante nach {{retries}} weiteren Versuchen abgeschlossen.",
+        "partial": "Ich habe einen Teil der geplanten Arbeit abgeschlossen, aber manche Arbeit braucht noch einen weiteren Versuch.",
+        "partialWithCanceled": "Ich habe einen Teil der geplanten Arbeit abgeschlossen, aber manche Arbeit braucht einen weiteren Versuch und manche wurde gestoppt.",
+        "failed": "Ich konnte die geplante Arbeit nicht abschließen, und manche Arbeit braucht noch einen weiteren Versuch.",
+        "failedWithCanceled": "Ich konnte die geplante Arbeit nicht abschließen; manche Arbeit braucht einen weiteren Versuch und manche wurde gestoppt.",
+        "canceled": "Ich habe diesen Turn gestoppt, bevor alle geplante Arbeit abgeschlossen war."
       }
     },
     "attempt": "(Versuch {{n}})",

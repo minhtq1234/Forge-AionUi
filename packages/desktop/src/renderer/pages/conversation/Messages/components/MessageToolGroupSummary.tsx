@@ -506,13 +506,33 @@ const MessageToolGroupSummary: React.FC<{ messages: WorkJournalSourceMessage[]; 
   const outcome = useMemo(() => {
     switch (recap.status) {
       case 'active':
+        if (recap.failed > 0 && recap.canceled > 0) {
+          return t('messages.toolActivity.recap.outcome.activeWithFailureAndCanceled', recap);
+        }
+        if (recap.failed > 0) return t('messages.toolActivity.recap.outcome.activeWithFailure', recap);
+        if (recap.canceled > 0) return t('messages.toolActivity.recap.outcome.activeWithCanceled', recap);
         return t('messages.toolActivity.recap.outcome.active', recap);
       case 'recovered':
-        return t('messages.toolActivity.recap.outcome.recovered', recap);
+        return t(
+          recap.retries === 1
+            ? 'messages.toolActivity.recap.outcome.recoveredOneRetry'
+            : 'messages.toolActivity.recap.outcome.recoveredManyRetries',
+          recap
+        );
       case 'partial':
-        return t('messages.toolActivity.recap.outcome.partial', recap);
+        return t(
+          recap.canceled > 0
+            ? 'messages.toolActivity.recap.outcome.partialWithCanceled'
+            : 'messages.toolActivity.recap.outcome.partial',
+          recap
+        );
       case 'failed':
-        return t('messages.toolActivity.recap.outcome.failed', recap);
+        return t(
+          recap.canceled > 0
+            ? 'messages.toolActivity.recap.outcome.failedWithCanceled'
+            : 'messages.toolActivity.recap.outcome.failed',
+          recap
+        );
       case 'canceled':
         return t('messages.toolActivity.recap.outcome.canceled', recap);
       case 'completed':

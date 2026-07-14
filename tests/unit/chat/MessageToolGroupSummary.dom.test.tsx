@@ -17,6 +17,9 @@ const mockDownloadFileFromPath = vi.fn().mockResolvedValue(undefined);
 const mockMessageSuccess = vi.fn();
 const mockMessageError = vi.fn();
 
+const renderOutcomeTemplate = (template: string, values: Record<string, number>): string =>
+  template.replace(/\{\{(\w+)\}\}/g, (match: string, key: string) => (key in values ? String(values[key]) : match));
+
 vi.mock('@/renderer/components/media/LocalImageView', () => ({
   __esModule: true,
   default: ({ src, alt, className }: { src: string; alt: string; className?: string }) => (
@@ -1024,6 +1027,23 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       expect(screen.getByText('messages.toolActivity.recap.headline.active')).toBeInTheDocument();
       expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.active .*"completed":1/)).toBeInTheDocument();
       expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.active .*"pending":1/)).toBeInTheDocument();
+      expect(screen.queryByText(/messages\.toolActivity\.recap\.outcome\.activeWith/)).not.toBeInTheDocument();
+      expect(enUsMessages.toolActivity.recap.outcome.active).toBe(
+        "I've completed {{completed}} of {{total}} so far, and the remaining work is still underway."
+      );
+      expect(enUsMessages.toolActivity.recap.outcome.active).not.toMatch(/\b(?:failed|stopped|remaining|unfinished):/);
+    });
+
+    it('uses richer active recap copy when a step has failed', () => {
+      render(
+        <MessageToolGroupSummary
+          isActive
+          messages={[acpStep('failed', 'failed-1'), commandStep('in_progress', 'verify-1', 'bun run test')]}
+        />
+      );
+
+      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.activeWithFailure/)).toBeInTheDocument();
+      expect(screen.queryByText(/messages\.toolActivity\.recap\.outcome\.active .*"failed":1/)).not.toBeInTheDocument();
     });
 
     it('does not report inactive pending work as active', () => {
@@ -1091,7 +1111,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       render(<MessageToolGroupSummary messages={[acpStep('failed', 'retry-1'), acpStep('completed', 'retry-2')]} />);
 
       expect(screen.getByText('messages.toolActivity.recap.headline.recovered')).toBeInTheDocument();
-      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.recovered .*"retries":1/)).toBeInTheDocument();
+      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.recoveredOneRetry/)).toBeInTheDocument();
     });
 
     it('uses plural-safe recovery copy after multiple retries', () => {
@@ -1107,7 +1127,27 @@ describe('MessageToolGroupSummary plain-language activity', () => {
       );
 
       expect(enUsMessages.toolActivity.recap.headline.recovered).toBe('Work recovered');
-      expect(screen.getByText(/messages\.toolActivity\.recap\.outcome\.recovered .*"retries":3/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/messages\.toolActivity\.recap\.outcome\.recoveredManyRetries .*"retries":3/)
+      ).toBeInTheDocument();
+    });
+
+    it('renders English recap templates as friendly sentences without zero-value buckets', () => {
+      const outcome = enUsMessages.toolActivity.recap.outcome;
+
+      expect(renderOutcomeTemplate(outcome.active, { completed: 1, total: 2 })).toBe(
+        "I've completed 1 of 2 so far, and the remaining work is still underway."
+      );
+      expect(renderOutcomeTemplate(outcome.activeWithFailure, { completed: 1, total: 3 })).toBe(
+        "I've completed 1 of 3 so far; some work needs another attempt while the remaining work is still underway."
+      );
+      expect(renderOutcomeTemplate(outcome.recoveredOneRetry, {})).toBe(
+        'I completed everything planned for this turn after one retry.'
+      );
+      expect(renderOutcomeTemplate(outcome.recoveredManyRetries, { retries: 3 })).toBe(
+        'I completed everything planned for this turn after 3 retries.'
+      );
+      expect(Object.values(outcome).join(' ')).not.toMatch(/\b(?:failed|stopped|remaining|unfinished):/);
     });
 
     it('reports partial completion while keeping the failed step in technical details', () => {
@@ -1181,7 +1221,7 @@ describe('MessageToolGroupSummary plain-language activity', () => {
         />
       );
 
-      const outcome = screen.getByText(/messages\.toolActivity\.recap\.outcome\.active/);
+      const outcome = screen.getByText(/messages\.toolActivity\.recap\.outcome\.activeWithFailure/);
       expect(outcome).toHaveTextContent('"failed":1');
       expect(outcome).toHaveTextContent('"pending":1');
       expect(outcome).toHaveTextContent('"unfinished":2');

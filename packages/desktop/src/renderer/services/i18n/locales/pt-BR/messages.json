@@ -95,12 +95,18 @@
         "generic": "Etapa do projeto ({{count}})"
       },
       "outcome": {
-        "active": "Concluído: {{completed}} de {{total}}; não concluído: {{unfinished}} (falhas: {{failed}}, interrompidos: {{canceled}}, restantes: {{pending}}).",
-        "completed": "Concluído: {{completed}} de {{total}}.",
-        "recovered": "Concluído: {{completed}} de {{total}}; novas tentativas: {{retries}}.",
-        "partial": "Concluído: {{completed}} de {{total}}; não concluído: {{unfinished}} (falhas: {{failed}}, interrompidos: {{canceled}}, pendentes: {{pending}}).",
-        "failed": "Concluído: {{completed}} de {{total}}; não concluído: {{unfinished}} (falhas: {{failed}}, interrompidos: {{canceled}}, pendentes: {{pending}}).",
-        "canceled": "Trabalho interrompido: concluído {{completed}} de {{total}}; não concluído: {{unfinished}} (falhas: {{failed}}, interrompidos: {{canceled}}, pendentes: {{pending}})."
+        "active": "Concluí {{completed}} de {{total}} até agora, e o trabalho restante ainda está em andamento.",
+        "activeWithFailure": "Concluí {{completed}} de {{total}} até agora; parte do trabalho precisa de outra tentativa enquanto o restante segue em andamento.",
+        "activeWithCanceled": "Concluí {{completed}} de {{total}} até agora; parte do trabalho foi interrompida enquanto o restante segue em andamento.",
+        "activeWithFailureAndCanceled": "Concluí {{completed}} de {{total}} até agora; parte do trabalho precisa de outra tentativa, parte foi interrompida e o restante segue em andamento.",
+        "completed": "Concluí tudo o que foi planejado para este turno.",
+        "recoveredOneRetry": "Concluí tudo o que foi planejado para este turno após uma nova tentativa.",
+        "recoveredManyRetries": "Concluí tudo o que foi planejado para este turno após {{retries}} novas tentativas.",
+        "partial": "Concluí parte do trabalho planejado, mas parte ainda precisa de outra tentativa.",
+        "partialWithCanceled": "Concluí parte do trabalho planejado, mas parte precisa de outra tentativa e parte foi interrompida.",
+        "failed": "Não consegui concluir o trabalho planejado, e parte ainda precisa de outra tentativa.",
+        "failedWithCanceled": "Não consegui concluir o trabalho planejado; parte precisa de outra tentativa e parte foi interrompida.",
+        "canceled": "Interrompi este turno antes de concluir todo o trabalho planejado."
       }
     },
     "attempt": "(tentativa {{n}})",

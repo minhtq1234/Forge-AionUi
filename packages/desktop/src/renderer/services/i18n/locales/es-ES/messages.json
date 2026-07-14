@@ -95,12 +95,18 @@
         "generic": "Paso del proyecto ({{count}})"
       },
       "outcome": {
-        "active": "Completado: {{completed}} de {{total}}; sin terminar: {{unfinished}} (fallidos: {{failed}}, detenidos: {{canceled}}, restantes: {{pending}}).",
-        "completed": "Completado: {{completed}} de {{total}}.",
-        "recovered": "Completado: {{completed}} de {{total}}; reintentos: {{retries}}.",
-        "partial": "Completado: {{completed}} de {{total}}; sin terminar: {{unfinished}} (fallidos: {{failed}}, detenidos: {{canceled}}, pendientes: {{pending}}).",
-        "failed": "Completado: {{completed}} de {{total}}; sin terminar: {{unfinished}} (fallidos: {{failed}}, detenidos: {{canceled}}, pendientes: {{pending}}).",
-        "canceled": "Trabajo detenido: completado {{completed}} de {{total}}; sin terminar: {{unfinished}} (fallidos: {{failed}}, detenidos: {{canceled}}, pendientes: {{pending}})."
+        "active": "He completado {{completed}} de {{total}} hasta ahora y el trabajo restante sigue en curso.",
+        "activeWithFailure": "He completado {{completed}} de {{total}} hasta ahora; parte del trabajo necesita otro intento mientras el resto sigue en curso.",
+        "activeWithCanceled": "He completado {{completed}} de {{total}} hasta ahora; parte del trabajo se detuvo mientras el resto sigue en curso.",
+        "activeWithFailureAndCanceled": "He completado {{completed}} de {{total}} hasta ahora; parte del trabajo necesita otro intento, parte se detuvo y el resto sigue en curso.",
+        "completed": "He completado todo lo previsto para este turno.",
+        "recoveredOneRetry": "He completado todo lo previsto para este turno tras un reintento.",
+        "recoveredManyRetries": "He completado todo lo previsto para este turno tras {{retries}} reintentos.",
+        "partial": "He completado parte del trabajo previsto, pero parte aún necesita otro intento.",
+        "partialWithCanceled": "He completado parte del trabajo previsto, pero parte necesita otro intento y parte se detuvo.",
+        "failed": "No pude completar el trabajo previsto y parte aún necesita otro intento.",
+        "failedWithCanceled": "No pude completar el trabajo previsto; parte necesita otro intento y parte se detuvo.",
+        "canceled": "Detuve este turno antes de completar todo el trabajo previsto."
       }
     },
     "attempt": "(intento {{n}})",
