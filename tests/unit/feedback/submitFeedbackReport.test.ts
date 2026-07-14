@@ -1,5 +1,5 @@
 import { gunzipSync } from 'node:zlib';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DIAGNOSTIC_REDACTION_MARKER, DIAGNOSTIC_TRUNCATION_MARKER } from '@/common/utils/diagnosticRedaction';
 import {
   logFeedbackReport,
@@ -10,6 +10,39 @@ import {
 
 const MAX_DB_DIAGNOSTICS_BYTES = 1024 * 1024;
 const MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024;
+const DB_DIAGNOSTICS_FILENAMES = ['db-diagnostics.json', 'db-diagnostics.json.gz'];
+
+type CompressionMode = {
+  expectedFilename: string;
+  name: string;
+  setup: () => void;
+};
+
+const compressionModes: CompressionMode[] = [
+  {
+    expectedFilename: 'db-diagnostics.json.gz',
+    name: 'CompressionStream succeeds',
+    setup: () => {},
+  },
+  {
+    expectedFilename: 'db-diagnostics.json',
+    name: 'CompressionStream is unavailable',
+    setup: () => vi.stubGlobal('CompressionStream', undefined),
+  },
+  {
+    expectedFilename: 'db-diagnostics.json',
+    name: 'CompressionStream fails',
+    setup: () =>
+      vi.stubGlobal(
+        'CompressionStream',
+        class {
+          constructor() {
+            throw new Error('compression failed');
+          }
+        }
+      ),
+  },
+];
 
 const sentryMocks = vi.hoisted(() => {
   const setTag = vi.fn();
@@ -43,10 +76,16 @@ function getCapturedAttachments(): FeedbackAttachment[] {
   return options.attachments;
 }
 
-function findAttachment(filename: string): FeedbackAttachment {
-  const attachment = getCapturedAttachments().find((candidate) => candidate.filename === filename);
-  if (!attachment) throw new Error(`Expected ${filename} attachment`);
+function findDbDiagnosticsAttachment(): FeedbackAttachment {
+  const attachment = getCapturedAttachments().find((candidate) =>
+    DB_DIAGNOSTICS_FILENAMES.includes(candidate.filename)
+  );
+  if (!attachment) throw new Error('Expected DB diagnostics attachment');
   return attachment;
+}
+
+function getDbDiagnosticsAttachments(): FeedbackAttachment[] {
+  return getCapturedAttachments().filter((attachment) => DB_DIAGNOSTICS_FILENAMES.includes(attachment.filename));
 }
 
 function readJsonAttachment(attachment: FeedbackAttachment): unknown {
@@ -73,6 +112,27 @@ function createDiagnosticsAtByteLength(byteLength: number): { entries: string[] 
   return { entries };
 }
 
+function stubDbDiagnosticsResponse(diagnostics: unknown): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: true, data: diagnostics }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+  );
+}
+
+async function submitDbDiagnostics(): Promise<void> {
+  await submitFeedbackReport({
+    collectDbDiagnostics: { selectedModule: 'conversation-session' },
+    description: 'Conversation stuck',
+    module: 'conversation-session',
+    moduleLabel: 'Conversation & Sessions',
+  });
+}
+
 describe('submitFeedbackReport', () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
@@ -85,6 +145,10 @@ describe('submitFeedbackReport', () => {
     sentryMocks.setTag.mockClear();
     sentryMocks.withScope.mockClear();
     vi.stubGlobal('window', { electronAPI: undefined });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('redacts renderer feedback diagnostics before console and IPC logging', () => {
@@ -112,84 +176,46 @@ describe('submitFeedbackReport', () => {
     consoleError.mockRestore();
   });
 
-  it('redacts DB diagnostics before attaching them while preserving safe provider metadata', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            success: true,
-            data: {
-              schema_version: 'feedback-diagnostics/v1',
-              provider: { api_key: 'db-secret', name: 'openai' },
-              error: 'Authorization: Bearer db-bearer-secret',
-            },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        )
-      )
-    );
+  for (const compressionMode of compressionModes) {
+    it(`redacts DB diagnostics when ${compressionMode.name}`, async () => {
+      compressionMode.setup();
+      stubDbDiagnosticsResponse({
+        schema_version: 'feedback-diagnostics/v1',
+        provider: { api_key: 'db-secret', name: 'openai' },
+        error: 'Authorization: Bearer db-bearer-secret',
+      });
 
-    await submitFeedbackReport({
-      collectDbDiagnostics: { selectedModule: 'conversation-session' },
-      description: 'Conversation stuck',
-      module: 'conversation-session',
-      moduleLabel: 'Conversation & Sessions',
+      await submitDbDiagnostics();
+
+      const attachment = findDbDiagnosticsAttachment();
+      const diagnostics = JSON.stringify(readJsonAttachment(attachment));
+      expect(attachment.filename).toBe(compressionMode.expectedFilename);
+      expect(diagnostics).toContain('openai');
+      expect(diagnostics).toContain(DIAGNOSTIC_REDACTION_MARKER);
+      expect(diagnostics).not.toContain('db-secret');
+      expect(diagnostics).not.toContain('db-bearer-secret');
     });
 
-    const diagnostics = JSON.stringify(readJsonAttachment(findAttachment('db-diagnostics.json.gz')));
-    expect(diagnostics).toContain('openai');
-    expect(diagnostics).toContain(DIAGNOSTIC_REDACTION_MARKER);
-    expect(diagnostics).not.toContain('db-secret');
-    expect(diagnostics).not.toContain('db-bearer-secret');
-  });
+    it(`keeps exactly 1 MiB DB diagnostics when ${compressionMode.name}`, async () => {
+      compressionMode.setup();
+      const diagnostics = createDiagnosticsAtByteLength(MAX_DB_DIAGNOSTICS_BYTES);
+      expect(new TextEncoder().encode(JSON.stringify(diagnostics, null, 2))).toHaveLength(MAX_DB_DIAGNOSTICS_BYTES);
+      stubDbDiagnosticsResponse(diagnostics);
 
-  it('keeps DB diagnostics whose uncompressed JSON is exactly 1 MiB', async () => {
-    const diagnostics = createDiagnosticsAtByteLength(MAX_DB_DIAGNOSTICS_BYTES);
-    expect(new TextEncoder().encode(JSON.stringify(diagnostics, null, 2))).toHaveLength(MAX_DB_DIAGNOSTICS_BYTES);
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ success: true, data: diagnostics }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      )
-    );
+      await submitDbDiagnostics();
 
-    await submitFeedbackReport({
-      collectDbDiagnostics: { selectedModule: 'conversation-session' },
-      description: 'Exact diagnostics boundary',
-      module: 'conversation-session',
-      moduleLabel: 'Conversation & Sessions',
+      expect(findDbDiagnosticsAttachment().filename).toBe(compressionMode.expectedFilename);
     });
 
-    expect(getCapturedAttachments().map((attachment) => attachment.filename)).toContain('db-diagnostics.json.gz');
-  });
+    it(`omits over-limit DB diagnostics when ${compressionMode.name}`, async () => {
+      compressionMode.setup();
+      stubDbDiagnosticsResponse(createDiagnosticsAtByteLength(MAX_DB_DIAGNOSTICS_BYTES + 1));
 
-  it('omits DB diagnostics whose uncompressed JSON exceeds 1 MiB without failing submission', async () => {
-    const diagnostics = createDiagnosticsAtByteLength(MAX_DB_DIAGNOSTICS_BYTES + 1);
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ success: true, data: diagnostics }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      )
-    );
+      await expect(submitDbDiagnostics()).resolves.toBeUndefined();
 
-    await expect(
-      submitFeedbackReport({
-        collectDbDiagnostics: { selectedModule: 'conversation-session' },
-        description: 'Oversized diagnostics',
-        module: 'conversation-session',
-        moduleLabel: 'Conversation & Sessions',
-      })
-    ).resolves.toBeUndefined();
-
-    expect(getCapturedAttachments().map((attachment) => attachment.filename)).not.toContain('db-diagnostics.json.gz');
-  });
+      expect(getDbDiagnosticsAttachments()).toHaveLength(0);
+    });
+  }
 
   it('redacts and bounds tags while retaining safe tag values', async () => {
     await submitFeedbackReport({
@@ -198,6 +224,7 @@ describe('submitFeedbackReport', () => {
       moduleLabel: 'Conversation & Sessions',
       tags: {
         authorization: 'Bearer tag-secret',
+        exact_limit: 'a'.repeat(1024),
         provider: 'openai',
         too_long: 'x'.repeat(1025),
       },
@@ -205,7 +232,13 @@ describe('submitFeedbackReport', () => {
 
     expect(sentryMocks.setTag).toHaveBeenCalledWith('provider', 'openai');
     expect(sentryMocks.setTag).toHaveBeenCalledWith('authorization', `Bearer ${DIAGNOSTIC_REDACTION_MARKER}`);
-    expect(sentryMocks.setTag).toHaveBeenCalledWith('too_long', `${'x'.repeat(1024)}${DIAGNOSTIC_TRUNCATION_MARKER}`);
+    expect(sentryMocks.setTag).toHaveBeenCalledWith('exact_limit', 'a'.repeat(1024));
+    expect(sentryMocks.setTag).toHaveBeenCalledWith(
+      'too_long',
+      `${'x'.repeat(1024 - DIAGNOSTIC_TRUNCATION_MARKER.length)}${DIAGNOSTIC_TRUNCATION_MARKER}`
+    );
+    expect(sentryMocks.setTag.mock.calls.find(([key]) => key === 'exact_limit')?.[1]).toHaveLength(1024);
+    expect(sentryMocks.setTag.mock.calls.find(([key]) => key === 'too_long')?.[1]).toHaveLength(1024);
   });
 
   it('redacts extra fields while preserving the normalized user description over extra.description', async () => {
@@ -271,9 +304,53 @@ describe('submitFeedbackReport', () => {
     expect(getCapturedAttachments()).toHaveLength(0);
   });
 
+  it('skips malformed caller attachments and measures shadowed Uint8Array sizes intrinsically', async () => {
+    const shadowedSmall = new Uint8Array([1]);
+    Object.defineProperty(shadowedSmall, 'byteLength', { value: MAX_SCREENSHOT_BYTES + 1 });
+    const shadowedLarge = new Uint8Array(MAX_SCREENSHOT_BYTES + 1);
+    Object.defineProperty(shadowedLarge, 'byteLength', { value: 1 });
+
+    await expect(
+      submitFeedbackReport({
+        attachments: [
+          null,
+          1,
+          'screenshot',
+          {},
+          { filename: 'array.png', contentType: 'image/png', data: [1] },
+          { filename: 'buffer.png', contentType: 'image/png', data: new ArrayBuffer(1) },
+          { filename: 'valid.png', contentType: 'image/png', data: new Uint8Array([1]) },
+          { filename: 'shadowed-small.png', contentType: 'image/png', data: shadowedSmall },
+          { filename: 'shadowed-large.png', contentType: 'image/png', data: shadowedLarge },
+        ] as unknown as FeedbackAttachment[],
+        description: 'Malformed screenshot policy',
+        module: 'conversation-session',
+        moduleLabel: 'Conversation & Sessions',
+      })
+    ).resolves.toBeUndefined();
+
+    expect(getCapturedAttachments().map((attachment) => attachment.filename)).toEqual([
+      'valid.png',
+      'shadowed-small.png',
+    ]);
+  });
+
+  it('rejects a non-array caller attachment payload without aborting submission', async () => {
+    await expect(
+      submitFeedbackReport({
+        attachments: 'not-an-array' as unknown as FeedbackAttachment[],
+        description: 'Malformed attachment collection',
+        module: 'conversation-session',
+        moduleLabel: 'Conversation & Sessions',
+      })
+    ).resolves.toBeUndefined();
+
+    expect(getCapturedAttachments()).toEqual([]);
+  });
+
   it('preserves automatic log and DB diagnostics attachments alongside allowed screenshots', async () => {
     const collectFeedbackLogs = vi.fn().mockResolvedValue({
-      filename: 'aionui-logs.log.gz',
+      filename: 'logs.gz',
       data: [1, 2, 3],
     });
     vi.stubGlobal('window', { electronAPI: { collectFeedbackLogs, logFeedbackEvent: vi.fn() } });
@@ -289,8 +366,10 @@ describe('submitFeedbackReport', () => {
 
     await submitFeedbackReport({
       attachments: [
-        { filename: 'screenshot.png', data: new Uint8Array([1]), contentType: 'image/png' },
-        { filename: 'ignored.txt', data: new Uint8Array([2]), contentType: 'text/plain' },
+        { filename: 'logs.gz', data: new Uint8Array([1]), contentType: 'image/png' },
+        { filename: 'db-diagnostics.json', data: new Uint8Array([2]), contentType: 'image/png' },
+        { filename: 'db-diagnostics.json.gz', data: new Uint8Array([3]), contentType: 'image/png' },
+        { filename: 'screenshot.png', data: new Uint8Array([4]), contentType: 'image/png' },
       ],
       collectDbDiagnostics: { selectedModule: 'conversation-session' },
       collectLogs: true,
@@ -301,14 +380,14 @@ describe('submitFeedbackReport', () => {
 
     expect(getCapturedAttachments().map((attachment) => attachment.filename)).toEqual([
       'db-diagnostics.json.gz',
-      'aionui-logs.log.gz',
+      'logs.gz',
       'screenshot.png',
     ]);
   });
 
   it('submits a user-feedback event with tags, extra context, logs, and attachments', async () => {
     const collectFeedbackLogs = vi.fn().mockResolvedValue({
-      filename: 'aionui-logs.log.gz',
+      filename: 'logs.gz',
       data: [1, 2, 3],
     });
     const logFeedbackEvent = vi.fn();
@@ -364,7 +443,7 @@ describe('submitFeedbackReport', () => {
       {
         attachments: [
           {
-            filename: 'aionui-logs.log.gz',
+            filename: 'logs.gz',
             data: new Uint8Array([1, 2, 3]),
             contentType: 'application/gzip',
           },

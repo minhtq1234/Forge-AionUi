@@ -1,6 +1,10 @@
 import type { FeedbackDiagnosticsContextInput } from '@/common/types/feedbackDiagnostics';
 import { httpRequest } from '@/common/adapter/httpBridge';
-import { redactDiagnosticText, redactDiagnosticValue } from '@/common/utils/diagnosticRedaction';
+import {
+  DIAGNOSTIC_TRUNCATION_MARKER,
+  redactDiagnosticText,
+  redactDiagnosticValue,
+} from '@/common/utils/diagnosticRedaction';
 
 const SUMMARY_PREVIEW_LENGTH = 60;
 const LOG_PREFIX = '[FeedbackReport]';
@@ -8,6 +12,11 @@ const MAX_DB_DIAGNOSTICS_BYTES = 1024 * 1024;
 const MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024;
 const MAX_SCREENSHOTS = 3;
 const MAX_TAG_VALUE_LENGTH = 1024;
+const RESERVED_AUTOMATIC_ATTACHMENT_FILENAMES = new Set(['logs.gz', 'db-diagnostics.json', 'db-diagnostics.json.gz']);
+const typedArrayByteLengthGetter = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype),
+  'byteLength'
+)?.get;
 type FeedbackLogLevel = 'info' | 'warn' | 'error';
 type FeedbackLogAttachmentStatus = 'collected' | 'empty' | 'failed' | 'skipped' | 'unavailable';
 type FeedbackDbDiagnosticsAttachmentStatus = 'collected' | 'empty' | 'failed' | 'skipped' | 'unavailable';
@@ -246,15 +255,58 @@ function buildSummary(moduleLabel: string, description: string): string {
   return `${moduleLabel}: ${summaryPreview}`;
 }
 
-function selectUserScreenshots(attachments: FeedbackAttachment[]): FeedbackAttachment[] {
-  return attachments
-    .filter(
-      (attachment) =>
-        attachment.contentType === 'image/png' &&
-        attachment.data.byteLength > 0 &&
-        attachment.data.byteLength <= MAX_SCREENSHOT_BYTES
-    )
-    .slice(0, MAX_SCREENSHOTS);
+function sanitizeTagValue(value: string): string {
+  const redacted = redactDiagnosticText(value, MAX_TAG_VALUE_LENGTH);
+  if (redacted.length <= MAX_TAG_VALUE_LENGTH) return redacted;
+
+  return `${redacted.slice(0, MAX_TAG_VALUE_LENGTH - DIAGNOSTIC_TRUNCATION_MARKER.length)}${DIAGNOSTIC_TRUNCATION_MARKER}`;
+}
+
+function getUint8ArrayByteLength(data: unknown): number | null {
+  if (!(data instanceof Uint8Array) || !typedArrayByteLengthGetter) return null;
+
+  try {
+    const byteLength = typedArrayByteLengthGetter.call(data);
+    return typeof byteLength === 'number' ? byteLength : null;
+  } catch {
+    return null;
+  }
+}
+
+function selectUserScreenshot(attachment: unknown): FeedbackAttachment | null {
+  if (!attachment || typeof attachment !== 'object') return null;
+
+  try {
+    const candidate = attachment as Partial<FeedbackAttachment>;
+    const { contentType, data, filename } = candidate;
+    const byteLength = getUint8ArrayByteLength(data);
+    if (
+      contentType !== 'image/png' ||
+      typeof filename !== 'string' ||
+      RESERVED_AUTOMATIC_ATTACHMENT_FILENAMES.has(filename) ||
+      byteLength === null ||
+      byteLength === 0 ||
+      byteLength > MAX_SCREENSHOT_BYTES
+    ) {
+      return null;
+    }
+
+    return { contentType, data, filename } as FeedbackAttachment;
+  } catch {
+    return null;
+  }
+}
+
+function selectUserScreenshots(attachments: unknown): FeedbackAttachment[] {
+  if (!Array.isArray(attachments)) return [];
+
+  const screenshots: FeedbackAttachment[] = [];
+  for (const attachment of attachments) {
+    if (screenshots.length === MAX_SCREENSHOTS) break;
+    const screenshot = selectUserScreenshot(attachment);
+    if (screenshot) screenshots.push(screenshot);
+  }
+  return screenshots;
 }
 
 export async function submitFeedbackReport(input: SubmitFeedbackReportInput): Promise<void> {
@@ -300,7 +352,7 @@ export async function submitFeedbackReport(input: SubmitFeedbackReportInput): Pr
       scope.setTag('module', input.module);
       Object.entries(input.tags ?? {}).forEach(([key, value]) => {
         if (value.trim()) {
-          scope.setTag(key, redactDiagnosticText(value, MAX_TAG_VALUE_LENGTH));
+          scope.setTag(key, sanitizeTagValue(value));
         }
       });
 
