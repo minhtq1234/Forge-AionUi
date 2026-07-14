@@ -4,20 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { PreviewHistoryTarget } from '@/common/types/office/preview';
 import { iconColors } from '@/renderer/styles/colors';
-import { Dropdown } from '@arco-design/web-react';
-import { Close } from '@icon-park/react';
+import { Button } from '@arco-design/web-react';
+import { Check, Close } from '@icon-park/react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { shouldShowDownload } from './previewToolbarUtils';
-
-/**
- * 暂时隐藏快照/历史入口（保留底层逻辑，日后翻 true 即恢复）
- * Temporarily hide the snapshot/history entry (underlying logic is kept;
- * flip to true to restore the UI).
- */
-const SHOW_SNAPSHOT_HISTORY = false;
 
 /**
  * PreviewToolbar 组件属性
@@ -35,6 +27,19 @@ type PreviewToolbarProps = {
    * Whether it's a Markdown file
    */
   isMarkdown: boolean;
+
+  /**
+   * 当前激活 tab 是否有未保存的修改，用于驱动 Save 控件的状态
+   * Whether the active tab has unsaved changes; drives the Save control's state
+   */
+  isDirty?: boolean;
+
+  /**
+   * 保存当前激活 tab 的内容（Save 控件的点击回调）；未提供时不展示 Save 控件
+   * Save the active tab's content (Save control's click handler); the Save
+   * control is hidden when this is not provided
+   */
+  onSave?: () => void;
 
   /**
    * 是否为 HTML 文件
@@ -67,18 +72,6 @@ type PreviewToolbarProps = {
   showOpenInSystemButton: boolean;
 
   /**
-   * 历史目标
-   * History target
-   */
-  historyTarget: PreviewHistoryTarget | null;
-
-  /**
-   * 是否正在保存快照
-   * Whether snapshot is saving
-   */
-  snapshotSaving: boolean;
-
-  /**
    * 设置视图模式
    * Set view mode
    */
@@ -91,24 +84,6 @@ type PreviewToolbarProps = {
   onSplitScreenToggle: () => void;
 
   /**
-   * 保存快照
-   * Save snapshot
-   */
-  onSaveSnapshot: () => void;
-
-  /**
-   * 刷新历史列表
-   * Refresh history list
-   */
-  onRefreshHistory: () => void;
-
-  /**
-   * 渲染历史下拉菜单
-   * Render history dropdown
-   */
-  renderHistoryDropdown: () => React.ReactNode;
-
-  /**
    * 在系统中打开文件
    * Open file in system
    */
@@ -119,12 +94,6 @@ type PreviewToolbarProps = {
    * Download file
    */
   onDownload: () => void;
-
-  /**
-   * 关闭预览面板
-   * Close preview panel
-   */
-  onClose: () => void;
 
   /**
    * HTML 审核元素模式（仅HTML类型使用）
@@ -158,28 +127,24 @@ type PreviewToolbarProps = {
  * 预览面板工具栏组件
  * Preview panel toolbar component
  *
- * 包含文件名、视图模式切换、快照/历史按钮、下载按钮、关闭按钮等
- * Contains filename, view mode toggle, snapshot/history buttons, download button, close button, etc.
+ * 包含文件名、视图模式切换、下载按钮、关闭按钮等
+ * Contains filename, view mode toggle, download button, close button, etc.
  */
 // eslint-disable-next-line max-len
 const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
   content_type,
   isMarkdown,
   isHTML,
+  isDirty,
+  onSave,
   viewMode,
   isSplitScreenEnabled,
   file_name,
   showOpenInSystemButton,
-  historyTarget,
-  snapshotSaving,
   onViewModeChange,
   onSplitScreenToggle,
-  onSaveSnapshot,
-  onRefreshHistory,
-  renderHistoryDropdown,
   onOpenInSystem,
   onDownload,
-  onClose,
   inspectMode,
   onInspectModeToggle,
   leftExtra,
@@ -188,6 +153,8 @@ const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
 }) => {
   const { t } = useTranslation();
   const isDiff = content_type === 'diff';
+  const isCode = content_type === 'code';
+  const showSaveControl = Boolean(onSave) && (isMarkdown || isHTML || isCode);
   const preferActionButtonsInFront = Boolean(leftExtra);
   // showOpenInSystemButton === Boolean(metadata.file_path) upstream — i.e. "file is on disk".
   const showDownload = shouldShowDownload(content_type, showOpenInSystemButton);
@@ -197,6 +164,50 @@ const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
   const toolbarBtnActive = '!text-white bg-brand hover:!text-white hover:bg-brand-hover';
   const toolbarIconSize = 12;
 
+  // 分段控件：Source / Split / Preview（diff 类型无 Split 段）/ Segmented control:
+  // Source / Split / Preview (diff has no Split segment)
+  const showViewSegments = isMarkdown || isHTML || isDiff;
+  const showSplitSegment = showViewSegments && !isDiff;
+  const isSourceSegmentActive = viewMode === 'source' && (isDiff || !isSplitScreenEnabled);
+  const isPreviewSegmentActive = viewMode === 'preview' && (isDiff || !isSplitScreenEnabled);
+  const isSplitSegmentActive = showSplitSegment && isSplitScreenEnabled;
+  const segmentBase =
+    'flex items-center justify-center h-full px-10px cursor-pointer transition-colors duration-150 text-12px font-medium';
+  const segmentInactive = 'text-t-secondary hover:text-t-primary hover:bg-bg-3';
+  const segmentDivider = <div className='w-1px self-stretch bg-border-1' />;
+
+  // 选择 Source/Preview 时，如果当前处于分屏模式则一并关闭，避免出现"分屏 + 单栏"的矛盾状态
+  // Selecting Source/Preview also turns split off when it is currently on, so the
+  // toolbar never shows a contradictory "split + single pane" state.
+  const handleSelectSource = () => {
+    try {
+      onViewModeChange('source');
+      if (!isDiff && isSplitScreenEnabled) onSplitScreenToggle();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleSelectPreview = () => {
+    try {
+      onViewModeChange('preview');
+      if (!isDiff && isSplitScreenEnabled) onSplitScreenToggle();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // 选择 Split 时只在当前未分屏时切换，避免重复点击时把分屏又关掉
+  // Selecting Split only toggles when not already split, so re-clicking the
+  // active segment never flips it back off.
+  const handleSelectSplit = () => {
+    try {
+      if (!isSplitScreenEnabled) onSplitScreenToggle();
+    } catch {
+      /* ignore */
+    }
+  };
+
   if (officeToolbar) return <>{officeToolbar}</>;
 
   return (
@@ -204,60 +215,58 @@ const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
       <div className='flex items-center justify-between gap-8px w-full' style={{ minWidth: 'max-content' }}>
         {/* 左侧：Tabs（Markdown/HTML）+ 文件名 / Left: Tabs (Markdown/HTML) + Filename */}
         <div className='flex items-center h-full gap-8px'>
-          {(isMarkdown || isHTML || isDiff) && (
-            <>
-              <div className='flex items-center h-full gap-0'>
-                <div
-                  className={`flex items-center h-full px-10px cursor-pointer transition-all duration-150 text-12px font-medium ${viewMode === 'source' ? 'text-brand bg-aou-2 border-b-4 border-brand' : 'text-t-secondary hover:text-t-primary hover:bg-bg-3'}`}
-                  onClick={() => {
-                    try {
-                      onViewModeChange('source');
-                    } catch {
-                      /* ignore */
-                    }
-                  }}
-                >
-                  {isHTML ? t('preview.code') : t('preview.source')}
-                </div>
-                <div
-                  className={`flex items-center h-full px-10px cursor-pointer transition-all duration-150 text-12px font-medium ${viewMode === 'preview' ? 'text-brand bg-aou-2 border-b-4 border-brand' : 'text-t-secondary hover:text-t-primary hover:bg-bg-3'}`}
-                  onClick={() => {
-                    try {
-                      onViewModeChange('preview');
-                    } catch {
-                      /* ignore */
-                    }
-                  }}
-                >
-                  {t('preview.preview')}
-                </div>
+          {showSaveControl && (
+            <div className='flex items-center gap-6px'>
+              {isDirty ? (
+                <>
+                  <span
+                    data-testid='preview-toolbar-dirty-dot'
+                    className='w-7px h-7px rd-full flex-shrink-0'
+                    style={{ background: 'var(--primary)' }}
+                  />
+                  <span className='text-12px text-t-secondary'>{t('preview.office.editor.unsavedChanges')}</span>
+                  <Button type='primary' size='mini' onClick={onSave}>
+                    {t('common.save')}
+                  </Button>
+                </>
+              ) : (
+                <span className='flex items-center gap-4px text-12px text-t-tertiary'>
+                  <Check size={12} fill={iconColors.secondary} />
+                  {t('preview.office.editor.saved')}
+                </span>
+              )}
+            </div>
+          )}
+          {showSaveControl && showViewSegments && <div className='w-1px h-16px bg-border-1 flex-shrink-0' />}
+          {showViewSegments && (
+            <div
+              className='inline-flex items-center h-24px rd-6px border border-solid border-border-1 overflow-hidden flex-shrink-0'
+              data-testid='preview-view-segmented-control'
+            >
+              <div
+                className={`${segmentBase} ${isSourceSegmentActive ? toolbarBtnActive : segmentInactive}`}
+                onClick={handleSelectSource}
+              >
+                {isHTML ? t('preview.code') : t('preview.source')}
               </div>
-              {!isDiff && (
+              {showSplitSegment && segmentDivider}
+              {showSplitSegment && (
                 <div
-                  className={`flex items-center px-8px py-3px rd-4px cursor-pointer transition-colors duration-150 ${isSplitScreenEnabled ? toolbarBtnActive : 'text-t-secondary hover:bg-bg-3'}`}
-                  onClick={() => {
-                    try {
-                      onSplitScreenToggle();
-                    } catch {
-                      /* ignore */
-                    }
-                  }}
+                  className={`${segmentBase} ${isSplitSegmentActive ? toolbarBtnActive : segmentInactive}`}
+                  onClick={handleSelectSplit}
                   title={isSplitScreenEnabled ? t('preview.closeSplitScreen') : t('preview.openSplitScreen')}
                 >
-                  <svg
-                    width={toolbarIconSize}
-                    height={toolbarIconSize}
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeWidth='2'
-                  >
-                    <rect x='3' y='3' width='18' height='18' rx='2' />
-                    <line x1='12' y1='3' x2='12' y2='21' />
-                  </svg>
+                  {t('preview.split')}
                 </div>
               )}
-            </>
+              {segmentDivider}
+              <div
+                className={`${segmentBase} ${isPreviewSegmentActive ? toolbarBtnActive : segmentInactive}`}
+                onClick={handleSelectPreview}
+              >
+                {t('preview.preview')}
+              </div>
+            </div>
           )}
           {preferActionButtonsInFront && showOpenInSystemButton && (
             <div className={toolbarBtn} onClick={onOpenInSystem} title={t('preview.openInSystemApp')}>
@@ -300,77 +309,6 @@ const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
 
         <div className='flex items-center gap-4px flex-shrink-0'>
           {rightExtra}
-
-          {SHOW_SNAPSHOT_HISTORY &&
-            ((content_type === 'markdown' && (viewMode === 'source' || isSplitScreenEnabled)) ||
-              (content_type === 'html' && (viewMode === 'source' || isSplitScreenEnabled))) && (
-              <>
-                <div
-                  className={`${toolbarBtn} ${historyTarget ? '' : '!cursor-not-allowed opacity-50'} ${snapshotSaving ? 'opacity-60' : ''}`}
-                  onClick={historyTarget && !snapshotSaving ? onSaveSnapshot : undefined}
-                  title={historyTarget ? t('preview.saveSnapshot') : t('preview.snapshotNotSupported')}
-                >
-                  <svg
-                    width={toolbarIconSize}
-                    height={toolbarIconSize}
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeWidth='1.8'
-                    className='text-t-secondary'
-                  >
-                    <path d='M5 7h3l1-2h6l1 2h3a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a1 1 0 0 1 1-1Z' />
-                    <circle cx='12' cy='13' r='3' />
-                  </svg>
-                  <span>{t('preview.snapshot')}</span>
-                </div>
-                {historyTarget ? (
-                  <Dropdown
-                    droplist={renderHistoryDropdown()}
-                    trigger={['hover']}
-                    position='br'
-                    onVisibleChange={(visible) => visible && onRefreshHistory()}
-                  >
-                    <div className={toolbarBtn} title={t('preview.historyVersions')}>
-                      <svg
-                        width={toolbarIconSize}
-                        height={toolbarIconSize}
-                        viewBox='0 0 24 24'
-                        fill='none'
-                        stroke='currentColor'
-                        strokeWidth='1.8'
-                        className='text-t-secondary'
-                      >
-                        <path d='M12 8v5l3 2' />
-                        <path d='M12 3a9 9 0 1 0 9 9' />
-                        <polyline points='21 3 21 9 15 9' />
-                      </svg>
-                      <span>{t('preview.history')}</span>
-                    </div>
-                  </Dropdown>
-                ) : (
-                  <div
-                    className={`${toolbarBtn} !cursor-not-allowed opacity-50`}
-                    title={t('preview.historyNotSupported')}
-                  >
-                    <svg
-                      width={toolbarIconSize}
-                      height={toolbarIconSize}
-                      viewBox='0 0 24 24'
-                      fill='none'
-                      stroke='currentColor'
-                      strokeWidth='1.8'
-                      className='text-t-secondary'
-                    >
-                      <path d='M12 8v5l3 2' />
-                      <path d='M12 3a9 9 0 1 0 9 9' />
-                      <polyline points='21 3 21 9 15 9' />
-                    </svg>
-                    <span>{t('preview.history')}</span>
-                  </div>
-                )}
-              </>
-            )}
 
           {!preferActionButtonsInFront && showOpenInSystemButton && (
             <div className={toolbarBtn} onClick={onOpenInSystem} title={t('preview.openInSystemApp')}>

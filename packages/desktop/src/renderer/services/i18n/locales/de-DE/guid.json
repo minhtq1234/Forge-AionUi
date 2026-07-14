@@ -1,4 +1,10 @@
 {
+  "toolbar": {
+    "label": "Startseitenaktionen",
+    "history": "Verlauf",
+    "saved": "Gespeichert",
+    "community": "Community"
+  },
   "agentFallbackNotice": "{{original}} ist nicht verfügbar, stattdessen wird {{fallback}} verwendet.",
   "noAgentAvailable": "Kein Hauptagent verfügbar. Bitte bei Google anmelden oder Claude/Codex CLI installieren. Zu den Einstellungen?",
   "noAgentAvailableShort": "Kein Hauptagent verfügbar. Zum Konfigurieren klicken.",
@@ -9,7 +15,8 @@
   "defaultPrompts": {
     "capabilities": "Was kannst du für mich tun?",
     "skills": "Welche Fähigkeiten hast du?",
-    "tools": "Welche Werkzeuge hast du?"
+    "tools": "Welche Werkzeuge hast du?",
+    "reviewFolder": "Review the files in a folder"
   },
   "selectAssistantHint": "Wähle einen Assistenten, um eine Aufgabe zu starten",
   "agentSwitcherLabel": "Agent",
@@ -31,5 +38,11 @@
     "statusTesting": "Latenz wird gemessen...",
     "statusUnreachable": "Nicht erreichbar",
     "statusAvailable": "Verfügbar"
+  },
+  "defaultProjectPrompts": {
+    "reviewFiles": "Review the files in this project",
+    "summarizeFolder": "Summarize what this project contains",
+    "createPlan": "Create a plan for this project",
+    "findNextSteps": "Find the next useful steps for this project"
   }
 }

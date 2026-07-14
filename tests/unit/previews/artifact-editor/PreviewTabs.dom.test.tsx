@@ -114,4 +114,48 @@ describe('PreviewTabs', () => {
     await user.click(screen.getByRole('button', { name: 'Collapse panel' }));
     expect(onClosePanel).toHaveBeenCalledOnce();
   });
+
+  it('renders a provisional tab title in italic and leaves pinned tabs upright', () => {
+    const mixedTabs = [
+      { id: 'tab-1', title: 'report.docx', contentType: 'word' as const },
+      { id: 'tab-2', title: 'draft.md', contentType: 'markdown' as const, preview: true },
+    ];
+
+    render(
+      <PreviewTabs
+        tabs={mixedTabs}
+        activeTabId='tab-1'
+        tabFadeState={{ left: false, right: false }}
+        tabsContainerRef={createRef<HTMLDivElement>()}
+        onSwitchTab={vi.fn()}
+        onCloseTab={vi.fn()}
+        onContextMenu={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('draft.md')).toHaveClass('italic');
+    expect(screen.getByText('report.docx')).not.toHaveClass('italic');
+  });
+
+  it('pins a provisional tab when its tab is double-clicked', async () => {
+    const user = userEvent.setup();
+    const onPinTab = vi.fn();
+    const previewTab = [{ id: 'tab-2', title: 'draft.md', contentType: 'markdown' as const, preview: true }];
+
+    render(
+      <PreviewTabs
+        tabs={previewTab}
+        activeTabId='tab-2'
+        tabFadeState={{ left: false, right: false }}
+        tabsContainerRef={createRef<HTMLDivElement>()}
+        onSwitchTab={vi.fn()}
+        onCloseTab={vi.fn()}
+        onContextMenu={vi.fn()}
+        onPinTab={onPinTab}
+      />
+    );
+
+    await user.dblClick(screen.getByRole('tab', { name: /draft\.md/i }));
+    expect(onPinTab).toHaveBeenCalledWith('tab-2');
+  });
 });

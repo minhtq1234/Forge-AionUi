@@ -8,6 +8,7 @@ import { ipcBridge } from '@/common';
 import { downloadFileFromPath } from '@/renderer/utils/file/download';
 import type { IDirOrFile } from '@/common/adapter/ipcBridge';
 import type { PreviewContentType } from '@/common/types/office/preview';
+import type { OpenPreviewOptions, PreviewMetadata } from '@/renderer/pages/conversation/Preview/context/PreviewContext';
 import { getContentTypeByExtension } from '@/renderer/pages/conversation/Preview/fileUtils';
 import { emitter } from '@/renderer/utils/emitter';
 import {
@@ -45,7 +46,12 @@ interface UseWorkspaceFileOpsOptions {
   setDeleteModal: React.Dispatch<React.SetStateAction<DeleteModalState>>;
 
   // Dependencies from preview context
-  openPreview: (content: string, type: PreviewContentType, metadata?: any, options?: { replace?: boolean }) => void;
+  openPreview: (
+    content: string,
+    type: PreviewContentType,
+    metadata?: PreviewMetadata,
+    options?: OpenPreviewOptions
+  ) => void;
 }
 
 /**
@@ -258,9 +264,13 @@ export function useWorkspaceFileOps(options: UseWorkspaceFileOpsOptions) {
   /**
    * 预览文件
    * Preview file
+   *
+   * @param pinned - 为 true 时以固定（常驻）tab 打开，而非临时预览 tab；用于文件树双击等固定意图的场景
+   *                 When true, opens as a pinned (permanent) tab instead of the provisional preview tab —
+   *                 used for pinned-intent entry points like a file-tree double-click.
    */
   const handlePreviewFile = useCallback(
-    async (nodeData: IDirOrFile | null) => {
+    async (nodeData: IDirOrFile | null, pinned = false) => {
       if (!nodeData || !nodeData.fullPath || !nodeData.isFile) return;
 
       try {
@@ -296,23 +306,27 @@ export function useWorkspaceFileOps(options: UseWorkspaceFileOpsOptions) {
         }
 
         // 打开预览面板并传入文件元数据 / Open preview panel with file metadata.
-        // replace: reuse the single browse preview tab instead of stacking tabs.
-        openPreview(
-          content,
-          contentType,
-          {
-            title: nodeData.name,
-            file_name: nodeData.name,
-            file_path: nodeData.fullPath,
-            workspace: workspace,
-            language: ext,
-            truncated: isLargeTextTruncated,
-            // Markdown 和图片文件默认为只读模式
-            // Markdown and image files default to read-only mode
-            editable: contentType === 'markdown' || contentType === 'image' || isLargeTextTruncated ? false : undefined,
-          },
-          { replace: true }
-        );
+        // preview: reuse the provisional preview tab instead of stacking tabs.
+        // pinned (double-click): open with no options so a pinned-intent open
+        // pins an existing provisional tab it dedupes onto, or creates a
+        // brand-new pinned tab otherwise.
+        const metadata = {
+          title: nodeData.name,
+          file_name: nodeData.name,
+          file_path: nodeData.fullPath,
+          workspace: workspace,
+          language: ext,
+          truncated: isLargeTextTruncated,
+          // Markdown 和图片文件默认为只读模式
+          // Markdown and image files default to read-only mode
+          editable: contentType === 'markdown' || contentType === 'image' || isLargeTextTruncated ? false : undefined,
+        };
+
+        if (pinned) {
+          openPreview(content, contentType, metadata);
+        } else {
+          openPreview(content, contentType, metadata, { preview: true });
+        }
       } catch (error) {
         const kind = classifyPreviewError(error);
         messageApi.error(t(previewErrorToI18nKey(kind)));

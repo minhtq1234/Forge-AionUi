@@ -26,7 +26,6 @@ const mocks = vi.hoisted(() => ({
   handleSelectionChange: vi.fn(),
   applyEdit: vi.fn(),
   undoEdit: vi.fn(),
-  askForge: vi.fn(),
   openInDesktopApp: vi.fn(),
   moveSelection: vi.fn(),
 }));
@@ -84,18 +83,6 @@ vi.mock('@/renderer/pages/conversation/Preview/hooks', () => ({
   }),
   useScrollSync: () => ({ handleEditorScroll: vi.fn(), handlePreviewScroll: vi.fn() }),
   usePreviewKeyboardShortcuts: vi.fn(),
-  usePreviewHistory: () => ({
-    historyVersions: [],
-    historyLoading: false,
-    snapshotSaving: false,
-    historyError: null,
-    historyTarget: null,
-    refreshHistory: vi.fn(),
-    handleSaveSnapshot: vi.fn(),
-    handleSnapshotSelect: vi.fn(),
-    messageApi: { error: vi.fn(), success: vi.fn() },
-    messageContextHolder: null,
-  }),
 }));
 
 vi.mock('@/renderer/pages/conversation/Preview/components/ArtifactEditor', () => ({
@@ -110,7 +97,6 @@ vi.mock('@/renderer/pages/conversation/Preview/components/ArtifactEditor', () =>
       handleSelectionChange: mocks.handleSelectionChange,
       apply: mocks.applyEdit,
       undo: mocks.undoEdit,
-      askForge: mocks.askForge,
       openInDesktopApp: mocks.openInDesktopApp,
       moveSelection: mocks.moveSelection,
     };
@@ -207,8 +193,6 @@ describe('PreviewPanel Office artifact integration', () => {
       conversationId: 'conversation-1',
       workspace: '/workspace',
       filePath: '/workspace/report.word',
-      fileName: 'report.word',
-      addToSendBox: mocks.previewContext.current.addToSendBox,
     });
     expect(mocks.wordViewerProps.current).toMatchObject({
       conversationId: 'conversation-1',
@@ -227,10 +211,10 @@ describe('PreviewPanel Office artifact integration', () => {
     setActiveTab('word');
     const view = render(<PreviewPanel fullBleed />);
 
-    expect(screen.getByTestId('preview-panel-surface')).not.toHaveClass('rounded-[16px]');
+    expect(screen.getByTestId('preview-panel-surface')).not.toHaveClass('rounded-[8px]');
 
     view.rerender(<PreviewPanel />);
-    expect(screen.getByTestId('preview-panel-surface')).toHaveClass('rounded-[16px]');
+    expect(screen.getByTestId('preview-panel-surface')).toHaveClass('rounded-[8px]');
   });
 
   it('wires artifact actions without restarting Office watch after a successful mutation', async () => {
@@ -241,7 +225,6 @@ describe('PreviewPanel Office artifact integration', () => {
 
     expect(toolbarProps).toMatchObject({
       openInDesktopApp: mocks.openInDesktopApp,
-      askForge: mocks.askForge,
       apply: mocks.applyEdit,
       undo: mocks.undoEdit,
       moveSelection: mocks.moveSelection,

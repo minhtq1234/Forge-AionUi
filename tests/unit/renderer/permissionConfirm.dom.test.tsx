@@ -69,36 +69,26 @@ const acpPermissionMessage = {
   },
 } satisfies IMessageAcpPermission;
 
-describe('permission Confirm buttons', () => {
-  it('keeps the standard permission Confirm readable while disabled and primary after selection', () => {
+describe('permission actions', () => {
+  it('submits a standard permission choice directly', async () => {
     render(<MessagePermission message={permissionMessage} />);
 
-    const confirm = screen.getByTestId('message-permission-confirm');
-    expect(confirm).toBeDisabled();
-    expect(confirm).toHaveClass('arco-btn-secondary');
-    expect(confirm).toHaveStyle({
-      color: 'var(--color-text-2)',
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }));
+
+    await vi.waitFor(() => {
+      expect(confirmPermissionMock).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { value: 'proceed_once' }, always_allow: false })
+      );
     });
-
-    fireEvent.click(screen.getByLabelText('Allow once'));
-
-    expect(confirm).not.toBeDisabled();
-    expect(confirm).toHaveClass('arco-btn-primary');
   });
 
-  it('keeps the ACP permission Confirm readable while disabled and primary after selection', () => {
+  it('submits an ACP permission choice directly', async () => {
     render(<MessageAcpPermission message={acpPermissionMessage} />);
 
-    const confirm = screen.getByTestId('message-acp-permission-confirm');
-    expect(confirm).toBeDisabled();
-    expect(confirm).toHaveClass('arco-btn-secondary');
-    expect(confirm).toHaveStyle({
-      color: 'var(--color-text-2)',
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }));
+
+    await vi.waitFor(() => {
+      expect(confirmAcpPermissionMock).toHaveBeenCalledWith(expect.objectContaining({ confirm_key: 'allow_once' }));
     });
-
-    fireEvent.click(screen.getByLabelText('Allow once'));
-
-    expect(confirm).not.toBeDisabled();
-    expect(confirm).toHaveClass('arco-btn-primary');
   });
 });

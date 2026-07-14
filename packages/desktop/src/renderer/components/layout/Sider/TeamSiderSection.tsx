@@ -5,7 +5,7 @@
  */
 
 import { DeleteOne, EditOne, Peoples, Plus, Pushpin, Right } from '@icon-park/react';
-import { Input, Message, Modal, Tooltip } from '@arco-design/web-react';
+import { Button, Input, Message, Modal, Tooltip } from '@arco-design/web-react';
 import classNames from 'classnames';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -148,11 +148,11 @@ const TeamSiderSection: React.FC<TeamSiderSectionProps> = ({
       ) : (
         <div className='shrink-0 flex flex-col gap-2px'>
           <div
-            className='group/label sider-section-label flex items-center px-12px h-28px select-none sticky top-0 z-10 mt-8px cursor-pointer'
+            className='group/label sider-section-label flex items-center pl-4px pr-12px h-28px select-none sticky top-0 z-10 mt-8px cursor-pointer'
             data-testid='team-section-toggle'
             onClick={() => setExpanded((v) => !v)}
           >
-            <span className='text-14px text-t-secondary sider-section-title group-hover/label:text-t-primary transition-colors font-600 leading-none'>
+            <span className='text-15px text-t-primary sider-section-title group-hover/label:text-primary transition-colors font-700 leading-none'>
               {t('team.sider.title')}
             </span>
             <span className='ml-2px flex items-center justify-center opacity-0 group-hover/label:opacity-100 transition-opacity text-t-tertiary shrink-0'>
@@ -165,22 +165,26 @@ const TeamSiderSection: React.FC<TeamSiderSectionProps> = ({
             {/* [E2E SYNC] data-testid="team-create-btn" 是 E2E 测试的入口 selector，不得删除或重命名。
                 如需修改，必须同步更新 tests/e2e/cases/teams/team-create.e2e.ts。 */}
             <Tooltip content={t('team.sider.createTeam')} position='top'>
-              <div
+              <Button
+                aria-label={t('team.sider.createTeam')}
                 data-testid='team-create-btn'
-                className='ml-auto -mr-4px size-20px rd-4px flex items-center justify-center text-t-secondary hover:text-t-primary hover:bg-fill-3 transition-colors shrink-0 cursor-pointer'
+                className='sider-section-add-action !ml-auto !w-22px !h-22px !p-0 !rounded-6px !text-t-secondary hover:!text-t-primary hover:!bg-fill-3'
+                size='mini'
+                type='text'
+                icon={
+                  <Plus
+                    theme='outline'
+                    size='14'
+                    fill='currentColor'
+                    className='block leading-none'
+                    style={{ lineHeight: 0 }}
+                  />
+                }
                 onClick={(e) => {
                   e.stopPropagation();
                   setCreateTeamVisible(true);
                 }}
-              >
-                <Plus
-                  theme='outline'
-                  size='14'
-                  fill='currentColor'
-                  className='block leading-none'
-                  style={{ lineHeight: 0 }}
-                />
-              </div>
+              />
             </Tooltip>
           </div>
           {expanded &&

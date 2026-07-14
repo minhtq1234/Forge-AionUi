@@ -17,7 +17,25 @@
     "quickActionStar": "Like us? Give us a star!",
     "skillsMarket": "Forge Skills Market",
     "skillsMarketDesc": "Search and activate community Skills on demand. Configure once, available for all agents.",
-    "skillsMarketDetails": "View More >>"
+    "skillsMarketDetails": "View More >>",
+    "projectTitle": "What's next in {{name}}?",
+    "projectPill": "Project · {{name}}",
+    "projectModeEyebrow": "You are in a Project workspace",
+    "projectModeBody": "Unlike a regular chat, this space is connected to one local folder. New chats stay grouped here and can use the project files as working context.",
+    "projectModeBadgeFolder": "Folder-backed",
+    "projectModeBadgeChats": "Project chats",
+    "projectModeBadgeFiles": "File-aware work"
+  },
+  "projectHeader": {
+    "label": "Project {{name}}",
+    "eyebrow": "PROJECT",
+    "tabs": {
+      "label": "Project views",
+      "chat": "Chat",
+      "files": "Files",
+      "context": "Context",
+      "artifacts": "Artifacts"
+    }
   },
   "history": {
     "recents": "Recents",
@@ -70,9 +88,30 @@
     "conversationsSection": "Chats",
     "removeProjectTitle": "Remove project",
     "removeProject": "Remove project",
-    "removeProjectConfirm": "Remove project \"{{name}}\"? Its {{count}} conversation(s) will be removed too.",
+    "removeProjectConfirm": "Remove project \"{{name}}\" from Forge? Its {{count}} chat(s) and folder files will stay where they are.",
     "newConversationInProject": "New chat in this project",
-    "deleting": "Deleting..."
+    "deleting": "Deleting...",
+    "newProject": "New project",
+    "createProjectTitle": "Create project",
+    "projectNameLabel": "Project name",
+    "projectNamePlaceholder": "Name this project",
+    "projectFolderLabel": "Folder",
+    "projectFolderPlaceholder": "Choose a folder to start your project",
+    "chooseProjectFolder": "Choose folder",
+    "changeProjectFolder": "Change folder",
+    "createProject": "Create project",
+    "projectFolderRequired": "Choose a folder before creating a project.",
+    "projectDuplicateFolder": "This folder is already used by \"{{name}}\".",
+    "openExistingProject": "Open existing project",
+    "createProjectSuccess": "Project created",
+    "createProjectFailed": "Project could not be created",
+    "renameProject": "Rename project",
+    "revealProjectFolder": "Reveal folder",
+    "relinkProjectFolder": "Relink folder",
+    "convertWorkspaceToProject": "Save as project",
+    "removeProjectSuccess": "Project removed. Chats and files were kept.",
+    "removeProjectFailed": "Project could not be removed",
+    "projectActions": "Project actions"
   },
   "historySearch": {
     "tooltip": "Search messages",
@@ -622,5 +661,9 @@
       }
     }
   },
-  "notFound": "Conversation not found or has been deleted"
+  "notFound": "Conversation not found or has been deleted",
+  "artifact": {
+    "emptyTitle": "No artifact open",
+    "emptyHint": "Generated files and documents open here."
+  }
 }

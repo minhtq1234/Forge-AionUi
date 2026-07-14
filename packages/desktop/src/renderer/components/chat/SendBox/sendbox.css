@@ -1,5 +1,26 @@
 /* Sendbox component styles */
 
+/* Give the composer a small invitation on pointer hover. Focus remains the
+ * stronger state managed by useInputFocusRing, so typing never feels noisy. */
+.sendbox-panel {
+  transition:
+    border-color 180ms ease-out,
+    box-shadow 220ms ease-out;
+}
+
+.sendbox-panel:hover:not(:focus-within) {
+  border-color: color-mix(in srgb, rgb(var(--primary-6)) 48%, var(--color-border-2)) !important;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, rgb(var(--primary-6)) 10%, transparent),
+    0 10px 24px color-mix(in srgb, rgb(var(--primary-6)) 10%, transparent) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sendbox-panel {
+    transition: none;
+  }
+}
+
 /* Send button disabled state - override Arco Design default disabled styles */
 .send-button-custom:disabled,
 .send-button-custom.arco-btn:disabled,
@@ -62,17 +83,11 @@
 }
 
 .thought-display--running {
-  border-color: color-mix(in srgb, var(--aou-6-brand) 22%, var(--color-border-2));
+  border-color: color-mix(in srgb, var(--aou-6-brand) 58%, var(--color-border-2));
   background: color-mix(in srgb, var(--aou-1) 56%, var(--color-bg-1));
-}
-
-.thought-display--running::before {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--aou-6-brand);
-  animation: thought-display-pulse 1.4s ease-in-out infinite;
-  content: '';
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--aou-6-brand) 12%, transparent),
+    0 8px 20px color-mix(in srgb, var(--aou-6-brand) 18%, transparent);
 }
 
 .thought-display--compact {
@@ -84,6 +99,7 @@
   align-items: center;
   min-width: 0;
   gap: 8px;
+  animation: thought-display-activity-in 180ms ease-out;
 }
 
 .thought-display__label {
@@ -93,6 +109,32 @@
   gap: 6px;
   color: var(--color-text-2);
   white-space: nowrap;
+}
+
+.thought-display--running .thought-display__label {
+  color: var(--color-text-1);
+}
+
+.thought-display__dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.thought-display__dots > span {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--aou-6-brand);
+  animation: thought-display-dot 1.2s ease-in-out infinite;
+}
+
+.thought-display__dots > span:nth-child(2) {
+  animation-delay: 160ms;
+}
+
+.thought-display__dots > span:nth-child(3) {
+  animation-delay: 320ms;
 }
 
 .thought-display__description {
@@ -121,24 +163,41 @@
   color: var(--aou-6-brand);
 }
 
-@keyframes thought-display-pulse {
-  0%,
-  100% {
+@keyframes thought-display-activity-in {
+  from {
     opacity: 0.45;
-    transform: scale(0.85);
+    transform: translateY(1px);
   }
 
-  50% {
+  to {
     opacity: 1;
-    transform: scale(1);
+    transform: translateY(0);
+  }
+}
+
+@keyframes thought-display-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .thought-display--running::before {
+  .thought-display__content,
+  .thought-display .arco-spin-icon {
+    animation: none;
+  }
+
+  .thought-display__dots > span {
     animation: none;
     opacity: 0.8;
-    transform: none;
   }
 }
 

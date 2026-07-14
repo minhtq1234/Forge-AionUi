@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Spin, Tag } from '@arco-design/web-react';
+import { Spin } from '@arco-design/web-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import './SendBox/sendbox.css';
@@ -44,10 +44,11 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
 
   const [elapsedTime, setElapsedTime] = useState(0);
   const startTimeRef = useRef<number>(Date.now());
+  const hasActivity = running || Boolean(thought?.subject);
 
   // Timer for elapsed time
   useEffect(() => {
-    if (!running && !thought?.subject) {
+    if (!hasActivity) {
       setElapsedTime(0);
       return;
     }
@@ -61,7 +62,7 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [running, thought?.subject]);
+  }, [hasActivity]);
 
   const className = [
     'thought-display',
@@ -71,36 +72,31 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
     .filter(Boolean)
     .join(' ');
 
-  // Hide when not running and no thought data
-  if (!thought?.subject && !running) {
+  if (!hasActivity) {
     return null;
   }
 
-  // Loading-only mode: running without thought data (used by ACP when thinking is inline)
-  if (running && !thought?.subject) {
-    return (
-      <div data-testid='thought-display' className={className}>
-        <Spin size={14} />
-        <span className='thought-display__label'>
-          {t('conversation.chat.processing')}
-          <span className='thought-display__elapsed'>({formatElapsedTime(elapsedTime)})</span>
-        </span>
-      </div>
-    );
-  }
-
-  // Full thought display mode: used by non-ACP platforms that still pass thought data
-  const showDescription = thought?.description && thought.description !== thought.subject;
+  const isFallbackActivity = !thought?.subject;
+  const rawActivityLabel = thought?.subject || t('conversation.thinking.label');
+  const activityLabel = isFallbackActivity ? rawActivityLabel.replace(/(?:\.\.\.|…)\s*$/, '') : rawActivityLabel;
+  const showDescription = Boolean(thought?.description && thought.description !== thought.subject);
+  const showElapsedTime = running && elapsedTime >= 5;
+  const activityKey = `${activityLabel}:${thought?.description ?? ''}`;
 
   return (
-    <div data-testid='thought-display' className={className}>
-      <div className='thought-display__content'>
+    <div data-testid='thought-display' className={className} role='status' aria-live='polite'>
+      <div className='thought-display__content' key={activityKey}>
         {running && <Spin size={14} />}
-        <Tag color='arcoblue' size='small'>
-          {thought?.subject}
-        </Tag>
+        <span className='thought-display__label'>{activityLabel}</span>
+        {running && isFallbackActivity && (
+          <span data-testid='thought-display-dots' className='thought-display__dots' aria-hidden='true'>
+            <span />
+            <span />
+            <span />
+          </span>
+        )}
         {showDescription && <span className='thought-display__description'>{thought?.description}</span>}
-        {running && <span className='thought-display__elapsed'>({formatElapsedTime(elapsedTime)})</span>}
+        {showElapsedTime && <span className='thought-display__elapsed'>{formatElapsedTime(elapsedTime)}</span>}
       </div>
     </div>
   );

@@ -7,6 +7,7 @@
 import { ipcBridge } from '@/common';
 import type { PreviewContentType } from '@/common/types/office/preview';
 import { emitter } from '@/renderer/utils/emitter';
+import { dispatchWorkspaceExpandEvent } from '@/renderer/utils/workspace/workspaceEvents';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { isOfficePreviewContentType, nextOfficePreviewRevision } from './officePreviewRevision';
 
@@ -43,14 +44,26 @@ export interface PreviewTab {
   isDirty?: boolean; // 是否有未保存的修改 / Whether there are unsaved changes
   originalContent?: string; // 原始内容，用于对比 / Original content for comparison
   officePreviewRevision?: number;
+  /**
+   * Marks this tab as the single provisional "preview" slot (VS Code–style
+   * single-click preview). At most one tab has `preview: true` at a time.
+   * Pinned tabs (opened without `{ preview: true }`) always have this falsy.
+   */
+  preview?: boolean;
 }
 
 export interface OpenPreviewOptions {
   /**
-   * Reuse the active tab instead of opening a new one — used by file-tree
-   * browsing so switching files swaps the single preview instead of stacking
-   * tabs. Ignored when the active tab has unsaved edits (falls back to a new
-   * tab to avoid losing changes).
+   * Open into the provisional preview slot instead of stacking a new pinned
+   * tab — used by file-tree/single-click browsing so switching files reuses
+   * the one provisional tab rather than accumulating tabs. If the current
+   * provisional tab has unsaved edits, it is promoted to a pinned tab (never
+   * clobbered) and a fresh provisional tab is opened for the new content.
+   */
+  preview?: boolean;
+  /**
+   * @deprecated Alias for `preview`, kept for backward compatibility with
+   * existing callers. Prefer `preview`.
    */
   replace?: boolean;
 }
@@ -75,6 +88,12 @@ export interface PreviewContextValue {
   closeTab: (tabId: string) => void;
   switchTab: (tabId: string) => void;
   updateContent: (content: string) => void;
+  /**
+   * Promotes a provisional (preview) tab to a pinned tab in place — used for
+   * double-clicking a tab in the tab bar. No-op for tabs that are already
+   * pinned or don't exist.
+   */
+  pinTab: (tabId: string) => void;
   saveContent: (tabId?: string) => Promise<boolean>; // 保存内容 / Save content
   findPreviewTab: (type: PreviewContentType, content?: string, metadata?: PreviewMetadata) => PreviewTab | null; // 查找匹配的 tab
   closePreviewByIdentity: (type: PreviewContentType, content?: string, metadata?: PreviewMetadata) => void; // 根据内容关闭指定 tab
@@ -102,18 +121,55 @@ const LEGACY_PREVIEW_STATE_KEY = 'aionui_preview_state';
 const MAX_PERSISTED_TAB_CONTENT_LENGTH = 80_000;
 const PERSISTABLE_CONTENT_TYPES = new Set<PreviewContentType>(['markdown', 'html', 'code', 'diff']);
 
-const sanitizeTabsForPersistence = (input: PreviewTab[]): PreviewTab[] => {
+// 依赖磁盘文件路径渲染的类型：持久化为「引用」而非内容本身（不写入 content），
+// 重新打开时由已有的 viewer 通过 metadata.file_path 重新读取。
+// 纯 base64 图片（没有 file_path）无法低成本恢复，因此不在此列 —— image 需额外校验 file_path。
+// Content types that render purely from a disk file path: persisted as a
+// lightweight "reference" (no content written), reloaded from
+// metadata.file_path by the existing viewers on restore. A pure base64 image
+// with no file_path can't be cheaply restored, so `image` still requires a
+// resolvable file_path to qualify (checked via hasFilePath/hasResolvableFilePath below).
+const FILE_BACKED_CONTENT_TYPES = new Set<PreviewContentType>(['word', 'excel', 'ppt', 'pdf', 'image']);
+
+// 结构校验：file_path 字段是否为字符串（允许空字符串，供 loadPersistedState 做语义校验）
+// Shape check: file_path is a string (empty string allowed; semantic validity is checked by loadPersistedState)
+const hasFilePath = (tab: Pick<PreviewTab, 'metadata'>): boolean => typeof tab.metadata?.file_path === 'string';
+
+// 语义校验：file_path 是否为可用于恢复的非空路径
+// Semantic check: file_path is a non-empty, resolvable path
+const hasResolvableFilePath = (tab: Pick<PreviewTab, 'metadata'>): boolean => Boolean(tab.metadata?.file_path);
+
+export const sanitizeTabsForPersistence = (input: PreviewTab[]): PreviewTab[] => {
   return input
-    .filter((tab) => PERSISTABLE_CONTENT_TYPES.has(tab.content_type))
-    .filter((tab) => tab.content.length <= MAX_PERSISTED_TAB_CONTENT_LENGTH)
-    .map((tab) => ({
-      ...tab,
-      isDirty: false,
-      originalContent: tab.content,
-    }));
+    .filter((tab) => {
+      if (PERSISTABLE_CONTENT_TYPES.has(tab.content_type)) {
+        return tab.content.length <= MAX_PERSISTED_TAB_CONTENT_LENGTH;
+      }
+      if (FILE_BACKED_CONTENT_TYPES.has(tab.content_type)) {
+        return hasResolvableFilePath(tab);
+      }
+      return false;
+    })
+    .map((tab) => {
+      if (FILE_BACKED_CONTENT_TYPES.has(tab.content_type)) {
+        // 引用型 tab：不落盘内容，重新加载时通过 file_path 从磁盘恢复
+        // Reference-only tab: don't persist content; reloaded from file_path on restore
+        return {
+          ...tab,
+          content: '',
+          originalContent: '',
+          isDirty: false,
+        };
+      }
+      return {
+        ...tab,
+        isDirty: false,
+        originalContent: tab.content,
+      };
+    });
 };
 
-const parsePersistedTabs = (value: unknown): PreviewTab[] => {
+export const parsePersistedTabs = (value: unknown): PreviewTab[] => {
   if (!Array.isArray(value)) return [];
 
   return value
@@ -127,13 +183,30 @@ const parsePersistedTabs = (value: unknown): PreviewTab[] => {
         typeof candidate.content_type === 'string'
       );
     })
-    .filter((tab) => PERSISTABLE_CONTENT_TYPES.has(tab.content_type))
-    .filter((tab) => tab.content.length <= MAX_PERSISTED_TAB_CONTENT_LENGTH)
-    .map((tab) => ({
-      ...tab,
-      originalContent: typeof tab.originalContent === 'string' ? tab.originalContent : tab.content,
-      isDirty: false,
-    }));
+    .filter((tab) => {
+      if (PERSISTABLE_CONTENT_TYPES.has(tab.content_type)) {
+        return tab.content.length <= MAX_PERSISTED_TAB_CONTENT_LENGTH;
+      }
+      if (FILE_BACKED_CONTENT_TYPES.has(tab.content_type)) {
+        return hasFilePath(tab);
+      }
+      return false;
+    })
+    .map((tab) => {
+      if (FILE_BACKED_CONTENT_TYPES.has(tab.content_type)) {
+        return {
+          ...tab,
+          content: '',
+          originalContent: '',
+          isDirty: false,
+        };
+      }
+      return {
+        ...tab,
+        originalContent: typeof tab.originalContent === 'string' ? tab.originalContent : tab.content,
+        isDirty: false,
+      };
+    });
 };
 
 // 从 localStorage 恢复状态 / Restore state from localStorage
@@ -152,6 +225,21 @@ const loadPersistedState = (): { isOpen: boolean; tabs: PreviewTab[]; activeTabI
         tabs = parsePersistedTabs(parsed.tabs);
         activeTabId = typeof parsed.activeTabId === 'string' ? parsed.activeTabId : activeTabId;
       }
+    }
+
+    // 恢复时若引用型 tab 的 file_path 不可解析（如损坏的存储数据），丢弃并记录一次告警
+    // On restore, drop file-backed reference tabs whose file_path is unresolvable
+    // (e.g. corrupted storage data) and log a single warning with the dropped count.
+    // 磁盘 IO 在此不做校验 —— 缺失的实际文件由对应 viewer 挂载时处理
+    // No disk IO here — an actually-missing file on disk is handled by the viewer on mount.
+    const unresolvedFileBackedCount = tabs.filter(
+      (tab) => FILE_BACKED_CONTENT_TYPES.has(tab.content_type) && !hasResolvableFilePath(tab)
+    ).length;
+    if (unresolvedFileBackedCount > 0) {
+      tabs = tabs.filter((tab) => !(FILE_BACKED_CONTENT_TYPES.has(tab.content_type) && !hasResolvableFilePath(tab)));
+      console.warn(
+        `[PreviewContext] Dropped ${unresolvedFileBackedCount} file-backed tab(s) with an unresolvable file_path on restore.`
+      );
     }
 
     if (activeTabId && !tabs.some((tab) => tab.id === activeTabId)) {
@@ -175,9 +263,6 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isOpen, setIsOpen] = useState(persistedState.isOpen);
   const [tabs, setTabs] = useState<PreviewTab[]>(persistedState.tabs);
   const [activeTabId, setActiveTabId] = useState<string | null>(persistedState.activeTabId);
-  // Mirror activeTabId in a ref so setTabs updaters can read the latest value
-  // without adding activeTabId to their dependencies.
-  const activeTabIdRef = useRef<string | null>(persistedState.activeTabId);
   // const [sendBoxHandler, setSendBoxHandlerState] = useState<((text: string) => void) | null>(null);
   const sendBoxHandler = useRef<((text: string) => void) | null>(null);
   const [domSnippets, setDomSnippets] = useState<DomSnippet[]>([]);
@@ -202,7 +287,6 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // 持久化 activeTabId（单独存储，避免切换 tab 时重复序列化大内容）
   // Persist activeTabId separately to avoid re-serializing large tab content on tab switch
   useEffect(() => {
-    activeTabIdRef.current = activeTabId;
     try {
       if (activeTabId) {
         localStorage.setItem(PREVIEW_ACTIVE_TAB_ID_KEY, activeTabId);
@@ -295,18 +379,34 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     (new_content: string, type: PreviewContentType, meta?: PreviewMetadata, options?: OpenPreviewOptions) => {
       let nextActiveTabId: string | null = null;
 
+      // Provisional preview mode: reuse the single provisional tab in place
+      // instead of stacking a new one — used by file-tree/single-click
+      // browsing. `replace` is kept as a back-compat alias for `preview`.
+      const wantsPreview = options?.preview ?? options?.replace ?? false;
+      // A "pinned intent" open (no `preview`/`replace` option) — e.g. an
+      // agent/chat open or a file-tree double-click — should pin an existing
+      // provisional tab it dedupes onto, rather than leaving it provisional.
+      const pinIntent = !wantsPreview;
+
       setTabs((prevTabs) => {
         // 如果同一个文件已经打开，则直接激活现有 tab，避免重复 / Focus existing tab when the same file is opened again
         const existingTab = findPreviewTabInList(prevTabs, type, new_content, meta);
 
         if (existingTab) {
           nextActiveTabId = existingTab.id;
+          const shouldPin = pinIntent && existingTab.preview === true;
+
           return prevTabs.map((tab) => {
             if (tab.id !== existingTab.id) return tab;
 
             // 如果用户已编辑内容，则保留当前内容，仅更新元数据 / Keep edited content, only merge metadata
             if (tab.isDirty) {
-              return meta ? { ...tab, metadata: { ...tab.metadata, ...meta } } : tab;
+              if (!meta && !shouldPin) return tab;
+              return {
+                ...tab,
+                ...(meta ? { metadata: { ...tab.metadata, ...meta } } : null),
+                ...(shouldPin ? { preview: false } : null),
+              };
             }
 
             return {
@@ -314,6 +414,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
               content: new_content,
               metadata: meta ? { ...tab.metadata, ...meta } : tab.metadata,
               originalContent: new_content,
+              preview: shouldPin ? false : tab.preview,
             };
           });
         }
@@ -342,21 +443,28 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
           title,
           isDirty: false,
           originalContent: new_content, // 保存原始内容 / Save original content
+          preview: false,
         };
 
-        // Single-preview browse mode: reuse the active tab in place instead of
-        // stacking a new one — unless it has unsaved edits, then fall back to a
-        // new tab so changes aren't lost.
-        if (options?.replace) {
-          const activeIdx = activeTabIdRef.current
-            ? prevTabs.findIndex((tab) => tab.id === activeTabIdRef.current)
-            : -1;
-          const activeTab = activeIdx >= 0 ? prevTabs[activeIdx] : null;
-          if (activeTab && !activeTab.isDirty) {
-            nextActiveTabId = activeTab.id;
-            const replacedTab: PreviewTab = { ...newTab, id: activeTab.id };
-            return prevTabs.map((tab, idx) => (idx === activeIdx ? replacedTab : tab));
+        if (wantsPreview) {
+          const provisionalIdx = prevTabs.findIndex((tab) => tab.preview);
+          const provisionalTab = provisionalIdx >= 0 ? prevTabs[provisionalIdx] : null;
+
+          if (provisionalTab && !provisionalTab.isDirty) {
+            // Reuse the existing provisional slot in place.
+            nextActiveTabId = provisionalTab.id;
+            const reusedTab: PreviewTab = { ...newTab, id: provisionalTab.id, preview: true };
+            return prevTabs.map((tab, idx) => (idx === provisionalIdx ? reusedTab : tab));
           }
+
+          // No provisional slot yet, or it has unsaved edits: promote a dirty
+          // provisional tab to pinned (never clobber it) and open a fresh
+          // provisional tab for the new content.
+          const tabsWithPromotedProvisional = provisionalTab
+            ? prevTabs.map((tab) => (tab.id === provisionalTab.id ? { ...tab, preview: false } : tab))
+            : prevTabs;
+          nextActiveTabId = tabId;
+          return [...tabsWithPromotedProvisional, { ...newTab, preview: true }];
         }
 
         nextActiveTabId = tabId;
@@ -367,6 +475,9 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setActiveTabId(nextActiveTabId);
       }
       setIsOpen(true);
+      // Opening a preview is an explicit "show me this" action: reveal the
+      // artifact pane even when it is collapsed by default or preference.
+      dispatchWorkspaceExpandEvent();
     },
     [extractFileName, findPreviewTabInList]
   );
@@ -437,7 +548,9 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
             if (tab.id === activeTabId) {
               // 检查内容是否与原始内容不同 / Check if content differs from original
               const isDirty = new_content !== tab.originalContent;
-              return { ...tab, content: new_content, isDirty };
+              // 编辑一个临时预览 tab 会将其自动固定为常驻 tab
+              // Editing a provisional preview tab auto-pins it to a permanent tab
+              return { ...tab, content: new_content, isDirty, preview: tab.preview ? false : tab.preview };
             }
             return tab;
           });
@@ -449,6 +562,12 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     },
     [activeTabId]
   );
+
+  // 将临时预览 tab 固定为常驻 tab（例如双击 tab 时）
+  // Promote a provisional preview tab to a pinned tab (e.g. on double-clicking a tab)
+  const pinTab = useCallback((tabId: string) => {
+    setTabs((prevTabs) => prevTabs.map((tab) => (tab.id === tabId && tab.preview ? { ...tab, preview: false } : tab)));
+  }, []);
 
   const saveContent = useCallback(
     async (tabId?: string) => {
@@ -742,6 +861,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
       closeTab,
       switchTab: setActiveTabId,
       updateContent,
+      pinTab,
       saveContent,
       findPreviewTab,
       closePreviewByIdentity,
@@ -762,6 +882,7 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     closeTab,
     setActiveTabId,
     updateContent,
+    pinTab,
     saveContent,
     findPreviewTab,
     closePreviewByIdentity,

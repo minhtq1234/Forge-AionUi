@@ -79,6 +79,7 @@ vi.mock('@/renderer/utils/model/agentLogo', () => ({
     selected_value?: string | null;
     fallbackLabel: string;
   }) => selectedLabel || selected_value || fallbackLabel,
+  formatCompactModelName: (value: string) => value.replace('minimax/minimax-m2.5', 'MiniMax M2.5'),
 }));
 
 vi.mock('@icon-park/react', () => ({

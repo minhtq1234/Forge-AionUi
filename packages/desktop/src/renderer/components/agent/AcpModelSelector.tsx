@@ -7,7 +7,7 @@
 import { useAcpModelInfo } from '@/renderer/hooks/agent/useAcpModelInfo';
 import { classifyConfigSetError } from '@/renderer/hooks/agent/useAcpConfigOptions';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
-import { getModelDisplayLabel } from '@/renderer/utils/model/agentLogo';
+import { formatCompactModelName, getModelDisplayLabel } from '@/renderer/utils/model/agentLogo';
 import { iconColors } from '@/renderer/styles/colors';
 import { Dropdown, Menu, Message, Tooltip } from '@arco-design/web-react';
 import { Brain, Down } from '@icon-park/react';
@@ -66,12 +66,14 @@ const AcpModelSelector: React.FC<{
     model_info?.current_model_label ||
     model_info?.current_model_id ||
     '';
-  const display_label = getModelDisplayLabel({
-    selected_value: model_info?.current_model_id,
-    selectedLabel: rawDisplayLabel,
-    defaultModelLabel,
-    fallbackLabel: t('conversation.welcome.useCliModel'),
-  });
+  const display_label = rawDisplayLabel
+    ? formatCompactModelName(rawDisplayLabel)
+    : getModelDisplayLabel({
+        selected_value: model_info?.current_model_id,
+        selectedLabel: rawDisplayLabel,
+        defaultModelLabel,
+        fallbackLabel: t('conversation.welcome.useCliModel'),
+      });
   const combinedLabel = composeRuntimeSelectorLabel({ modelLabel: display_label, thoughtLevel });
   const isRuntimeSetting = isConfigSetting(setStatus);
   const handleThoughtLevelSelect = useCallback(
@@ -144,7 +146,7 @@ const AcpModelSelector: React.FC<{
                   selected={model.id === model_info.current_model_id}
                   description={model.description}
                 >
-                  {model.label || model.id}
+                  {formatCompactModelName(model.label || model.id)}
                 </RuntimeSelectorCheckedItem>
               </Menu.Item>
             ))}

@@ -11,8 +11,9 @@ import { CronJobIndicator } from '@/renderer/pages/cron';
 import { resolveConversationLeadingMark } from '@/renderer/pages/conversation/utils/conversationAssistantIdentity';
 import { cleanupSiderTooltips, getSiderTooltipProps } from '@/renderer/utils/ui/siderTooltip';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
+import { iconColors } from '@/renderer/styles/colors';
 import { Checkbox, Dropdown, Menu, Spin, Tooltip } from '@arco-design/web-react';
-import { DeleteOne, EditOne, Export, MessageOne, MoreOne, Pushpin, Robot } from '@icon-park/react';
+import { Attention, CheckOne, DeleteOne, EditOne, Export, MessageOne, MoreOne, Pushpin, Robot } from '@icon-park/react';
 import classNames from 'classnames';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -53,6 +54,14 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   const cronStatus = getJobStatus(conversation.id);
   const siderTooltipProps = getSiderTooltipProps(tooltipEnabled);
   const inlineNameTooltipEnabled = !collapsed && !isMobile && !!conversation.name;
+  const pinnedHoverFade = isPinned ? 'group-hover:opacity-0 transition-opacity' : '';
+  const wasGeneratingRef = React.useRef(isGenerating);
+  const [isStatusSettling, setIsStatusSettling] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsStatusSettling(wasGeneratingRef.current && !isGenerating);
+    wasGeneratingRef.current = isGenerating;
+  }, [isGenerating]);
 
   const renderLeadingIcon = () => {
     if (cronStatus !== 'none') {
@@ -61,7 +70,6 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
 
     // When the row is pinned, hovering reveals a pushpin marker that overlays
     // the leading icon. We dim the resting icon on hover so the pin reads cleanly.
-    const pinnedHoverFade = isPinned ? 'group-hover:opacity-0 transition-opacity' : '';
     const composedClass = classNames(pinnedHoverFade);
 
     const leadingMark = resolveConversationLeadingMark(conversation, assistantInfo, logos);
@@ -98,6 +106,40 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
     );
   };
 
+  const renderConversationStatus = () => {
+    // Scheduled chats retain their dedicated job state. Other chats use the
+    // leading slot exclusively for their conversation status.
+    if (cronStatus !== 'none' || batchMode) {
+      return renderLeadingIcon();
+    }
+
+    const statusClass = classNames('conversation-status-mark flex-center', pinnedHoverFade, {
+      'conversation-status-mark--settling': isStatusSettling && !isGenerating,
+    });
+
+    if (isGenerating) {
+      return (
+        <span data-testid={`conversation-status-running-${conversation.id}`} className={statusClass}>
+          <Spin size={16} />
+        </span>
+      );
+    }
+
+    if (hasCompletionUnread) {
+      return (
+        <span data-testid={`conversation-status-attention-${conversation.id}`} className={statusClass}>
+          <Attention theme='filled' size='16' fill={iconColors.danger} className='line-height-0 flex-shrink-0' />
+        </span>
+      );
+    }
+
+    return (
+      <span data-testid={`conversation-status-completed-${conversation.id}`} className={statusClass}>
+        <CheckOne theme='filled' size='16' fill={iconColors.success} className='line-height-0 flex-shrink-0' />
+      </span>
+    );
+  };
+
   const handleRowClick = () => {
     cleanupSiderTooltips();
     if (batchMode) {
@@ -115,18 +157,6 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
       return;
     }
     onOpenMenu(conversation);
-  };
-
-  const renderCompletionUnreadDot = () => {
-    if (batchMode || !hasCompletionUnread || isGenerating) {
-      return null;
-    }
-
-    return (
-      <span className='absolute right-8px top-1/2 -translate-y-1/2 flex items-center justify-center group-hover:hidden'>
-        <span className='h-8px w-8px rounded-full bg-#2C7FFF shadow-[0_0_0_2px_rgba(44,127,255,0.18)]' />
-      </span>
-    );
   };
 
   return (
@@ -164,7 +194,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
           </span>
         )}
         <span className='size-22px flex items-center justify-center shrink-0 relative'>
-          {isGenerating && !batchMode ? <Spin size={16} /> : renderLeadingIcon()}
+          {renderConversationStatus()}
           {/* Pinned indicator: only visible when row is hovered, overlays leading icon */}
           {!batchMode && isPinned && !isMobile && !isGenerating && (
             <span
@@ -191,7 +221,6 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
           </Tooltip>
         </FlexFullContainer>
 
-        {renderCompletionUnreadDot()}
         {!batchMode && (
           <div
             className={classNames(

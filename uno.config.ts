@@ -146,6 +146,11 @@ export default defineConfig({
     // Arco Design popup/dialog background color: bg-popup
     ['bg-popup', { 'background-color': 'var(--color-bg-popup)' }],
 
+    // 文档编辑器/预览的白色页面背景（区别于暖色调 bg-1/bg-2 外层 chrome）
+    // Artifact editor/preview "document" surface (distinct from the warm bg-1/bg-2 outer chrome)
+    ['bg-document', { 'background-color': 'var(--bg-document)' }],
+    ['bg-document-muted', { 'background-color': 'var(--bg-document-muted)' }],
+
     // 项目自定义颜色 / Project custom colors
     ['bg-dialog-fill-0', { 'background-color': 'var(--dialog-fill-0)' }],
     ['text-0', { color: 'var(--text-0)' }],

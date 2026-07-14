@@ -1,9 +1,16 @@
 {
+  "toolbar": {
+    "label": "Ana sayfa işlemleri",
+    "history": "Geçmiş",
+    "saved": "Kaydedilenler",
+    "community": "Topluluk"
+  },
   "promptExamplesHint": "Bu talimatları deneyin",
   "defaultPrompts": {
     "capabilities": "Benim için neler yapabilirsin?",
     "skills": "Hangi becerilere sahipsin?",
-    "tools": "Hangi araçlara sahipsin?"
+    "tools": "Hangi araçlara sahipsin?",
+    "reviewFolder": "Review the files in a folder"
   },
   "selectAssistantHint": "Göreve başlamak için bir asistan seçin",
   "workspace": {
@@ -13,5 +20,11 @@
     "specifyWorkspace": "Proje klasörü seç",
     "searchPlaceholder": "Proje ara…",
     "noProject": "Proje Yok"
+  },
+  "defaultProjectPrompts": {
+    "reviewFiles": "Review the files in this project",
+    "summarizeFolder": "Summarize what this project contains",
+    "createPlan": "Create a plan for this project",
+    "findNextSteps": "Find the next useful steps for this project"
   }
 }

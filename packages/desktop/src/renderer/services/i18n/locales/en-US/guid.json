@@ -1,9 +1,16 @@
 {
+  "toolbar": {
+    "label": "Home actions",
+    "history": "History",
+    "saved": "Saved",
+    "community": "Community"
+  },
   "promptExamplesHint": "Try these instructions",
   "defaultPrompts": {
     "capabilities": "What can you do for me?",
     "skills": "What skills do you have?",
-    "tools": "What tools do you have?"
+    "tools": "What tools do you have?",
+    "reviewFolder": "Review the files in a folder"
   },
   "selectAssistantHint": "Select an assistant to start a task",
   "workspace": {
@@ -13,5 +20,11 @@
     "specifyWorkspace": "Select project folder",
     "searchPlaceholder": "Search projects…",
     "noProject": "No Project"
+  },
+  "defaultProjectPrompts": {
+    "reviewFiles": "Review the files in this project",
+    "summarizeFolder": "Summarize what this project contains",
+    "createPlan": "Create a plan for this project",
+    "findNextSteps": "Find the next useful steps for this project"
   }
 }

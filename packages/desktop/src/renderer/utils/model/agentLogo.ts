@@ -179,3 +179,21 @@ export const getModelDisplayLabel = ({
   if (!selectedLabel) return fallbackLabel;
   return selectedLabel;
 };
+
+/** Make provider-qualified model ids readable in compact controls. */
+export const formatCompactModelName = (raw: string): string => {
+  const modelId = raw.replace(/^[^/]+\//, '').replace(/^minimax-/i, 'minimax-');
+  return modelId
+    .replace(/[-_]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => {
+      const lower = part.toLowerCase();
+      if (lower === 'minimax') return 'MiniMax';
+      if (/^m\d/.test(lower)) return lower.toUpperCase();
+      if (/^\d+(?:\.\d+)?$/.test(part)) return part;
+      return `${part.charAt(0).toUpperCase()}${part.slice(1)}`;
+    })
+    .join(' ')
+    .replace(/ (\d+) (\d+)$/, ' $1.$2');
+};

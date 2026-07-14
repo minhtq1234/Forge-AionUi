@@ -13,7 +13,7 @@ import { iconColors } from '@/renderer/styles/colors';
 import { Alert, Message, Tooltip } from '@arco-design/web-react';
 import { Copy } from '@icon-park/react';
 import classNames from 'classnames';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyText } from '@/renderer/utils/ui/clipboard';
 import CollapsibleContent from '@renderer/components/chat/CollapsibleContent';
@@ -50,6 +50,63 @@ import { resolveAgentLogo, useAgentLogos } from '@/renderer/utils/model/agentLog
 import TeammateMessageAvatar from './TeammateMessageAvatar';
 
 const CODE_STYLE = { marginTop: 4, marginBlock: 4 };
+const STREAM_REVEAL_INTERVAL_MS = 16;
+const STREAM_REVEAL_MIN_DURATION_MS = 80;
+const STREAM_REVEAL_MAX_DURATION_MS = 280;
+const STREAM_REVEAL_MS_PER_CHARACTER = 4;
+
+const prefersReducedMotion = (): boolean =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const useProgressiveText = (text: string, isStreaming: boolean) => {
+  const [displayedText, setDisplayedText] = useState(() => (isStreaming && !prefersReducedMotion() ? '' : text));
+  const displayedTextRef = React.useRef(displayedText);
+  const wasStreamingRef = React.useRef(isStreaming);
+
+  useEffect(() => {
+    const wasStreaming = wasStreamingRef.current;
+    wasStreamingRef.current = isStreaming;
+    const currentText = displayedTextRef.current;
+    const canReveal =
+      !prefersReducedMotion() &&
+      (isStreaming || wasStreaming) &&
+      text.startsWith(currentText) &&
+      currentText.length < text.length;
+
+    if (!canReveal) {
+      if (currentText !== text) {
+        displayedTextRef.current = text;
+        setDisplayedText(text);
+      }
+      return;
+    }
+
+    const additionalCharacterCount = text.length - currentText.length;
+    const duration = Math.min(
+      STREAM_REVEAL_MAX_DURATION_MS,
+      Math.max(STREAM_REVEAL_MIN_DURATION_MS, additionalCharacterCount * STREAM_REVEAL_MS_PER_CHARACTER)
+    );
+    const stepCount = Math.ceil(duration / STREAM_REVEAL_INTERVAL_MS);
+    const charactersPerStep = Math.max(1, Math.ceil(additionalCharacterCount / stepCount));
+    let revealLength = currentText.length;
+
+    const interval = window.setInterval(() => {
+      revealLength = Math.min(text.length, revealLength + charactersPerStep);
+      const nextText = text.slice(0, revealLength);
+      displayedTextRef.current = nextText;
+      setDisplayedText(nextText);
+      if (revealLength === text.length) {
+        window.clearInterval(interval);
+      }
+    }, STREAM_REVEAL_INTERVAL_MS);
+
+    return () => window.clearInterval(interval);
+  }, [isStreaming, text]);
+
+  return { displayedText, isRevealing: displayedText !== text };
+};
 
 const parseFileMarker = (content: string) => {
   const markerIndex = content.indexOf(AIONUI_FILES_MARKER);
@@ -95,7 +152,11 @@ const useFormatContent = (content: string) => {
   }, [content]);
 };
 
-const MessageText: React.FC<{ message: IMessageText; showCopyRow?: boolean }> = ({ message, showCopyRow = true }) => {
+const MessageText: React.FC<{ message: IMessageText; showCopyRow?: boolean; isStreaming?: boolean }> = ({
+  message,
+  showCopyRow = true,
+  isStreaming = false,
+}) => {
   const logos = useAgentLogos();
   // Filter think tags from content before rendering
   // 在渲染前过滤 think 标签
@@ -119,6 +180,8 @@ const MessageText: React.FC<{ message: IMessageText; showCopyRow?: boolean }> = 
   const { t } = useTranslation();
   const [showCopyAlert, setShowCopyAlert] = useState(false);
   const isUserMessage = message.position === 'right';
+  const shouldRevealStream = isStreaming && !isUserMessage && !json;
+  const { displayedText, isRevealing } = useProgressiveText(text, shouldRevealStream);
   const isTeammateMessage = message.position === 'left' && message.content.teammateMessage === true;
   const shouldRenderPlainText = isUserMessage;
   const conversationContext = useConversationContextSafe();
@@ -239,7 +302,7 @@ const MessageText: React.FC<{ message: IMessageText; showCopyRow?: boolean }> = 
           ) : (
             <div data-testid='message-text-content'>
               <MarkdownView codeStyle={CODE_STYLE} onLocalFileLink={handleLocalFileLink}>
-                {data}
+                {shouldRevealStream || isRevealing ? displayedText : data}
               </MarkdownView>
             </div>
           )}

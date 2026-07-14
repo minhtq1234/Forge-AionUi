@@ -5,9 +5,9 @@
  */
 
 import ThoughtDisplay from '@/renderer/components/chat/ThoughtDisplay';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/renderer/hooks/context/ThemeContext', () => ({
   useThemeContext: () => ({ theme: 'light' }),
@@ -20,7 +20,11 @@ vi.mock('react-i18next', () => ({
 }));
 
 describe('ThoughtDisplay', () => {
-  it('renders running state as a compact activity pill', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('renders a calm thinking state before a live activity is available', () => {
     render(<ThoughtDisplay running />);
 
     const display = screen.getByTestId('thought-display');
@@ -29,11 +33,12 @@ describe('ThoughtDisplay', () => {
     expect(display).not.toHaveClass('mb--20px');
     expect(display).not.toHaveClass('pb-30px');
     expect(display).not.toHaveClass('rd-t-20px');
-    expect(screen.getByText('conversation.chat.processing')).toBeInTheDocument();
-    expect(screen.getByText('(0s)')).toBeInTheDocument();
+    expect(screen.getByText('conversation.thinking.label')).toBeInTheDocument();
+    expect(screen.getByTestId('thought-display-dots')).toBeInTheDocument();
+    expect(screen.queryByText('0s')).not.toBeInTheDocument();
   });
 
-  it('keeps thought text compact when a platform provides thought details', () => {
+  it('narrates the live activity without a separate status tag', () => {
     render(<ThoughtDisplay running thought={{ subject: 'Planning', description: 'Checking files' }} />);
 
     const display = screen.getByTestId('thought-display');
@@ -41,5 +46,18 @@ describe('ThoughtDisplay', () => {
     expect(display).toHaveClass('thought-display--running');
     expect(screen.getByText('Planning')).toBeInTheDocument();
     expect(screen.getByText('Checking files')).toBeInTheDocument();
+    expect(display.querySelector('.arco-tag')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('thought-display-dots')).not.toBeInTheDocument();
+  });
+
+  it('shows elapsed time only after the activity has been running for a few seconds', () => {
+    vi.useFakeTimers();
+    render(<ThoughtDisplay running />);
+
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+
+    expect(screen.getByText('5s')).toBeInTheDocument();
   });
 });

@@ -6,6 +6,7 @@
 
 import type { IConversationArtifact } from '@/common/adapter/ipcBridge';
 import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup, TMessage } from '@/common/chat/chatLib';
+import { isDiagnosticToolMessage } from '@/common/chat/normalizeToolCall';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useConversationRuntimeView } from '@/renderer/pages/conversation/runtime/useConversationRuntimeView';
 import { getChatSurfaceWidthClass } from '@/renderer/pages/conversation/utils/chatSurfaceWidth';
@@ -181,6 +182,7 @@ const MessageItem: React.FC<{
   highlighted?: boolean;
   rowWidthClass: string;
   showCopyRow?: boolean;
+  isStreaming?: boolean;
 }> = React.memo(
   HOC((props) => {
     const { message, highlighted, rowWidthClass } = props as {
@@ -212,16 +214,18 @@ const MessageItem: React.FC<{
     ({
       message,
       showCopyRow,
+      isStreaming,
     }: {
       message: TMessage;
       highlighted?: boolean;
       rowWidthClass: string;
       showCopyRow?: boolean;
+      isStreaming?: boolean;
     }) => {
       const { t } = useTranslation();
       switch (message.type) {
         case 'text':
-          return <MessageText message={message} showCopyRow={showCopyRow}></MessageText>;
+          return <MessageText message={message} showCopyRow={showCopyRow} isStreaming={isStreaming}></MessageText>;
         case 'tips':
           return <MessageTips message={message}></MessageTips>;
         case 'tool_call':
@@ -329,6 +333,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       if (message.hidden) continue;
       if (message.type === 'available_commands') continue;
       if (message.type === 'tool_group') {
+        if (isDiagnosticToolMessage(message)) continue;
         if (message.content.length === 1) {
           const writeFileResults = message.content
             .filter(
@@ -352,10 +357,12 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         continue;
       }
       if (message.type === 'acp_tool_call') {
+        if (isDiagnosticToolMessage(message)) continue;
         pushToolList(message);
         continue;
       }
       if (message.type === 'tool_call') {
+        if (isDiagnosticToolMessage(message)) continue;
         pushToolList(message);
         continue;
       }
@@ -422,6 +429,25 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
     if (isProcessing && lastTurnTextId) ids.delete(lastTurnTextId);
     return ids;
   }, [processedList, isProcessing]);
+
+  const streamingTextMessageId = useMemo(() => {
+    if (!isProcessing) {
+      return undefined;
+    }
+
+    for (let index = processedList.length - 1; index >= 0; index -= 1) {
+      const item = processedList[index];
+      if ('type' in item && ['file_summary', 'tool_summary', 'artifact'].includes(item.type)) {
+        continue;
+      }
+      const message = item as TMessage;
+      if (message.type === 'text' && message.position === 'left') {
+        return message.id;
+      }
+    }
+
+    return undefined;
+  }, [isProcessing, processedList]);
 
   // Use auto-scroll hook
   const {
@@ -630,6 +656,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         highlighted={highlighted}
         rowWidthClass={rowWidthClass}
         showCopyRow={showCopyRow}
+        isStreaming={streamingTextMessageId === message.id}
       ></MessageItem>
     );
   };

@@ -1,5 +1,6 @@
 import { blurActiveElement } from '@/renderer/utils/ui/focus';
 import {
+  WORKSPACE_EXPAND_EVENT,
   WORKSPACE_HAS_FILES_EVENT,
   WORKSPACE_TOGGLE_EVENT,
   dispatchWorkspaceStateEvent,
@@ -35,7 +36,8 @@ type UseWorkspaceCollapseReturn = {
 };
 
 /**
- * Manages workspace panel collapse/expand state.
+ * Manages the artifact-pane collapse/expand state (`rightSiderCollapsed`).
+ * ChatLayout consumes this as `artifactCollapsed`.
  *
  * Default: collapsed. Auto-expand fires when WORKSPACE_HAS_FILES_EVENT arrives
  * and either:
@@ -59,7 +61,7 @@ export function useWorkspaceCollapse({
   preferenceKey,
   isTemporaryWorkspace,
 }: UseWorkspaceCollapseParams): UseWorkspaceCollapseReturn {
-  // Workspace panel always starts collapsed; preference and hasFiles events
+  // Artifact pane always starts collapsed; preference and hasFiles events
   // drive expand. See WORKSPACE_HAS_FILES_EVENT handler below.
   const [rightSiderCollapsed, setRightSiderCollapsed] = useState(true);
 
@@ -97,6 +99,26 @@ export function useWorkspaceCollapse({
       window.removeEventListener(WORKSPACE_TOGGLE_EVENT, handleWorkspaceToggle);
     };
   }, [workspaceEnabled, preferenceKey]);
+
+  // Explicit reveal: opening a preview force-expands the pane, overriding the
+  // collapsed default and any stored preference. Fires on desktop and mobile
+  // (mobile expand opens the overlay drawer). The persisted preference is left
+  // untouched — a later manual collapse persists normally.
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+    const handleWorkspaceExpand = () => {
+      if (!workspaceEnabled) {
+        return;
+      }
+      setRightSiderCollapsed(false);
+    };
+    window.addEventListener(WORKSPACE_EXPAND_EVENT, handleWorkspaceExpand);
+    return () => {
+      window.removeEventListener(WORKSPACE_EXPAND_EVENT, handleWorkspaceExpand);
+    };
+  }, [workspaceEnabled]);
 
   // Auto expand/collapse workspace panel based on files state (user preference takes priority)
   useEffect(() => {

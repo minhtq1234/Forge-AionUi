@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMessageText } from '@/common/chat/chatLib';
 import { ipcBridge } from '@/common';
@@ -271,7 +271,7 @@ describe('MessageText attachment paths', () => {
           targetLine: 10,
           targetColumn: 2,
         }),
-        { replace: true }
+        { preview: true }
       );
     });
   });
@@ -307,7 +307,7 @@ describe('MessageText attachment paths', () => {
           targetColumn: 7,
           truncated: false,
         }),
-        { replace: true }
+        { preview: true }
       );
     });
   });
@@ -343,7 +343,7 @@ describe('MessageText attachment paths', () => {
           targetColumn: undefined,
           truncated: false,
         }),
-        { replace: true }
+        { preview: true }
       );
     });
 
@@ -371,7 +371,7 @@ describe('MessageText attachment paths', () => {
           workspace: '/workspace/demo',
           language: 'pdf',
         }),
-        { replace: true }
+        { preview: true }
       );
     });
     expect(ipcBridge.fs.readFile.invoke).not.toHaveBeenCalled();
@@ -399,7 +399,7 @@ describe('MessageText attachment paths', () => {
           language: 'png',
           editable: false,
         }),
-        { replace: true }
+        { preview: true }
       );
     });
     expect(ipcBridge.fs.readFile.invoke).not.toHaveBeenCalled();
@@ -426,8 +426,71 @@ describe('MessageText attachment paths', () => {
           truncated: true,
           editable: false,
         }),
-        { replace: true }
+        { preview: true }
       );
     });
+  });
+});
+
+describe('MessageText streaming', () => {
+  it('reveals live assistant text progressively', () => {
+    vi.useFakeTimers();
+    const message: IMessageText = {
+      id: 'msg-streaming',
+      msg_id: 'msg-streaming',
+      conversation_id: 'conv-1',
+      type: 'text',
+      position: 'left',
+      created_at: Date.now(),
+      content: {
+        content: 'A measured streaming response.',
+      },
+    };
+
+    render(<MessageText message={message} isStreaming />);
+
+    expect(screen.getByTestId('message-text-content')).not.toHaveTextContent('A measured streaming response.');
+
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+
+    expect(screen.getByTestId('message-text-content')).toHaveTextContent('A measured streaming response.');
+    vi.useRealTimers();
+  });
+
+  it('finishes a pending reveal smoothly after the stream completes', () => {
+    vi.useFakeTimers();
+    const message: IMessageText = {
+      id: 'msg-streaming-finish',
+      msg_id: 'msg-streaming-finish',
+      conversation_id: 'conv-1',
+      type: 'text',
+      position: 'left',
+      created_at: Date.now(),
+      content: {
+        content: 'A final response should not appear all at once.',
+      },
+    };
+
+    const { rerender } = render(<MessageText message={message} isStreaming />);
+
+    act(() => {
+      vi.advanceTimersByTime(32);
+    });
+    rerender(<MessageText message={message} isStreaming={false} />);
+
+    expect(screen.getByTestId('message-text-content')).not.toHaveTextContent(
+      'A final response should not appear all at once.'
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+
+    expect(screen.getByTestId('message-text-content')).toHaveTextContent(
+      'A final response should not appear all at once.'
+    );
+    vi.useRealTimers();
   });
 });

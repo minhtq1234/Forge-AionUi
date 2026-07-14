@@ -6,6 +6,7 @@
 
 import { iconColors } from '@/renderer/styles/colors';
 import { isElectronDesktop } from '@/renderer/utils/platform';
+import WorkspaceOpenButton from '@/renderer/pages/conversation/components/ChatLayout/WorkspaceOpenButton';
 import { Dropdown, Input, Menu, Tooltip } from '@arco-design/web-react';
 import { Down, Plus, Refresh, Search } from '@icon-park/react';
 import React from 'react';
@@ -31,6 +32,8 @@ type WorkspaceToolbarProps = {
   handleSelectHostFiles: () => void;
   handleUploadDeviceFiles: () => void;
   setShowHostFileSelector: (v: boolean) => void;
+  workspacePath: string;
+  isTemporaryWorkspace: boolean;
 };
 
 /** Toolbar area: workspace name, search toggle, refresh button, upload menu, settings. */
@@ -49,6 +52,8 @@ const WorkspaceToolbar: React.FC<WorkspaceToolbarProps> = ({
   handleSelectHostFiles,
   handleUploadDeviceFiles,
   setShowHostFileSelector,
+  workspacePath,
+  isTemporaryWorkspace,
 }) => {
   const workspaceUploadMenu = (
     <Menu
@@ -72,11 +77,10 @@ const WorkspaceToolbar: React.FC<WorkspaceToolbarProps> = ({
 
   return (
     <div className='px-12px'>
-      {/* Search Input */}
-      {(showSearch || searchText) && (
-        <div className='py-8px workspace-toolbar-search'>
+      <div data-testid='workspace-toolbar-top-row' className='flex items-center gap-8px py-8px'>
+        {(showSearch || searchText) && (
           <Input
-            className='w-full workspace-search-input'
+            className='workspace-search-input flex-1 min-w-0'
             ref={searchInputRef}
             placeholder={t('conversation.workspace.searchPlaceholder')}
             value={searchText}
@@ -87,11 +91,9 @@ const WorkspaceToolbar: React.FC<WorkspaceToolbarProps> = ({
             allowClear
             prefix={<Search theme='outline' size='14' fill={iconColors.primary} />}
           />
-        </div>
-      )}
-
-      {/* Border divider below search */}
-      {!isWorkspaceCollapsed && (showSearch || searchText) && <div className='border-b border-b-base' />}
+        )}
+        <WorkspaceOpenButton workspacePath={workspacePath} isTemporary={isTemporaryWorkspace} />
+      </div>
 
       {/* Directory name with collapse and action icons */}
       <div className='workspace-toolbar-row flex items-center justify-between gap-8px'>

@@ -10,11 +10,13 @@ import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { toLocalFileHref } from '@/renderer/components/Markdown/markdownUtils';
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import { OfficeArtifactToolbar, useOfficeArtifactEditor } from '../ArtifactEditor';
+import ArtifactEmptyState from '../ArtifactEmptyState';
 import { PreviewToolbarExtrasProvider, type PreviewToolbarExtras } from '../../context/PreviewToolbarExtrasContext';
-import { usePreviewContext } from '../../context/PreviewContext';
+import { usePreviewContext, type PreviewTab as PreviewContextTab } from '../../context/PreviewContext';
 import { getOfficePreviewRefreshToken } from '../../context/officePreviewRevision';
+import type { PreviewContentType } from '@/common/types/office/preview';
 import { useResizableSplit } from '@/renderer/hooks/ui/useResizableSplit';
-import { Link } from '@arco-design/web-react';
+import { Link, Message } from '@arco-design/web-react';
 import classNames from 'classnames';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DiffPreview from '../viewers/DiffViewer';
@@ -34,19 +36,15 @@ import {
   PreviewToolbar,
   PreviewContextMenu,
   PreviewConfirmModals,
-  PreviewHistoryDropdown,
   type ContextMenuState,
   type CloseTabConfirmState,
   type PreviewTab,
 } from '.';
 import { DEFAULT_SPLIT_RATIO, FILE_TYPES_WITH_BUILTIN_OPEN, MAX_SPLIT_WIDTH, MIN_SPLIT_WIDTH } from '../../constants';
-import {
-  usePreviewHistory,
-  usePreviewKeyboardShortcuts,
-  useScrollSync,
-  useTabOverflow,
-  useThemeDetection,
-} from '../../hooks';
+import { usePreviewKeyboardShortcuts, useScrollSync, useTabOverflow, useThemeDetection } from '../../hooks';
+// Imported from its module (not the barrel) so PreviewPanel tests that mock the
+// hooks barrel don't need to stub the LRU — the real logic always runs.
+import { useWarmOfficeTabs } from '../../hooks/useWarmOfficeTabs';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import './preview.css';
@@ -60,24 +58,44 @@ import './preview.css';
  */
 type PreviewPanelProps = {
   fullBleed?: boolean;
+  /**
+   * Collapse the surrounding artifact pane. When provided, the tab bar's
+   * "close panel" button collapses the pane (owned by ChatLayout) instead of
+   * merely clearing the preview state. Falls back to `closePreview` when absent.
+   */
+  onRequestCollapse?: () => void;
 };
 
-const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
+/**
+ * Office content types rendered through OfficeWatchViewer (each launches an
+ * `officecli watch`). These are kept mounted per open tab so switching between
+ * them is instant instead of re-launching the watch.
+ * 通过 OfficeWatchViewer 渲染的 Office 内容类型（会启动 officecli watch）。
+ */
+const isOfficeViewerContentType = (type: PreviewContentType | undefined): boolean =>
+  type === 'word' || type === 'excel' || type === 'ppt';
+
+const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onRequestCollapse }) => {
   const { t } = useTranslation();
   const { id: conversationId = '' } = useParams<{ id: string }>();
   const {
-    isOpen,
     tabs,
     activeTabId,
     activeTab,
     closeTab,
     switchTab,
+    pinTab,
     closePreview,
     updateContent,
     saveContent,
-    addToSendBox,
     addDomSnippet,
   } = usePreviewContext();
+
+  // The artifact pane is always mounted while expanded; ChatLayout owns its
+  // visibility via collapse state, so the pane no longer self-hides on the
+  // preview `isOpen` flag. When there is no active tab it renders the empty
+  // state below.
+  const handleClosePanel = onRequestCollapse ?? closePreview;
   const layout = useLayoutContext();
 
   // 视图状态 / View states
@@ -85,7 +103,11 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
   const [isSplitScreenEnabled, setIsSplitScreenEnabled] = useState(false);
   const [inspectMode, setInspectMode] = useState(false);
   const [toolbarExtras, setToolbarExtras] = useState<PreviewToolbarExtras | null>(null);
-  const [manualOfficeRefreshRevision, setManualOfficeRefreshRevision] = useState(0);
+  // Manual "refresh" bumps are tracked per tab id so refreshing the active
+  // office doc never restarts the warm (mounted-but-hidden) watches of the
+  // other open office tabs.
+  const [manualOfficeRefreshByTab, setManualOfficeRefreshByTab] = useState<Record<string, number>>({});
+  const activeManualOfficeRefresh = activeTabId ? (manualOfficeRefreshByTab[activeTabId] ?? 0) : 0;
 
   // 切换文件时把视图模式复位为预览，避免上一个文件的 source 模式串到下一个文件（如代码文件丢失语法高亮）。
   // 注意：单预览浏览模式下打开新文件会复用当前 tab 的 id，所以这里要监听实际显示的文件标识（路径 + 类型），
@@ -116,22 +138,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
     previewContainerRef,
   });
 
-  // eslint-disable-next-line max-len
-  const {
-    historyVersions,
-    historyLoading,
-    snapshotSaving,
-    historyError,
-    historyTarget,
-    refreshHistory,
-    handleSaveSnapshot,
-    handleSnapshotSelect,
-    messageApi,
-    messageContextHolder,
-  } = usePreviewHistory({
-    activeTab,
-    updateContent,
-  });
+  const [messageApi, messageContextHolder] = Message.useMessage();
 
   usePreviewKeyboardShortcuts({
     isDirty: activeTab?.isDirty,
@@ -168,11 +175,24 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
     conversationId,
     workspace: activeTab?.metadata?.workspace ?? '',
     filePath: activeTab?.metadata?.file_path ?? '',
-    fileName: activeTab?.metadata?.file_name ?? activeTab?.title,
-    externalRevision: `${activeTab?.officePreviewRevision ?? 0}:${manualOfficeRefreshRevision}`,
-    addToSendBox,
+    externalRevision: `${activeTab?.officePreviewRevision ?? 0}:${activeManualOfficeRefresh}`,
     onArtifactMutated: handleOfficeArtifactMutated,
   });
+
+  // Open office tabs (word/excel/ppt) stay mounted so switching between them is
+  // instant (no re-launched `officecli watch`). Missing-file office tabs are
+  // excluded — they show the missing-file state via renderContent rather than
+  // watching a nonexistent file.
+  // 打开的 Office 标签页保持挂载，切换即时；缺失文件的标签页走 renderContent。
+  const officeTabs = tabs.filter((tab) => isOfficeViewerContentType(tab.content_type) && !tab.metadata?.missingFile);
+  // Cap concurrently warm office viewers with an LRU: only the most-recently
+  // active office tabs stay mounted (each holds a live watch + lease); the rest
+  // go cold until reactivated. The active office tab is always warm. Called
+  // unconditionally, above the empty-state early return (Rules of Hooks).
+  const warmOfficeIds = useWarmOfficeTabs(
+    activeTabId,
+    officeTabs.map((tab) => tab.id)
+  );
 
   // 内层分割：编辑器和预览的分割比例（默认 50/50）
   // Inner split: Split ratio between editor and preview (default 50/50)
@@ -297,18 +317,24 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
     setContextMenu({ show: false, x: 0, y: 0, tabId: null });
   }, [tabs, closeTab]);
 
-  // 如果预览面板未打开，不渲染 / Don't render if preview panel is not open
-  if (!isOpen || !activeTab) return null;
+  // 将 tabs 转换为 PreviewTab 类型 / Convert tabs to PreviewTab type
+  const previewTabs: PreviewTab[] = tabs.map((tab) => ({
+    id: tab.id,
+    title: tab.title,
+    isDirty: tab.isDirty,
+    contentType: tab.content_type,
+    preview: tab.preview,
+  }));
 
-  const { content, content_type, metadata } = activeTab;
+  // Derived from the active tab. Null-safe so every hook below (notably the four
+  // useCallbacks) is constructed unconditionally even when there is no active
+  // tab — the empty-state early return lives AFTER the last hook to respect the
+  // Rules of Hooks. These fields are only ever read on the with-tab render path
+  // (guarded below) or inside interaction callbacks that never fire while empty.
+  const { content, content_type, metadata } = (activeTab ?? {}) as NonNullable<typeof activeTab>;
   const isMarkdown = content_type === 'markdown';
   const isHTML = content_type === 'html';
   const isOfficeDocument = content_type === 'word' || content_type === 'excel';
-  const officeRefreshToken = getOfficePreviewRefreshToken(
-    metadata?.file_path,
-    activeTab.officePreviewRevision,
-    manualOfficeRefreshRevision
-  );
   const isEditable = metadata?.editable !== false; // 默认可编辑 / Default editable
 
   // 检查文件类型是否已有内置的打开按钮（Word、PPT、PDF、Excel 组件内部已提供）
@@ -420,28 +446,73 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
   }, [metadata?.file_path, messageApi, t]);
 
   const handleManualOfficeRefresh = useCallback(() => {
-    setManualOfficeRefreshRevision((revision) => revision + 1);
-  }, []);
+    if (!activeTabId) return;
+    setManualOfficeRefreshByTab((previous) => ({
+      ...previous,
+      [activeTabId]: (previous[activeTabId] ?? 0) + 1,
+    }));
+  }, [activeTabId]);
 
   const handleRevealOfficeInFolder = useCallback(() => {
     if (!metadata?.file_path) return;
     void ipcBridge.shell.showItemInFolder.invoke(metadata.file_path).catch(() => {});
   }, [metadata?.file_path]);
 
-  // 渲染历史下拉菜单 / Render history dropdown
-  const renderHistoryDropdown = () => {
-    // eslint-disable-next-line max-len
+  // 没有打开的 tab 时展示占位空状态，而不是按类型渲染内容
+  // Show a placeholder empty state instead of type-specific content when no tab is
+  // open. This early return lives AFTER every hook above so the hook order is
+  // identical between the empty and with-tab renders (Rules of Hooks).
+  if (!activeTab) {
     return (
-      <PreviewHistoryDropdown
-        historyVersions={historyVersions}
-        historyLoading={historyLoading}
-        historyError={historyError}
-        historyTarget={historyTarget}
-        currentTheme={currentTheme}
-        onSnapshotSelect={handleSnapshotSelect}
-      />
+      <PreviewToolbarExtrasProvider value={toolbarExtrasContextValue}>
+        <div
+          data-testid='preview-panel-surface'
+          className={classNames('h-full flex flex-col', !fullBleed && 'rounded-[8px]')}
+          style={{ background: 'var(--bg-artifact-surface)' }}
+        >
+          {messageContextHolder}
+
+          {/* 确认对话框 / Confirmation modals */}
+          <PreviewConfirmModals
+            closeTabConfirm={closeTabConfirm}
+            onSaveAndCloseTab={handleSaveAndCloseTab}
+            onCloseWithoutSave={handleCloseWithoutSave}
+            onCancelCloseTab={handleCancelCloseTab}
+          />
+
+          {/* Tab 栏 / Tab bar */}
+          <PreviewTabs
+            tabs={previewTabs}
+            activeTabId={activeTabId}
+            tabFadeState={tabFadeState}
+            tabsContainerRef={tabsContainerRef}
+            onSwitchTab={switchTab}
+            onCloseTab={handleCloseTab}
+            onPinTab={pinTab}
+            onContextMenu={handleTabContextMenu}
+            onClosePanel={handleClosePanel}
+          />
+
+          {/* 空状态 / Empty state */}
+          <div className='flex-1 overflow-hidden'>
+            <ArtifactEmptyState />
+          </div>
+
+          {/* Tab 右键菜单 / Tab context menu */}
+          <PreviewContextMenu
+            contextMenu={contextMenu}
+            tabs={previewTabs}
+            currentTheme={currentTheme}
+            onClose={() => setContextMenu({ show: false, x: 0, y: 0, tabId: null })}
+            onCloseLeft={handleCloseLeft}
+            onCloseRight={handleCloseRight}
+            onCloseOthers={handleCloseOthers}
+            onCloseAll={handleCloseAll}
+          />
+        </div>
+      </PreviewToolbarExtrasProvider>
     );
-  };
+  }
 
   const renderMissingFile = () => {
     const filePath = metadata?.file_path;
@@ -475,7 +546,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
         // 移动端：全屏显示预览，隐藏编辑器 / Mobile: Full-screen preview, hide editor
         if (layout?.isMobile) {
           return (
-            <div className='flex-1 overflow-hidden'>
+            <div className='flex-1 overflow-hidden bg-document'>
               <MarkdownPreview content={content} file_path={metadata?.file_path} workspace={metadata?.workspace} />
             </div>
           );
@@ -489,7 +560,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
               <div className='h-40px flex items-center px-12px bg-bg-2'>
                 <span className='text-12px text-t-secondary'>{t('preview.editor')}</span>
               </div>
-              <div className='flex-1 overflow-hidden'>
+              <div className='flex-1 overflow-hidden bg-document'>
                 <MarkdownEditor
                   key={activeTabId ?? undefined}
                   value={content}
@@ -507,7 +578,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
               <div className='h-40px flex items-center px-12px bg-bg-2'>
                 <span className='text-12px text-t-secondary'>{t('preview.preview')}</span>
               </div>
-              <div className='flex flex-col flex-1 overflow-hidden'>
+              <div className='flex flex-col flex-1 overflow-hidden bg-document'>
                 <MarkdownPreview
                   content={content}
                   containerRef={previewContainerRef}
@@ -541,7 +612,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
         // 移动端：全屏显示预览，隐藏编辑器 / Mobile: Full-screen preview, hide editor
         if (layout?.isMobile) {
           return (
-            <div className='flex-1 overflow-hidden'>
+            <div className='flex-1 overflow-hidden bg-document'>
               <HTMLRenderer
                 content={content}
                 file_path={metadata?.file_path}
@@ -563,7 +634,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
               <div className='h-40px flex items-center px-12px bg-bg-2'>
                 <span className='text-12px text-t-secondary'>{t('preview.editor')}</span>
               </div>
-              <div className='flex-1 overflow-hidden'>
+              <div className='flex-1 overflow-hidden bg-document'>
                 <HTMLEditor
                   key={activeTabId ?? undefined}
                   value={content}
@@ -582,7 +653,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
               <div className='h-40px flex items-center justify-between px-12px bg-bg-2'>
                 <span className='text-12px text-t-secondary'>{t('preview.preview')}</span>
               </div>
-              <div className='flex flex-col flex-1 overflow-hidden'>
+              <div className='flex flex-col flex-1 overflow-hidden bg-document'>
                 {/* prettier-ignore */}
                 {/* eslint-disable-next-line max-len */}
                 <HTMLRenderer
@@ -605,7 +676,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
       // 非分屏模式：单栏（原文或预览）/ Non-split mode: Single panel (source or preview)
       if (viewMode === 'source') {
         return (
-          <div className='flex-1 overflow-hidden'>
+          <div className='flex-1 overflow-hidden bg-document'>
             <HTMLEditor
               key={activeTabId ?? undefined}
               value={content}
@@ -617,7 +688,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
       } else {
         // 预览模式 / Preview mode
         return (
-          <div className='flex-1 overflow-hidden'>
+          <div className='flex-1 overflow-hidden bg-document'>
             <HTMLRenderer
               content={content}
               file_path={metadata?.file_path}
@@ -646,7 +717,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
     } else if (content_type === 'code') {
       // 统一：始终可编辑的 CodeEditor（看=改）/ Unified: always-editable CodeEditor (view = edit)
       return (
-        <div className='flex-1 overflow-hidden'>
+        <div className='flex-1 overflow-hidden bg-document'>
           <CodeEditor
             key={activeTabId ?? undefined}
             value={content}
@@ -661,32 +732,12 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
       );
     } else if (content_type === 'pdf') {
       return <PDFPreview file_path={metadata?.file_path} content={content} />;
-    } else if (content_type === 'ppt') {
-      return <PptViewer file_path={metadata?.file_path} content={content} workspace={metadata?.workspace} />;
-    } else if (content_type === 'word') {
-      return (
-        <OfficeDocPreview
-          conversationId={conversationId}
-          file_path={metadata?.file_path}
-          content={content}
-          workspace={metadata?.workspace}
-          refreshToken={officeRefreshToken}
-          onSelectionChange={officeEditorEnabled ? officeEditor.handleSelectionChange : undefined}
-          scriptRequest={officeEditorEnabled ? officeEditor.scriptRequest : undefined}
-        />
-      );
-    } else if (content_type === 'excel') {
-      return (
-        <ExcelPreview
-          conversationId={conversationId}
-          file_path={metadata?.file_path}
-          content={content}
-          workspace={metadata?.workspace}
-          refreshToken={officeRefreshToken}
-          onSelectionChange={officeEditorEnabled ? officeEditor.handleSelectionChange : undefined}
-          scriptRequest={officeEditorEnabled ? officeEditor.scriptRequest : undefined}
-        />
-      );
+    } else if (isOfficeViewerContentType(content_type)) {
+      // Office documents (word/excel/ppt) are rendered by the warm-mounted
+      // office viewer container below (one viewer kept alive per open office
+      // tab); nothing to render inline here. Missing-file office tabs are
+      // handled by the missingFile guard at the top of renderContent.
+      return null;
     } else if (content_type === 'image') {
       return (
         <ImagePreview
@@ -704,19 +755,44 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
     return null;
   };
 
-  // 将 tabs 转换为 PreviewTab 类型 / Convert tabs to PreviewTab type
-  const previewTabs: PreviewTab[] = tabs.map((tab) => ({
-    id: tab.id,
-    title: tab.title,
-    isDirty: tab.isDirty,
-    contentType: tab.content_type,
-  }));
+  const activeOfficeTab = officeTabs.find((tab) => tab.id === activeTabId) ?? null;
+
+  // Render one office viewer for a given open office tab. Only the active office
+  // tab is wired to the artifact editor (selection + guest script bridge); the
+  // hidden warm viewers stay read-only.
+  const renderOfficeViewer = (tab: PreviewContextTab) => {
+    const tabFilePath = tab.metadata?.file_path;
+    const tabWorkspace = tab.metadata?.workspace;
+
+    if (tab.content_type === 'ppt') {
+      return <PptViewer file_path={tabFilePath} content={tab.content} workspace={tabWorkspace} />;
+    }
+
+    const tabRefreshToken = getOfficePreviewRefreshToken(
+      tabFilePath,
+      tab.officePreviewRevision,
+      manualOfficeRefreshByTab[tab.id] ?? 0
+    );
+    const editorWired = tab.id === activeTabId && officeEditorEnabled;
+    const sharedProps = {
+      conversationId,
+      file_path: tabFilePath,
+      content: tab.content,
+      workspace: tabWorkspace,
+      refreshToken: tabRefreshToken,
+      onSelectionChange: editorWired ? officeEditor.handleSelectionChange : undefined,
+      scriptRequest: editorWired ? officeEditor.scriptRequest : undefined,
+    };
+
+    return tab.content_type === 'excel' ? <ExcelPreview {...sharedProps} /> : <OfficeDocPreview {...sharedProps} />;
+  };
 
   return (
     <PreviewToolbarExtrasProvider value={toolbarExtrasContextValue}>
       <div
         data-testid='preview-panel-surface'
-        className={classNames('h-full flex flex-col bg-1', !fullBleed && 'rounded-[16px]')}
+        className={classNames('h-full flex flex-col', !fullBleed && 'rounded-[8px]')}
+        style={{ background: 'var(--bg-artifact-surface)' }}
       >
         {messageContextHolder}
 
@@ -738,8 +814,9 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
           tabsContainerRef={tabsContainerRef}
           onSwitchTab={switchTab}
           onCloseTab={handleCloseTab}
+          onPinTab={pinTab}
           onContextMenu={handleTabContextMenu}
-          onClosePanel={closePreview}
+          onClosePanel={handleClosePanel}
         />
 
         {/* 工具栏（URL 类型不显示工具栏，因为不需要下载/编辑等功能）/ Toolbar (hidden for URL type as it doesn't need download/edit features) */}
@@ -748,23 +825,19 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
             content_type={content_type}
             isMarkdown={isMarkdown}
             isHTML={isHTML}
+            isDirty={activeTab.isDirty}
+            onSave={() => void saveContent()}
             viewMode={viewMode}
             isSplitScreenEnabled={isSplitScreenEnabled}
             file_name={metadata?.file_name || activeTab.title}
             showOpenInSystemButton={showOpenInSystemButton}
-            historyTarget={historyTarget}
-            snapshotSaving={snapshotSaving}
             onViewModeChange={(mode) => {
               setViewMode(mode);
               setIsSplitScreenEnabled(false); // 切换视图模式时关闭分屏 / Disable split when switching view mode
             }}
             onSplitScreenToggle={() => setIsSplitScreenEnabled(!isSplitScreenEnabled)}
-            onSaveSnapshot={handleSaveSnapshot}
-            onRefreshHistory={refreshHistory}
-            renderHistoryDropdown={renderHistoryDropdown}
             onOpenInSystem={handleOpenInSystem}
             onDownload={handleDownload}
-            onClose={closePreview}
             inspectMode={inspectMode}
             onInspectModeToggle={() => setInspectMode(!inspectMode)}
             leftExtra={toolbarExtras?.left}
@@ -778,7 +851,6 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
                   undoDepth={officeEditor.undoDepth}
                   apply={officeEditor.apply}
                   undo={officeEditor.undo}
-                  askForge={officeEditor.askForge}
                   openInDesktopApp={officeEditor.openInDesktopApp}
                   download={handleDownload}
                   revealInFolder={handleRevealOfficeInFolder}
@@ -796,8 +868,30 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false }) => {
           </div>
         )}
 
-        {/* 预览内容 / Preview content */}
-        {renderContent()}
+        {/* Office documents: the most-recently-active office tabs are kept
+            mounted (warm) up to an LRU cap so switching between them is instant.
+            Only the active office tab's viewer is visible; the other warm ones
+            stay behind display:none, and cold (evicted) tabs render nothing. */}
+        {officeTabs.length > 0 && (
+          <div className='relative flex-1 overflow-hidden' style={{ display: activeOfficeTab ? undefined : 'none' }}>
+            {officeTabs
+              .filter((tab) => warmOfficeIds.has(tab.id))
+              .map((tab) => (
+                <div
+                  key={tab.id}
+                  data-testid={`office-viewer-container-${tab.id}`}
+                  className='absolute inset-0 h-full w-full'
+                  style={{ display: tab.id === activeTabId ? undefined : 'none' }}
+                >
+                  {renderOfficeViewer(tab)}
+                </div>
+              ))}
+          </div>
+        )}
+
+        {/* 预览内容（非 Office，或缺失文件的 Office 标签页）/ Preview content
+            (non-office, or missing-file office tabs) — active tab only */}
+        {!activeOfficeTab && renderContent()}
 
         {/* Tab 右键菜单 / Tab context menu */}
         {/* eslint-disable-next-line max-len */}

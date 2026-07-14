@@ -27,18 +27,6 @@ vi.mock('@/common', () => ({
   },
 }));
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string, values?: Record<string, string>) => {
-      if (key === 'preview.office.editor.requestPlaceholder') return 'Describe the requested change.';
-      if (key === 'preview.office.editor.askWordContext') {
-        return `File: ${values?.fileName}\nSelection: ${values?.text}\nRequest: ${values?.placeholder}`;
-      }
-      return key;
-    },
-  }),
-}));
-
 import { useOfficeArtifactEditor } from '@/renderer/pages/conversation/Preview/components/ArtifactEditor/useOfficeArtifactEditor';
 
 type Deferred<T> = {
@@ -94,9 +82,7 @@ const createOptions = () => ({
   conversationId: 'conversation-1',
   workspace: '/workspace',
   filePath: '/workspace/report.docx',
-  fileName: 'report.docx',
   externalRevision: 0,
-  addToSendBox: vi.fn<(text: string) => void>(),
   onArtifactMutated: vi.fn<() => void>(),
 });
 
@@ -295,7 +281,7 @@ describe('useOfficeArtifactEditor', () => {
   });
 
   it.each(['UNSUPPORTED_CONTENT', 'AMBIGUOUS_TEXT'] as const)(
-    'reports %s mutation failures as unsupported editor state',
+    'returns to the idle ready state instead of a dead-end status after %s mutation failures',
     async (code) => {
       mocks.inspect.mockResolvedValue(firstInspection);
       mocks.apply.mockResolvedValue({ ok: false, code });
@@ -306,7 +292,8 @@ describe('useOfficeArtifactEditor', () => {
 
       await act(() => result.current.apply({ kind: 'replaceText', value: 'New text' }));
 
-      expect(result.current.status).toBe('unsupported');
+      expect(result.current.status).toBe('ready');
+      expect(result.current.inspection).toBeNull();
     }
   );
 
@@ -323,7 +310,7 @@ describe('useOfficeArtifactEditor', () => {
       await act(() => result.current.apply({ kind: 'replaceText', value: 'New text' }));
       const secondApplyResult = await act(() => result.current.apply({ kind: 'replaceText', value: 'Retry' }));
 
-      expect(result.current.status).toBe('unsupported');
+      expect(result.current.status).toBe('ready');
       expect(result.current.inspection).toBeNull();
       expect(secondApplyResult).toBe(false);
       expect(mocks.apply).toHaveBeenCalledOnce();
@@ -373,19 +360,5 @@ describe('useOfficeArtifactEditor', () => {
 
     expect(result.current.scriptRequest?.id).toBe((firstRequest?.id ?? 0) + 1);
     expect(result.current.scriptRequest?.script).toContain("__forgeOfficeMoveSelection('down')");
-  });
-
-  it('adds selection context to the composer without invoking a send operation', async () => {
-    mocks.inspect.mockResolvedValue(firstInspection);
-    const options = createOptions();
-    const { result } = renderHook(() => useOfficeArtifactEditor(options));
-    await waitFor(() => expect(result.current.version).toBe('v1'));
-    act(() => result.current.handleSelectionChange(firstSelection));
-    await waitFor(() => expect(result.current.inspection).not.toBeNull());
-
-    act(() => result.current.askForge());
-
-    expect(options.addToSendBox).toHaveBeenCalledWith(expect.stringContaining('report.docx'));
-    expect(options.addToSendBox).toHaveBeenCalledTimes(1);
   });
 });

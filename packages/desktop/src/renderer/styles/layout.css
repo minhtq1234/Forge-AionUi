@@ -119,6 +119,31 @@
     background-color 0.2s ease;
 }
 
+.conversation-status-mark {
+  width: 16px;
+  height: 16px;
+}
+
+.conversation-status-mark--settling {
+  animation: conversation-status-settle 0.3s ease-out both;
+}
+
+@keyframes conversation-status-settle {
+  0% {
+    opacity: 0.4;
+    transform: scale(0.72);
+  }
+
+  65% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
 .chat-history__item-name,
 .chat-history__item-editor,
 .settings-sider__item-label {
@@ -182,12 +207,14 @@
   .chat-history__item,
   .chat-history__item-name,
   .chat-history__item-editor,
+  .conversation-status-mark--settling,
   .settings-sider,
   .settings-sider__item,
   .settings-sider__item-label,
   .chat-history__placeholder,
   .chat-history__section {
     transition: none;
+    animation: none;
   }
 }
 

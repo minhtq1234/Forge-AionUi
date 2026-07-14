@@ -9,6 +9,7 @@ import { renderHook, act, cleanup } from '@testing-library/react';
 import React, { type ReactNode } from 'react';
 import { ipcBridge } from '@/common';
 import { PreviewProvider, usePreviewContext } from '@/renderer/pages/conversation/Preview/context/PreviewContext';
+import { WORKSPACE_EXPAND_EVENT } from '@/renderer/utils/workspace/workspaceEvents';
 
 vi.mock('@/common', () => ({
   ipcBridge: {
@@ -70,6 +71,20 @@ describe('PreviewContext', () => {
     expect(result.current.tabs).toHaveLength(1);
     expect(result.current.tabs[0].content).toBe('# Hello');
     expect(result.current.tabs[0].content_type).toBe('markdown');
+  });
+
+  it('dispatches a workspace-expand event when opening a preview', () => {
+    const handler = vi.fn();
+    window.addEventListener(WORKSPACE_EXPAND_EVENT, handler);
+    try {
+      const { result } = renderHook(() => usePreviewContext(), { wrapper });
+      act(() => {
+        result.current.openPreview('# Hi', 'markdown', { title: 'reveal.md' });
+      });
+      expect(handler).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener(WORKSPACE_EXPAND_EVENT, handler);
+    }
   });
 
   it('closes preview and clears all tabs', () => {

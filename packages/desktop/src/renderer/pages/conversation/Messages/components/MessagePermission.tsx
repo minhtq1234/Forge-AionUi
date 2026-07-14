@@ -6,8 +6,7 @@
 
 import type { IMessagePermission } from '@/common/chat/chatLib';
 import { ipcBridge } from '@/common';
-import { Button, Card, Radio, Typography } from '@arco-design/web-react';
-import classNames from 'classnames';
+import { Button, Card, Typography } from '@arco-design/web-react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -28,24 +27,13 @@ const MessagePermission: React.FC<MessagePermissionProps> = React.memo(({ messag
   const { t } = useTranslation();
   const { options = [], description, title, action, call_id, command_type } = message.content || {};
 
-  const [selected, setSelected] = useState<string | null>(null);
   const [isResponding, setIsResponding] = useState(false);
   const [hasResponded, setHasResponded] = useState(false);
 
   const icon = actionIcons[action || ''] || '🔐';
   const displayTitle = title || description || t('messages.permissionRequest');
-  const confirmDisabled = !selected || isResponding;
-  const confirmButtonStyle: React.CSSProperties | undefined = !selected
-    ? {
-        backgroundColor: 'var(--color-fill-2)',
-        borderColor: 'var(--color-border-2)',
-        color: 'var(--color-text-2)',
-        opacity: 1,
-      }
-    : undefined;
-
-  const handleConfirm = async () => {
-    if (hasResponded || !selected) return;
+  const handleConfirm = async (selected: string) => {
+    if (hasResponded || isResponding) return;
 
     setIsResponding(true);
     try {
@@ -72,12 +60,6 @@ const MessagePermission: React.FC<MessagePermissionProps> = React.memo(({ messag
           <span className='text-2xl'>{icon}</span>
           <Text className='block'>{displayTitle}</Text>
         </div>
-        {command_type && (
-          <div>
-            <Text className='text-xs text-t-secondary mb-1'>{t('messages.command')}</Text>
-            <code className='text-xs bg-1 p-2 rounded block text-t-primary break-all'>{command_type}</code>
-          </div>
-        )}
         {description && description !== displayTitle && (
           <div>
             <Text className='text-xs text-t-secondary'>{description}</Text>
@@ -86,38 +68,28 @@ const MessagePermission: React.FC<MessagePermissionProps> = React.memo(({ messag
         {!hasResponded && (
           <>
             <div className='mt-10px'>{t('messages.chooseAction')}</div>
-            <Radio.Group direction='vertical' size='mini' value={selected} onChange={setSelected}>
-              {options.length > 0 ? (
-                options.map((option, index) => (
-                  <div
-                    key={String(option.value) || `option_${index}`}
-                    data-testid={`message-permission-option-${String(option.value) || `option_${index}`}`}
-                  >
-                    <Radio value={String(option.value)}>
+            {options.length > 0 ? (
+              <div className='flex flex-wrap gap-8px'>
+                {options.map((option, index) => {
+                  const value = String(option.value);
+                  const isDeny = /deny|reject|cancel|no/i.test(value);
+                  return (
+                    <Button
+                      key={value || `option_${index}`}
+                      type={isDeny ? 'secondary' : 'primary'}
+                      size='small'
+                      disabled={isResponding}
+                      onClick={() => void handleConfirm(value)}
+                      data-testid={`message-permission-option-${value || `option_${index}`}`}
+                    >
                       {t(option.label, { ...option.params, defaultValue: option.label })}
-                    </Radio>
-                  </div>
-                ))
-              ) : (
-                <Text type='secondary'>{t('messages.noOptionsAvailable')}</Text>
-              )}
-            </Radio.Group>
-            <div className='flex justify-start pl-20px'>
-              <Button
-                type={selected ? 'primary' : 'secondary'}
-                size='mini'
-                disabled={confirmDisabled}
-                className={classNames(
-                  '!min-w-74px !h-30px !rounded-8px !font-600',
-                  selected && '!shadow-[0_6px_14px_rgba(var(--primary-6),0.20)]'
-                )}
-                style={confirmButtonStyle}
-                onClick={handleConfirm}
-                data-testid='message-permission-confirm'
-              >
-                {isResponding ? t('messages.processing') : t('messages.confirm')}
-              </Button>
-            </div>
+                    </Button>
+                  );
+                })}
+              </div>
+            ) : (
+              <Text type='secondary'>{t('messages.noOptionsAvailable')}</Text>
+            )}
           </>
         )}
         {hasResponded && (

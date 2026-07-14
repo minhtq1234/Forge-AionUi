@@ -377,7 +377,9 @@ describe('ChatWorkspace preview selection', () => {
         hasKey: true,
       },
     });
-    expect(mocks.handlePreviewFile).toHaveBeenCalledWith(selectedFile);
+    // Single-click opens a persistent (pinned) tab so opening several files
+    // accumulates several tabs, instead of replacing a single shared preview tab.
+    expect(mocks.handlePreviewFile).toHaveBeenCalledWith(selectedFile, true);
     expect(screen.queryByRole('menuitem', { name: /conversation.workspace.changes.filesTab/ })).not.toBeInTheDocument();
   });
 
