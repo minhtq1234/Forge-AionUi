@@ -9,12 +9,13 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { app } from 'electron';
 import { DIAGNOSTIC_TRUNCATION_MARKER } from '@/common/utils/diagnosticRedaction';
-import { collectFeedbackLogAttachment, readBoundedLogTail } from '@/process/feedback/logs';
+import { collectFeedbackLogAttachment } from '@/process/feedback/logs';
 
 const { handlers, eventHandlers, exposedMainWorld, ipcRenderer } = vi.hoisted(() => ({
   eventHandlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
@@ -101,6 +102,17 @@ vi.mock('electron', () => ({
 }));
 
 vi.mock('@sentry/electron/preload', () => ({}));
+
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return {
+    ...actual,
+    closeSync: vi.fn(actual.closeSync),
+    fstatSync: vi.fn(actual.fstatSync),
+    openSync: vi.fn(actual.openSync),
+    readSync: vi.fn(actual.readSync),
+  };
+});
 
 beforeEach(async () => {
   handlers.clear();
@@ -357,80 +369,126 @@ describe('feedback logs', () => {
     }
   });
 
-  it('limits attachments to deterministic recent candidate paths', () => {
-    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-candidates-'));
-    const limits = { maxAggregateBytes: 120, maxCandidateFiles: 2, maxFileBytes: 32 };
+  it('drops a partial first tail line before redacting a multibyte secret', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-partial-tail-'));
     try {
-      writeFileSync(path.join(logsDir, '2026-07-14.log'), 'frontend\n');
-      writeFileSync(path.join(logsDir, '2026-07-14.aioncore.log'), 'backend\n');
-      writeFileSync(path.join(logsDir, '2026-07-13.log'), 'older\n');
+      const secret = 'secret-\u79d8\u5bc6-value';
+      const firstLine = `Authorization: Bearer ${secret}\n`;
+      const retainedLine = 'recent-safe-log-line\n';
+      const tailOffset = Buffer.byteLength('Authorization: Bearer secret-\u79d8', 'utf8') + 1;
+      const source = `${firstLine}${retainedLine}`;
+      const maxFileBytes = Buffer.byteLength(source, 'utf8') - tailOffset;
+      writeFileSync(path.join(logsDir, '2026-07-14.log'), source);
 
-      const attachment = collectFeedbackLogAttachment(logsDir, limits);
+      const attachment = collectFeedbackLogAttachment(logsDir, { maxFileBytes });
       const content = gunzipSync(attachment!.data).toString('utf8');
 
-      expect(content).toContain('=== 2026-07-14.aioncore.log ===');
-      expect(content).toContain('=== 2026-07-14.log ===');
-      expect(content).not.toContain('2026-07-13.log');
+      expect(content).toContain('recent-safe-log-line');
+      expect(content).not.toContain('secret-');
+      expect(content).not.toContain('\u79d8\u5bc6');
+      expect(content).not.toContain('-value');
+      expect(content).not.toContain('\uFFFD');
     } finally {
       rmSync(logsDir, { recursive: true, force: true });
     }
   });
 
-  it('retains only the recent tail of an oversized log', () => {
-    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-tail-'));
-    const limits = { maxAggregateBytes: 120, maxCandidateFiles: 2, maxFileBytes: 32 };
+  it('preserves only a numeric status after redacting authorization lines', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-authorization-status-'));
     try {
-      writeFileSync(path.join(logsDir, '2026-07-14.log'), `old-prefix-${'x'.repeat(24)}recent-tail-marker`);
+      writeFileSync(
+        path.join(logsDir, '2026-07-14.log'),
+        'Authorization: Bearer secret status=401 upstream_body=customer-token\n'
+      );
 
-      const attachment = collectFeedbackLogAttachment(logsDir, limits);
+      const attachment = collectFeedbackLogAttachment(logsDir);
       const content = gunzipSync(attachment!.data).toString('utf8');
 
-      expect(content).not.toContain('old-prefix');
-      expect(content).toContain('recent-tail-marker');
-      expect(content).toContain('[TRUNCATED: recent tail retained]');
+      expect(content).toContain('status=401');
+      expect(content).not.toContain('secret');
+      expect(content).not.toContain('customer-token');
     } finally {
       rmSync(logsDir, { recursive: true, force: true });
     }
   });
 
-  it('bounds the decompressed attachment to the aggregate limit', () => {
+  it('orders headers deterministically across dates and log roots', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-header-order-'));
+    try {
+      const alphaLogsDir = path.join(logsDir, 'alpha');
+      const betaLogsDir = path.join(logsDir, 'beta');
+      mkdirSync(alphaLogsDir);
+      mkdirSync(betaLogsDir);
+      writeFileSync(path.join(alphaLogsDir, '2026-07-14.aioncore.log'), 'alpha latest\n');
+      writeFileSync(path.join(betaLogsDir, '2026-07-14.log'), 'beta latest\n');
+      writeFileSync(path.join(alphaLogsDir, '2026-07-13.log'), 'alpha previous\n');
+      writeFileSync(path.join(betaLogsDir, '2026-07-13.aionrs.log'), 'beta previous\n');
+
+      const attachment = collectFeedbackLogAttachment([betaLogsDir, alphaLogsDir]);
+      const content = gunzipSync(attachment!.data).toString('utf8');
+      const headers = [...content.matchAll(/^=== (.+) ===$/gmu)].map((match) => match[1]);
+
+      expect(headers).toEqual(['2026-07-14.aioncore.log', '2026-07-14.log', '2026-07-13.log', '2026-07-13.aionrs.log']);
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('bounds the aggregate attachment with retained content and a byte-safe marker', () => {
     const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-aggregate-'));
-    const limits = { maxAggregateBytes: 120, maxCandidateFiles: 2, maxFileBytes: 32 };
+    const limits = { maxAggregateBytes: 120, maxCandidateFiles: 2, maxFileBytes: 64 };
     try {
-      writeFileSync(path.join(logsDir, '2026-07-14.aioncore.log'), 'a'.repeat(64));
-      writeFileSync(path.join(logsDir, '2026-07-14.log'), 'b'.repeat(64));
+      writeFileSync(path.join(logsDir, '2026-07-14.aioncore.log'), 'first retained content\n');
+      writeFileSync(path.join(logsDir, '2026-07-14.log'), '\u{1F4A5}'.repeat(16));
 
       const attachment = collectFeedbackLogAttachment(logsDir, limits);
       const content = gunzipSync(attachment!.data);
+      const text = content.toString('utf8');
 
-      expect(content.byteLength).toBeLessThanOrEqual(limits.maxAggregateBytes);
+      expect(content.byteLength).toBe(limits.maxAggregateBytes);
+      expect(text).toContain('first retained content');
+      expect(text).toContain('[TRUNCATED: aggregate feedback log limit]');
+      expect(text).not.toContain('\uFFFD');
+      expect([...text.matchAll(/^=== (.+) ===$/gmu)].map((match) => match[1])).toEqual(['2026-07-14.aioncore.log']);
     } finally {
       rmSync(logsDir, { recursive: true, force: true });
     }
   });
 
-  it('reads oversized logs from a bounded file-descriptor offset', () => {
-    const fileSystem = {
-      closeSync: vi.fn((_fd: number) => {}),
-      fstatSync: vi.fn((_fd: number) => ({ size: 96 })),
-      openSync: vi.fn((_filePath: string, _flags: string) => 7),
-      readSync: vi.fn((fd: number, buffer: Buffer, offset: number, length: number, position: number) => {
-        expect(fd).toBe(7);
-        expect(offset).toBe(0);
-        expect(length).toBe(32);
-        expect(position).toBe(64);
-        Buffer.from('recent-tail').copy(buffer);
-        return 'recent-tail'.length;
-      }),
-    };
+  it('reads oversized logs through the collector with a bounded descriptor offset', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-bounded-read-'));
+    try {
+      const logPath = path.join(logsDir, '2026-07-14.log');
+      writeFileSync(logPath, 'x'.repeat(96));
+      vi.clearAllMocks();
 
-    const result = readBoundedLogTail('/logs/2026-07-14.log', 32, fileSystem);
+      collectFeedbackLogAttachment(logsDir, { maxFileBytes: 32 });
 
-    expect(fileSystem.openSync).toHaveBeenCalledWith('/logs/2026-07-14.log', 'r');
-    expect(fileSystem.fstatSync).toHaveBeenCalledWith(7);
-    expect(fileSystem.readSync).toHaveBeenCalledOnce();
-    expect(fileSystem.closeSync).toHaveBeenCalledWith(7);
-    expect(result).toEqual({ text: 'recent-tail', truncated: true });
+      expect(fs.openSync).toHaveBeenCalledWith(logPath, 'r');
+      expect(fs.fstatSync).toHaveBeenCalledOnce();
+      expect(fs.readSync).toHaveBeenCalledWith(expect.any(Number), expect.any(Buffer), 0, 32, 64);
+      expect(fs.readSync.mock.calls[0]?.[1]).toHaveLength(32);
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('closes a log descriptor when bounded metadata lookup throws', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-close-descriptor-'));
+    try {
+      writeFileSync(path.join(logsDir, '2026-07-14.log'), 'log content\n');
+      vi.clearAllMocks();
+      vi.mocked(fs.fstatSync).mockImplementationOnce(() => {
+        throw new Error('fstat failed');
+      });
+
+      expect(() => collectFeedbackLogAttachment(logsDir)).toThrow('fstat failed');
+
+      expect(fs.openSync).toHaveBeenCalledOnce();
+      expect(fs.closeSync).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
   });
 });
 

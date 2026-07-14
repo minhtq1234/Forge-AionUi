@@ -7,7 +7,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
-import { redactDiagnosticText } from '@/common/utils/diagnosticRedaction';
+import { DIAGNOSTIC_REDACTION_MARKER, redactDiagnosticText } from '@/common/utils/diagnosticRedaction';
 
 const LOG_SUFFIXES = ['.log', '.aioncore.log', '.aionrs.log'];
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}/;
@@ -189,11 +189,7 @@ function getLogHeaderName(logPath: string, rootDir: string, showRelativePath: bo
   return relativePath.split(path.sep).join('/');
 }
 
-export function readBoundedLogTail(
-  filePath: string,
-  maxBytes: number,
-  fileSystem: BoundedFileSystem = fs
-): BoundedLogText {
+function readBoundedLogTail(filePath: string, maxBytes: number, fileSystem: BoundedFileSystem = fs): BoundedLogText {
   const fd = fileSystem.openSync(filePath, 'r');
   try {
     const size = fileSystem.fstatSync(fd).size;
@@ -208,6 +204,11 @@ export function readBoundedLogTail(
   } finally {
     fileSystem.closeSync(fd);
   }
+}
+
+function discardFirstPartialLine(text: string): string {
+  const firstLineEnd = text.indexOf('\n');
+  return firstLineEnd === -1 ? '' : text.slice(firstLineEnd + 1);
 }
 
 function fitUtf8Section(text: string, maxBytes: number): string {
@@ -233,11 +234,11 @@ function fitUtf8Section(text: string, maxBytes: number): string {
 }
 
 function redactLogText(text: string, maxBytes: number): string {
-  const withSeparatedStatus = text.replace(
-    /(\b(?:proxy[_-]?authorization|authorization)\s*[=:]\s*[^\r\n]*?)(\s+status\s*[=:])/gi,
-    '$1\n$2'
+  const withPreservedStatus = text.replace(
+    /(\b(?:proxy[_-]?authorization|authorization)\s*[=:]\s*[^\r\n]*?)\s+status\s*[=:]\s*([1-5]\d{2})(?=\s|$)[^\r\n]*/gi,
+    `$1\nstatus=$2\n${DIAGNOSTIC_REDACTION_MARKER}`
   );
-  return redactDiagnosticText(withSeparatedStatus, maxBytes);
+  return redactDiagnosticText(withPreservedStatus, maxBytes);
 }
 
 export function getRecentFeedbackLogPaths(logsDir: string, days = DEFAULT_LOG_DAYS): string[] {
@@ -264,9 +265,10 @@ export function collectFeedbackLogAttachment(
   for (const logPath of logPaths.slice(0, resolvedLimits.maxCandidateFiles)) {
     const basename = getLogHeaderName(logPath, normalizedDirs[0], true);
     const logTail = readBoundedLogTail(logPath, resolvedLimits.maxFileBytes);
+    const logText = logTail.truncated ? discardFirstPartialLine(logTail.text) : logTail.text;
     const truncationNotice = logTail.truncated ? '[TRUNCATED: recent tail retained]\n' : '';
     const separator = parts.length > 0 ? '\n' : '';
-    const section = `${separator}=== ${basename} ===\n${truncationNotice}${redactLogText(logTail.text, resolvedLimits.maxFileBytes)}\n`;
+    const section = `${separator}=== ${basename} ===\n${truncationNotice}${redactLogText(logText, resolvedLimits.maxFileBytes)}\n`;
     const sectionBytes = Buffer.byteLength(section, 'utf8');
 
     if (aggregateBytes + sectionBytes > resolvedLimits.maxAggregateBytes) {
