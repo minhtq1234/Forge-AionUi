@@ -21,6 +21,8 @@ jobs:
     name: Code Quality
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/dev' || (startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-dev-'))
+    outputs:
+      release_channel: ${{ steps.release-channel.outputs.release_channel }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -29,6 +31,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - name: Classify release channel
+        id: release-channel
+        shell: bash
+        env:
+          RELEASE_REF: ${{ github.ref }}
+        run: |
+          RELEASE_CHANNEL=$(node -e "const { classifyReleaseRef } = require('./scripts/afterSign.js'); process.stdout.write(classifyReleaseRef(process.env.RELEASE_REF));")
+          echo "release_channel=${RELEASE_CHANNEL}" >> "$GITHUB_OUTPUT"
 
       - name: Setup bun
         uses: oven-sh/setup-bun@v2
@@ -61,6 +72,7 @@ jobs:
     if: needs.code-quality.result == 'success' && (github.ref == 'refs/heads/dev' || (startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-dev-')))
     with:
       skip_code_quality: true
+      release_channel: ${{ needs.code-quality.outputs.release_channel }}
       matrix: >-
         {"include":[
           {"platform":"macos-arm64","os":"macos-14","command":"node scripts/build-with-builder.js arm64 --mac --arm64","artifact-name":"macos-build-arm64","arch":"arm64"},
