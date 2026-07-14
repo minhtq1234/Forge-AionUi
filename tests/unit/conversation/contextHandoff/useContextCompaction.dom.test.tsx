@@ -524,9 +524,7 @@ describe('automatic context compaction policy', () => {
     act(() => listener?.(completedTurn()));
 
     await waitFor(() =>
-      expect(runCompaction).toHaveBeenCalledWith(
-        expect.objectContaining({ trigger: 'auto', budgetStatus: 'compress' })
-      )
+      expect(runCompaction).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'auto', budgetStatus: 'compress' }))
     );
   });
 
