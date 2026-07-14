@@ -419,12 +419,21 @@ describe('AionrsSendBox', () => {
       tokenUsage: { total_tokens: 12_000 },
     };
 
-    render(<AionrsSendBox conversation_id='conv-1' modelSelection={modelSelection} />);
+    const miniMaxSelection = {
+      current_model: {
+        provider_id: 'minimax',
+        model: 'MiniMax-M2.5',
+        use_model: 'minimax/MiniMax-M2.5',
+      },
+    } as AionrsModelSelection;
+
+    render(<AionrsSendBox conversation_id='conv-1' modelSelection={miniMaxSelection} />);
 
     expect(screen.getByTestId('context-usage-indicator')).toBeInTheDocument();
     expect(contextUsageIndicatorProps.current).toEqual({
       tokenUsage: { total_tokens: 12_000 },
       localUsage: { today: 120, weekToDate: 560, monthToDate: 1_240 },
+      context_limit: 204_800,
     });
     expect(screen.getByRole('button', { name: 'send' })).toBeInTheDocument();
     expect(sendBoxProps.current).not.toHaveProperty('tokenUsage');

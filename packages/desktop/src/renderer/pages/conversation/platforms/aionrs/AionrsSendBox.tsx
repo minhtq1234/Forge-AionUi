@@ -30,6 +30,7 @@ import { useSlashCommands } from '@/renderer/hooks/chat/useSlashCommands';
 import { useOpenFileSelector } from '@/renderer/hooks/file/useOpenFileSelector';
 import { useLocalTokenUsage } from '@/renderer/hooks/useLocalTokenUsage';
 import { useLatestRef } from '@/renderer/hooks/ui/useLatestRef';
+import { getKnownModelContextLimit } from '@/renderer/utils/model/modelContextLimits';
 import {
   shouldEnqueueConversationCommand,
   useConversationCommandQueue,
@@ -151,6 +152,7 @@ const AionrsSendBox: React.FC<{
   const { t } = useTranslation();
   const { checkAndUpdateTitle } = useAutoTitle();
   const { current_model } = modelSelection;
+  const contextLimit = getKnownModelContextLimit(current_model?.use_model);
   const teamPermission = useTeamPermission();
   const propagateMode = teamPermission?.propagateMode;
 
@@ -716,7 +718,7 @@ const AionrsSendBox: React.FC<{
               onModeChanged={propagateMode}
               beforeRuntimeSync={prepareRuntimeConfig}
             />
-            <ContextUsageIndicator tokenUsage={tokenUsage} localUsage={localUsage} />
+            <ContextUsageIndicator tokenUsage={tokenUsage} localUsage={localUsage} context_limit={contextLimit} />
           </div>
         }
         prefix={

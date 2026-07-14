@@ -10,12 +10,19 @@ describe('getKnownModelContextLimit', () => {
     expect(getKnownModelContextLimit('gpt-4o')).toBe(128_000);
   });
 
-  it('returns the MiniMax M2.5 window so aionrs budgets resolve a real limit', () => {
-    expect(getKnownModelContextLimit('minimax-m2.5')).toBe(192_000);
+  it.each(['minimax-m2', 'minimax-m2.1', 'minimax-m2.5', 'minimax-m2.7'])(
+    'returns the official 204.8K window for %s',
+    (model) => {
+      expect(getKnownModelContextLimit(model)).toBe(204_800);
+    }
+  );
+
+  it('returns the MiniMax M3 window advertised for supported plans', () => {
+    expect(getKnownModelContextLimit('minimax-m3')).toBe(1_000_000);
   });
 
   it('matches known models case-insensitively and via provider suffixes', () => {
-    expect(getKnownModelContextLimit('MiniMax-M2.5-preview')).toBe(192_000);
+    expect(getKnownModelContextLimit('MiniMax-M2.5-preview')).toBe(204_800);
   });
 
   it('returns undefined when the model is unknown so the budget can stay "--"', () => {
@@ -31,7 +38,7 @@ describe('getKnownModelContextLimit', () => {
 
 describe('getModelContextLimit', () => {
   it('still resolves known models', () => {
-    expect(getModelContextLimit('minimax-m2.5')).toBe(192_000);
+    expect(getModelContextLimit('minimax-m2.5')).toBe(204_800);
   });
 
   it('falls back to the default window for unknown models', () => {

@@ -53,7 +53,11 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   'claude-3-haiku': 200_000,
 
   // MiniMax 系列
-  'minimax-m2.5': 192_000,
+  'minimax-m3': 1_000_000,
+  'minimax-m2.7': 204_800,
+  'minimax-m2.5': 204_800,
+  'minimax-m2.1': 204_800,
+  'minimax-m2': 204_800,
 };
 
 /**

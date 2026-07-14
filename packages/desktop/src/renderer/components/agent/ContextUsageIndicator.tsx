@@ -11,8 +11,6 @@ import { useTranslation } from 'react-i18next';
 import type { TokenUsageData } from '@/common/config/storage';
 import type { LocalTokenUsageSummary } from '@/renderer/pages/conversation/utils/localTokenUsage';
 
-import { DEFAULT_CONTEXT_LIMIT } from '@/renderer/utils/model/modelContextLimits';
-
 type ContextUsageIndicatorProps = {
   tokenUsage: TokenUsageData | null;
   localUsage: LocalTokenUsageSummary;
@@ -26,7 +24,7 @@ const CONTEXT_TRACK_COLOR = 'var(--color-fill-3)';
 const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
   tokenUsage,
   localUsage,
-  context_limit = DEFAULT_CONTEXT_LIMIT,
+  context_limit,
   className = '',
   size = 24,
 }) => {
@@ -35,16 +33,15 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
   const contextUsage = useMemo(() => {
     const total = tokenUsage?.total_tokens;
     if (typeof total !== 'number' || !Number.isFinite(total) || total < 0) return null;
+    if (typeof context_limit !== 'number' || !Number.isFinite(context_limit) || context_limit <= 0) return null;
 
-    const resolvedContextLimit =
-      Number.isFinite(context_limit) && context_limit > 0 ? context_limit : DEFAULT_CONTEXT_LIMIT;
-    const pct = (total / resolvedContextLimit) * 100;
+    const pct = (total / context_limit) * 100;
     if (!Number.isFinite(pct)) return null;
 
     return {
       percentage: pct,
       displayTotal: formatTokenCount(total),
-      displayLimit: formatTokenCount(resolvedContextLimit, true),
+      displayLimit: formatTokenCount(context_limit, true),
       isWarning: pct > 70,
       isDanger: pct > 90,
     };

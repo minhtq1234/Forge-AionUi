@@ -454,7 +454,7 @@ describe('AcpSendBox', () => {
     expect(sendBoxProps.current).not.toHaveProperty('context_limit');
   });
 
-  it('uses the indicator default limit when ACP reports a zero context limit', () => {
+  it('does not invent a context limit when ACP reports zero', () => {
     render(
       <AcpSendBox
         conversation_id='conv-1'

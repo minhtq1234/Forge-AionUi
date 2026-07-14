@@ -525,7 +525,7 @@ describe('automatic context compaction policy', () => {
 
     await waitFor(() =>
       expect(runCompaction).toHaveBeenCalledWith(
-        expect.objectContaining({ trigger: 'auto', budgetStatus: 'too_large' })
+        expect.objectContaining({ trigger: 'auto', budgetStatus: 'compress' })
       )
     );
   });

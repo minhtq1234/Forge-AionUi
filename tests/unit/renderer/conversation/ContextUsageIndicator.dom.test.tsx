@@ -10,7 +10,6 @@ import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import ContextUsageIndicator from '@/renderer/components/agent/ContextUsageIndicator';
-import { DEFAULT_CONTEXT_LIMIT } from '@/renderer/utils/model/modelContextLimits';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -105,22 +104,19 @@ describe('ContextUsageIndicator', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
-  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
-    'uses the default context limit for invalid limit %s',
-    async (contextLimit) => {
+  it.each([undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'renders no meter for an unknown or invalid context limit %s',
+    (contextLimit) => {
       render(
         <ContextUsageIndicator
-          tokenUsage={{ total_tokens: DEFAULT_CONTEXT_LIMIT / 2 }}
+          tokenUsage={{ total_tokens: 102_400 }}
           context_limit={contextLimit}
           localUsage={localUsage}
         />
       );
 
-      fireEvent.focus(screen.getByRole('button', { name: 'Show context usage' }));
-
-      expect(await screen.findByText('50% used')).toBeInTheDocument();
-      expect(screen.getByText('524.3K of 1M tokens')).toBeInTheDocument();
-      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50');
+      expect(screen.queryByRole('button', { name: 'Show context usage' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     }
   );
 
