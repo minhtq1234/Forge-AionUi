@@ -273,6 +273,16 @@ function getUint8ArrayByteLength(data: unknown): number | null {
   }
 }
 
+function snapshotUint8Array(data: unknown, byteLength: number): Uint8Array<ArrayBuffer> | null {
+  if (!(data instanceof Uint8Array)) return null;
+
+  try {
+    return Uint8Array.prototype.slice.call(data, 0, byteLength) as Uint8Array<ArrayBuffer>;
+  } catch {
+    return null;
+  }
+}
+
 function selectUserScreenshot(attachment: unknown): FeedbackAttachment | null {
   if (!attachment || typeof attachment !== 'object') return null;
 
@@ -291,20 +301,36 @@ function selectUserScreenshot(attachment: unknown): FeedbackAttachment | null {
       return null;
     }
 
-    return { contentType, data, filename } as FeedbackAttachment;
+    const snapshot = snapshotUint8Array(data, byteLength);
+    return snapshot ? { contentType, data: snapshot, filename } : null;
   } catch {
     return null;
   }
 }
 
 function selectUserScreenshots(attachments: unknown): FeedbackAttachment[] {
-  if (!Array.isArray(attachments)) return [];
+  try {
+    if (!Array.isArray(attachments)) return [];
+  } catch {
+    return [];
+  }
+
+  let length: number;
+  try {
+    length = attachments.length;
+  } catch {
+    return [];
+  }
+  if (!Number.isSafeInteger(length) || length < 0) return [];
 
   const screenshots: FeedbackAttachment[] = [];
-  for (const attachment of attachments) {
-    if (screenshots.length === MAX_SCREENSHOTS) break;
-    const screenshot = selectUserScreenshot(attachment);
-    if (screenshot) screenshots.push(screenshot);
+  for (let index = 0; index < length && screenshots.length < MAX_SCREENSHOTS; index++) {
+    try {
+      const screenshot = selectUserScreenshot(attachments[index]);
+      if (screenshot) screenshots.push(screenshot);
+    } catch {
+      // Continue evaluating later callers after an inaccessible array index.
+    }
   }
   return screenshots;
 }

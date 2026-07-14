@@ -148,6 +148,7 @@ describe('submitFeedbackReport', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -346,6 +347,77 @@ describe('submitFeedbackReport', () => {
     ).resolves.toBeUndefined();
 
     expect(getCapturedAttachments()).toEqual([]);
+  });
+
+  it('submits an independent screenshot snapshot when the caller mutates the original during log collection', async () => {
+    let resolveLogs: (value: { data: number[]; filename: string }) => void = () => {};
+    const collectFeedbackLogs = vi.fn(
+      () =>
+        new Promise<{ data: number[]; filename: string }>((resolve) => {
+          resolveLogs = resolve;
+        })
+    );
+    const original = new Uint8Array([1, 2, 3]);
+    vi.stubGlobal('window', { electronAPI: { collectFeedbackLogs, logFeedbackEvent: vi.fn() } });
+
+    const submission = submitFeedbackReport({
+      attachments: [{ filename: 'snapshot.png', data: original, contentType: 'image/png' }],
+      collectLogs: true,
+      description: 'Snapshot screenshot',
+      module: 'conversation-session',
+      moduleLabel: 'Conversation & Sessions',
+    });
+    original.fill(9);
+    resolveLogs({ filename: 'logs.gz', data: [4] });
+
+    await submission;
+
+    const screenshot = getCapturedAttachments().find((attachment) => attachment.filename === 'snapshot.png');
+    expect(screenshot?.data).not.toBe(original);
+    expect(Array.from(screenshot?.data ?? [])).toEqual([1, 2, 3]);
+  });
+
+  it('rejects a revoked attachment-array proxy without aborting submission', async () => {
+    const { proxy, revoke } = Proxy.revocable([], {});
+    revoke();
+
+    await expect(
+      submitFeedbackReport({
+        attachments: proxy as unknown as FeedbackAttachment[],
+        description: 'Revoked attachment array',
+        module: 'conversation-session',
+        moduleLabel: 'Conversation & Sessions',
+      })
+    ).resolves.toBeUndefined();
+
+    expect(getCapturedAttachments()).toEqual([]);
+  });
+
+  it('skips throwing attachment indexes without invoking a custom iterator', async () => {
+    const attachments = [undefined, { filename: 'later.png', data: new Uint8Array([7]), contentType: 'image/png' }];
+    Object.defineProperty(attachments, 0, {
+      configurable: true,
+      get: () => {
+        throw new Error('index inaccessible');
+      },
+    });
+    Object.defineProperty(attachments, Symbol.iterator, {
+      configurable: true,
+      value: () => {
+        throw new Error('iterator must not be called');
+      },
+    });
+
+    await expect(
+      submitFeedbackReport({
+        attachments: attachments as unknown as FeedbackAttachment[],
+        description: 'Throwing attachment index',
+        module: 'conversation-session',
+        moduleLabel: 'Conversation & Sessions',
+      })
+    ).resolves.toBeUndefined();
+
+    expect(getCapturedAttachments().map((attachment) => attachment.filename)).toEqual(['later.png']);
   });
 
   it('preserves automatic log and DB diagnostics attachments alongside allowed screenshots', async () => {
