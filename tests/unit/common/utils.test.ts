@@ -254,6 +254,41 @@ describe('utils', () => {
       expect(result).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER} client_secret=${DIAGNOSTIC_REDACTION_MARKER}`);
     });
 
+    it('redacts a double-quoted secret whose closing quote is beyond the retained boundary', () => {
+      const result = redactDiagnosticText('password="abcdefghijklmnopqrstuvwxyz"', 20);
+
+      expect(result).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER}${DIAGNOSTIC_TRUNCATION_MARKER}`);
+      expect(result).not.toContain('abcdefghij');
+    });
+
+    it('redacts a single-quoted secret whose closing quote is beyond the retained boundary', () => {
+      const result = redactDiagnosticText("password='abcdefghijklmnopqrstuvwxyz'", 20);
+
+      expect(result).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER}${DIAGNOSTIC_TRUNCATION_MARKER}`);
+      expect(result).not.toContain('abcdefghij');
+    });
+
+    it('redacts a URL password whose at-sign is beyond the retained boundary', () => {
+      const result = redactDiagnosticText('https://user:abcdefghijklmnopqrstuvwxyz@example.com/path', 25);
+
+      expect(result).toBe(`https://user:${DIAGNOSTIC_REDACTION_MARKER}${DIAGNOSTIC_TRUNCATION_MARKER}`);
+      expect(result).not.toContain('abcdefghijkl');
+    });
+
+    it('preserves complete quoted and URL credential redaction output', () => {
+      expect(redactDiagnosticText('password="alpha beta"')).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER}`);
+      expect(redactDiagnosticText("password='gamma delta'")).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER}`);
+      expect(redactDiagnosticText('https://user:password-secret@example.com/path')).toBe(
+        `https://user:${DIAGNOSTIC_REDACTION_MARKER}@example.com/path`
+      );
+    });
+
+    it('stops an unterminated quoted secret at the line boundary', () => {
+      const result = redactDiagnosticText('password="alpha beta\nstatus=healthy');
+
+      expect(result).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER}\nstatus=healthy`);
+    });
+
     it('redacts proxy authorization assignments directly', () => {
       const result = redactDiagnosticText('Proxy-Authorization: Basic proxy-secret');
 

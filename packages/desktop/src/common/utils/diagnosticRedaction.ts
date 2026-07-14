@@ -69,9 +69,9 @@ export function redactDiagnosticText(text: string, maxLength = DEFAULT_LIMITS.ma
   const redacted = boundedText
     .replace(/(\b(?:proxy[_-]?authorization|authorization)\s*[=:]\s*)[^\r\n]*/gi, `$1${DIAGNOSTIC_REDACTION_MARKER}`)
     .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, `$1 ${DIAGNOSTIC_REDACTION_MARKER}`)
-    .replace(/\b([a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:)[^@\s/]+@/gi, `$1${DIAGNOSTIC_REDACTION_MARKER}@`)
+    .replace(/\b([a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:)[^@\s/]+(?=@|[/\s]|$)/gi, `$1${DIAGNOSTIC_REDACTION_MARKER}`)
     .replace(
-      /(["']?(?:authorization|proxy[_-]?authorization|x[_-]?api[_-]?key|api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|token|password|passwd|client[_-]?secret|secret|cookie|session(?:[_-]?(?:id|token))?|jwt(?:[_-]?token)?)["']?\s*[=:]\s*)(?:"(?:\\[^\r\n]|[^"\\\r\n])*"|'(?:\\[^\r\n]|[^'\\\r\n])*'|[^\s"',;}]+)/gi,
+      /(["']?(?:authorization|proxy[_-]?authorization|x[_-]?api[_-]?key|api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|token|password|passwd|client[_-]?secret|secret|cookie|session(?:[_-]?(?:id|token))?|jwt(?:[_-]?token)?)["']?\s*[=:]\s*)(?:"(?:\\[^\r\n]|[^"\\\r\n])*(?:"|(?=[\r\n]|$))|'(?:\\[^\r\n]|[^'\\\r\n])*(?:'|(?=[\r\n]|$))|[^\s"',;}]+)/gi,
       `$1${DIAGNOSTIC_REDACTION_MARKER}`
     );
   return truncated ? `${redacted}${DIAGNOSTIC_TRUNCATION_MARKER}` : redacted;
