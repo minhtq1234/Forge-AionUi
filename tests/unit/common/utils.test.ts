@@ -268,6 +268,20 @@ describe('utils', () => {
       expect(result).not.toContain('abcdefghij');
     });
 
+    it('redacts a bounded double-quoted secret ending in a lone escape', () => {
+      const result = redactDiagnosticText(String.raw`password="abcdefgh\more"`, 19);
+
+      expect(result).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER}${DIAGNOSTIC_TRUNCATION_MARKER}`);
+      expect(result).not.toContain('abcdefgh');
+    });
+
+    it('redacts an unterminated single-quoted secret ending in a lone escape', () => {
+      const result = redactDiagnosticText("password='abcdefgh" + '\\');
+
+      expect(result).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER}`);
+      expect(result).not.toContain('abcdefgh');
+    });
+
     it('redacts a URL password whose at-sign is beyond the retained boundary', () => {
       const result = redactDiagnosticText('https://user:abcdefghijklmnopqrstuvwxyz@example.com/path', 25);
 
