@@ -542,6 +542,9 @@
       "unsupported": "Não compatível"
     }
   },
+  "status": {
+    "waitingApproval": "Aguardando sua aprovação"
+  },
   "runtimePreparing": {
     "sendboxHint": "Preparando o ambiente de execução. A primeira inicialização pode demorar um pouco mais."
   },

@@ -536,6 +536,9 @@
       "unsupported": "Unsupported"
     }
   },
+  "status": {
+    "waitingApproval": "Awaiting approval"
+  },
   "runtimePreparing": {
     "sendboxHint": "Preparing the runtime environment. First startup can take a little longer."
   },

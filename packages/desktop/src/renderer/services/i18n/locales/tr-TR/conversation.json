@@ -538,6 +538,9 @@
       "unsupported": "Desteklenmiyor"
     }
   },
+  "status": {
+    "waitingApproval": "Onayınızı bekliyor"
+  },
   "runtimePreparing": {
     "sendboxHint": "Çalışma ortamı hazırlanıyor. İlk başlatma biraz daha uzun sürebilir."
   },

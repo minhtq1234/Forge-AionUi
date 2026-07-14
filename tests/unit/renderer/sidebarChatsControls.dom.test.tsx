@@ -89,7 +89,7 @@ vi.mock('@/renderer/pages/conversation/GroupedHistory/hooks/useConversations', (
   useConversations: () => ({
     conversations: [conversation],
     isConversationGenerating: () => false,
-    hasCompletionUnread: () => false,
+    getRecentCompletionAt: () => undefined,
     expandedWorkspaces: [],
     pinnedConversations: [],
     timelineSections: [

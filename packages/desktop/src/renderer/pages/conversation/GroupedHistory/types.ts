@@ -44,7 +44,7 @@ export type ExportTask =
 export type ConversationRowProps = {
   conversation: TChatConversation;
   isGenerating: boolean;
-  hasCompletionUnread: boolean;
+  recentCompletionAt?: number;
   collapsed: boolean;
   tooltipEnabled: boolean;
   batchMode: boolean;

@@ -48,7 +48,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
   const {
     conversations,
     isConversationGenerating,
-    hasCompletionUnread,
+    getRecentCompletionAt,
     expandedWorkspaces,
     pinnedConversations,
     timelineSections,
@@ -198,7 +198,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     (conversation: TChatConversation): ConversationRowProps => ({
       conversation,
       isGenerating: isConversationGenerating(conversation.id),
-      hasCompletionUnread: hasCompletionUnread(conversation.id),
+      recentCompletionAt: getRecentCompletionAt(conversation.id),
       collapsed,
       tooltipEnabled,
       batchMode,
@@ -223,7 +223,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
       tooltipEnabled,
       batchMode,
       isConversationGenerating,
-      hasCompletionUnread,
+      getRecentCompletionAt,
       selectedConversationIds,
       id,
       dropdownVisibleId,

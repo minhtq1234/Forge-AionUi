@@ -536,6 +536,9 @@
       "unsupported": "不支持"
     }
   },
+  "status": {
+    "waitingApproval": "等待你的批准"
+  },
   "runtimePreparing": {
     "sendboxHint": "正在准备运行环境。首次启动可能会稍慢一些。"
   },

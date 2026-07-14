@@ -537,6 +537,9 @@
       "unsupported": "Nicht unterstützt"
     }
   },
+  "status": {
+    "waitingApproval": "Wartet auf deine Freigabe"
+  },
   "runtimePreparing": {
     "sendboxHint": "Laufzeit-Umgebung wird vorbereitet. Der erste Start kann etwas länger dauern."
   },
