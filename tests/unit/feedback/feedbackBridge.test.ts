@@ -15,42 +15,50 @@ import { gunzipSync } from 'node:zlib';
 import { app } from 'electron';
 import { collectFeedbackLogAttachment } from '@/process/feedback/logs';
 
-// Table of handlers registered via ipcMain.handle during module import.
 const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>();
+const eventHandlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>();
 
 type FakeWebContents = {
   capturePage?: () => Promise<{ toPNG: () => Buffer }>;
+  isDestroyed: () => boolean;
 };
 
 type FakeWindow = {
   isDestroyed: () => boolean;
+  once: (event: string, callback: () => void) => void;
   webContents: FakeWebContents;
 };
 
-let currentWindow: FakeWindow | null = null;
+const allowedWindow: FakeWindow = {
+  isDestroyed: () => false,
+  once: vi.fn(),
+  webContents: {
+    isDestroyed: () => false,
+  },
+};
+
+const foreignSender: FakeWebContents = {
+  isDestroyed: () => false,
+};
+
+let initFeedbackBridgeWithWindow: typeof import('@/process/bridge/feedbackBridge').initFeedbackBridgeWithWindow;
 
 vi.mock('electron', () => ({
   ipcMain: {
-    handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => {
-      handlers.set(channel, fn);
-    },
-    on: vi.fn(),
+    handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => handlers.set(channel, fn),
+    on: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => eventHandlers.set(channel, fn),
   },
   app: {
     getPath: vi.fn(() => '/tmp/aionui-test-logs-nonexistent'),
     getVersion: vi.fn(() => '0.0.0'),
   },
-  BrowserWindow: {
-    fromWebContents: vi.fn(() => currentWindow),
-  },
 }));
 
 beforeEach(async () => {
   handlers.clear();
-  currentWindow = null;
+  eventHandlers.clear();
   vi.resetModules();
-  // Importing registers the ipcMain.handle callbacks into our map.
-  await import('@/process/bridge/feedbackBridge');
+  ({ initFeedbackBridgeWithWindow } = await import('@/process/bridge/feedbackBridge'));
 });
 
 afterEach(() => {
@@ -64,67 +72,68 @@ describe('feedbackBridge — capture-screenshot', () => {
 
   it('returns png bytes and a timestamped filename on success', async () => {
     const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01, 0x02, 0x03]);
-    currentWindow = {
-      isDestroyed: () => false,
-      webContents: {
-        capturePage: vi.fn(async () => ({ toPNG: () => pngBytes })),
-      },
-    };
+    allowedWindow.webContents.capturePage = vi.fn(async () => ({ toPNG: () => pngBytes }));
+    initFeedbackBridgeWithWindow(allowedWindow as never);
 
     const handler = handlers.get('feedback:capture-screenshot')!;
-    const result = (await handler({ sender: {} })) as { filename: string; data: number[] } | null;
+    const result = (await handler({ sender: allowedWindow.webContents })) as {
+      filename: string;
+      data: number[];
+    } | null;
 
     expect(result).not.toBeNull();
     expect(result!.filename).toMatch(/^screenshot-.*\.png$/);
     expect(result!.data).toEqual(Array.from(pngBytes));
   });
 
-  it('returns null when no owning BrowserWindow is resolved', async () => {
-    currentWindow = null;
+  it('rejects screenshot capture from a foreign sender', async () => {
+    initFeedbackBridgeWithWindow(allowedWindow as never);
     const handler = handlers.get('feedback:capture-screenshot')!;
-    const result = await handler({ sender: {} });
-    expect(result).toBeNull();
+    await expect(handler({ sender: foreignSender })).rejects.toThrow('Feedback request rejected');
   });
 
-  it('returns null when the owning BrowserWindow is destroyed', async () => {
-    currentWindow = {
+  it('rejects screenshot capture when the registered window is destroyed', async () => {
+    const destroyedWindow: FakeWindow = {
       isDestroyed: () => true,
+      once: vi.fn(),
       webContents: {
         capturePage: vi.fn(),
+        isDestroyed: () => false,
       },
     };
+    initFeedbackBridgeWithWindow(destroyedWindow as never);
     const handler = handlers.get('feedback:capture-screenshot')!;
-    const result = await handler({ sender: {} });
-    expect(result).toBeNull();
-    expect(currentWindow.webContents.capturePage).not.toHaveBeenCalled();
+    await expect(handler({ sender: destroyedWindow.webContents })).rejects.toThrow('Feedback request rejected');
+    expect(destroyedWindow.webContents.capturePage).not.toHaveBeenCalled();
   });
 
   it('returns null when capturePage yields an empty buffer', async () => {
-    currentWindow = {
-      isDestroyed: () => false,
-      webContents: {
-        capturePage: vi.fn(async () => ({ toPNG: () => Buffer.alloc(0) })),
-      },
-    };
+    allowedWindow.webContents.capturePage = vi.fn(async () => ({ toPNG: () => Buffer.alloc(0) }));
+    initFeedbackBridgeWithWindow(allowedWindow as never);
 
     const handler = handlers.get('feedback:capture-screenshot')!;
-    const result = await handler({ sender: {} });
+    const result = await handler({ sender: allowedWindow.webContents });
+    expect(result).toBeNull();
+  });
+
+  it('returns null when capturePage yields a png larger than 10 MiB', async () => {
+    allowedWindow.webContents.capturePage = vi.fn(async () => ({ toPNG: () => Buffer.alloc(10 * 1024 * 1024 + 1) }));
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    const handler = handlers.get('feedback:capture-screenshot')!;
+    const result = await handler({ sender: allowedWindow.webContents });
     expect(result).toBeNull();
   });
 
   it('returns null and does not throw when capturePage rejects', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    currentWindow = {
-      isDestroyed: () => false,
-      webContents: {
-        capturePage: vi.fn(async () => {
-          throw new Error('capture refused');
-        }),
-      },
-    };
+    allowedWindow.webContents.capturePage = vi.fn(async () => {
+      throw new Error('capture refused');
+    });
+    initFeedbackBridgeWithWindow(allowedWindow as never);
 
     const handler = handlers.get('feedback:capture-screenshot')!;
-    const result = await handler({ sender: {} });
+    const result = await handler({ sender: allowedWindow.webContents });
     expect(result).toBeNull();
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
@@ -132,6 +141,11 @@ describe('feedbackBridge — capture-screenshot', () => {
 });
 
 describe('feedback logs', () => {
+  it('rejects log collection from an unregistered sender', async () => {
+    const handler = handlers.get('feedback:collect-logs')!;
+    await expect(handler({ sender: foreignSender })).rejects.toThrow('Feedback request rejected');
+  });
+
   it('collects top-level frontend logs and nested backend logs through the IPC handler', async () => {
     const logsDir = mkdtempSync(path.join(tmpdir(), 'aionui-feedback-bridge-'));
     try {
@@ -148,8 +162,12 @@ describe('feedback logs', () => {
         return path.join(logsDir, 'userData');
       });
 
+      initFeedbackBridgeWithWindow(allowedWindow as never);
       const handler = handlers.get('feedback:collect-logs')!;
-      const result = (await handler({})) as { filename: string; data: number[] } | null;
+      const result = (await handler({ sender: allowedWindow.webContents })) as {
+        filename: string;
+        data: number[];
+      } | null;
 
       expect(result).not.toBeNull();
       const content = gunzipSync(Buffer.from(result!.data)).toString('utf8');
@@ -218,5 +236,73 @@ describe('feedback logs', () => {
     } finally {
       rmSync(logsDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('feedbackBridge — renderer-log', () => {
+  it('drops renderer logs from a foreign sender without echoing payload values', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: foreignSender },
+      JSON.stringify({ level: 'error', message: 'secret-message' })
+    );
+
+    expect(warning).toHaveBeenCalledWith('[feedbackBridge] Rejected renderer log: unauthorized sender');
+    expect(JSON.stringify(warning.mock.calls)).not.toContain('secret-message');
+  });
+
+  it('drops malformed renderer log JSON without echoing payload values', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.({ sender: allowedWindow.webContents }, '{secret-message');
+
+    expect(warning).toHaveBeenCalledWith('[feedbackBridge] Rejected renderer log: invalid payload');
+    expect(JSON.stringify(warning.mock.calls)).not.toContain('secret-message');
+  });
+
+  it('redacts and bounds an authorized renderer log before writing it', () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({
+        level: 'error',
+        message: 'x'.repeat(5_000),
+        details: { api_key: 'renderer-secret', status: 401 },
+      })
+    );
+
+    const serializedCalls = JSON.stringify(errorLog.mock.calls);
+    expect(serializedCalls).not.toContain('renderer-secret');
+    expect(serializedCalls).toContain('[REDACTED]');
+    expect(serializedCalls).toContain('[TRUNCATED]');
+  });
+
+  it('drops a renderer log larger than 64 KiB before parsing', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({ level: 'info', message: 'x'.repeat(65_536) })
+    );
+
+    expect(warning).toHaveBeenCalledWith('[feedbackBridge] Rejected renderer log: invalid payload');
+  });
+
+  it('normalizes an unknown renderer log level to info', () => {
+    const infoLog = vi.spyOn(console, 'info').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({ level: 'debug', message: 'feedback message' })
+    );
+
+    expect(infoLog).toHaveBeenCalledWith('[FeedbackReport:renderer] feedback message');
   });
 });
