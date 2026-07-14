@@ -377,6 +377,38 @@ describe('submitFeedbackReport', () => {
     expect(Array.from(screenshot?.data ?? [])).toEqual([1, 2, 3]);
   });
 
+  it('copies hostile Uint8Array subclasses into bounded plain screenshot snapshots', async () => {
+    let speciesConstructorCalls = 0;
+    class OversizedSpecies extends Uint8Array {
+      constructor(byteLength: number) {
+        speciesConstructorCalls++;
+        super(byteLength + 1);
+      }
+    }
+    class HostileUint8Array extends Uint8Array {
+      static get [Symbol.species](): typeof OversizedSpecies {
+        return OversizedSpecies;
+      }
+    }
+
+    const original = new HostileUint8Array([1, 2, 3]);
+    await submitFeedbackReport({
+      attachments: [{ filename: 'hostile.png', data: original, contentType: 'image/png' }],
+      description: 'Hostile screenshot',
+      module: 'conversation-session',
+      moduleLabel: 'Conversation & Sessions',
+    });
+
+    const screenshot = getCapturedAttachments().find((attachment) => attachment.filename === 'hostile.png');
+    original.fill(9);
+
+    expect(speciesConstructorCalls).toBe(0);
+    expect(screenshot?.data).not.toBe(original);
+    expect(Object.getPrototypeOf(screenshot?.data)).toBe(Uint8Array.prototype);
+    expect(screenshot?.data.byteLength).toBe(3);
+    expect(Array.from(screenshot?.data ?? [])).toEqual([1, 2, 3]);
+  });
+
   it('rejects a revoked attachment-array proxy without aborting submission', async () => {
     const { proxy, revoke } = Proxy.revocable([], {});
     revoke();

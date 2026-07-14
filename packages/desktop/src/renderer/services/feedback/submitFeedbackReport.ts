@@ -277,7 +277,9 @@ function snapshotUint8Array(data: unknown, byteLength: number): Uint8Array<Array
   if (!(data instanceof Uint8Array)) return null;
 
   try {
-    return Uint8Array.prototype.slice.call(data, 0, byteLength) as Uint8Array<ArrayBuffer>;
+    const snapshot = new Uint8Array(byteLength);
+    Uint8Array.prototype.set.call(snapshot, data);
+    return snapshot;
   } catch {
     return null;
   }
