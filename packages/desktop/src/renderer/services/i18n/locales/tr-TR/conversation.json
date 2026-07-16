@@ -521,7 +521,15 @@
     "queueTooLarge": "Kuyruk verisi güvenli şekilde saklanamayacak kadar büyük. Önce bazı komutları kaldırın."
   },
   "contextUsage": {
-    "contextUsed": "bağlam kullanıldı"
+    "contextUsed": "bağlam kullanıldı",
+    "contextWindow": "Bağlam penceresi",
+    "percentUsed": "%{{percent}} kullanıldı",
+    "tokenCount": "{{used}} / {{limit}} belirteç",
+    "localTokenUsage": "Yerel belirteç kullanımı",
+    "today": "Bugün",
+    "weekToDate": "Bu hafta",
+    "monthToDate": "Bu ay",
+    "triggerLabel": "Bağlam kullanımını göster"
   },
   "skill_generator": {
     "title": "Yetenek/Kural Oluştur",
@@ -579,6 +587,9 @@
       "failed": "Başarısız",
       "unsupported": "Desteklenmiyor"
     }
+  },
+  "status": {
+    "waitingApproval": "Onayınızı bekliyor"
   },
   "runtimePreparing": {
     "sendboxHint": "Çalışma ortamı hazırlanıyor. İlk başlatma biraz daha uzun sürebilir."

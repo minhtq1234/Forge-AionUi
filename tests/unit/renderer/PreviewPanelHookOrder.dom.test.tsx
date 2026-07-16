@@ -154,4 +154,17 @@ describe('PreviewPanel hook order across empty <-> document transitions', () => 
 
     expect(screen.getByText('conversation.artifact.emptyTitle')).toBeInTheDocument();
   });
+
+  it('requests collapse only after the final open tab disappears', () => {
+    const onRequestCollapse = vi.fn();
+    ctx.value = docContext();
+    const { rerender } = render(<PreviewPanel onRequestCollapse={onRequestCollapse} />);
+
+    expect(onRequestCollapse).not.toHaveBeenCalled();
+
+    ctx.value = emptyContext();
+    rerender(<PreviewPanel onRequestCollapse={onRequestCollapse} />);
+
+    expect(onRequestCollapse).toHaveBeenCalledOnce();
+  });
 });

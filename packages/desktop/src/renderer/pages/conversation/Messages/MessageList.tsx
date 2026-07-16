@@ -5,8 +5,10 @@
  */
 
 import type { IConversationArtifact } from '@/common/adapter/ipcBridge';
-import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup, TMessage } from '@/common/chat/chatLib';
-import { isDiagnosticToolMessage } from '@/common/chat/normalizeToolCall';
+import type { TMessage } from '@/common/chat/chatLib';
+import { coalesceToolCalls } from '@/common/chat/toolActivity/coalesceToolCalls';
+import type { CoalescedStep } from '@/common/chat/toolActivity/types';
+import { isDiagnosticToolMessage, normalizeToolMessages, type ToolMessage } from '@/common/chat/normalizeToolCall';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useConversationRuntimeView } from '@/renderer/pages/conversation/runtime/useConversationRuntimeView';
 import { getChatSurfaceWidthClass } from '@/renderer/pages/conversation/utils/chatSurfaceWidth';
@@ -29,6 +31,7 @@ import type { FileChangeInfo } from './MessageFileChanges';
 import MessageFileChanges, { parseDiff } from './MessageFileChanges';
 import { useConversationArtifacts } from './artifacts';
 import {
+  isHistoryGapMarker,
   useLoadAnchorMessageWindow,
   useLoadPreviousMessagePage,
   useMessageList,
@@ -41,11 +44,12 @@ import MessageTips from './components/MessageTips';
 import MessageToolCall from './components/MessageToolCall';
 import MessageToolGroup from './components/MessageToolGroup';
 import MessageToolGroupSummary from './components/MessageToolGroupSummary';
+import ToolActivityError from './components/toolActivity/ToolActivityError';
 import MessageCronTrigger from './components/MessageCronTrigger';
 import MessageSkillSuggest from './components/MessageSkillSuggest';
 import MessageText from './components/MessageText';
 import MessageThinking from './components/MessageThinking';
-import type { WriteFileResult } from './types';
+import type { WorkJournalSourceMessage, WriteFileResult } from './types';
 import { useAutoScroll } from './useAutoScroll';
 import { useAutoPreviewOfficeFiles } from '@/renderer/hooks/file/useAutoPreviewOfficeFiles';
 import SelectionReplyButton from './components/SelectionReplyButton';
@@ -54,9 +58,16 @@ type IMessageVO =
   | TMessage
   | { type: 'file_summary'; id: string; diffs: FileChangeInfo[]; sourceMessageIds: string[]; created_at: number }
   | {
-      type: 'tool_summary';
+      type: 'work_error';
       id: string;
-      messages: Array<IMessageToolGroup | IMessageAcpToolCall | IMessageToolCall>;
+      step: CoalescedStep;
+      sourceMessageIds: string[];
+      created_at: number;
+    }
+  | {
+      type: 'work_summary';
+      id: string;
+      messages: WorkJournalSourceMessage[];
       sourceMessageIds: string[];
       created_at: number;
     };
@@ -72,7 +83,10 @@ const getProcessedItemSourceMessageIds = (item: IProcessedItem): string[] => {
   if ('type' in item && item.type === 'artifact') {
     return [item.id];
   }
-  if ('type' in item && item.type === 'tool_summary') {
+  if ('type' in item && item.type === 'work_summary') {
+    return item.sourceMessageIds;
+  }
+  if ('type' in item && item.type === 'work_error') {
     return item.sourceMessageIds;
   }
   if ('type' in item && item.type === 'file_summary') {
@@ -89,12 +103,13 @@ const matchesTargetMessage = (item: IProcessedItem, targetMessageId?: string): b
 };
 
 const getProcessedItemAnchorId = (item: IProcessedItem): string => {
+  if ('type' in item && item.type === 'work_error') return item.id;
   const sourceIds = getProcessedItemSourceMessageIds(item);
   return sourceIds[0] || ('id' in item ? item.id : uuid());
 };
 
 const getProcessedItemCreatedAt = (item: IProcessedItem): number => {
-  if ('type' in item && ['file_summary', 'tool_summary', 'artifact'].includes(item.type)) {
+  if ('type' in item && ['file_summary', 'work_summary', 'work_error', 'artifact'].includes(item.type)) {
     return item.created_at;
   }
   return item.created_at ?? 0;
@@ -286,13 +301,21 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
   const scrollerElementRef = useRef<HTMLDivElement | null>(null);
   const contentElementRef = useRef<HTMLDivElement | null>(null);
 
-  // Pre-process message list to group tool outputs into summary cards
+  // Pre-process message list to group left-side work activity into summary cards.
   const processedList = useMemo(() => {
+    type PendingWorkSummary = {
+      messages: WorkJournalSourceMessage[];
+      sourceMessageIds: string[];
+      latestResultIndex: number;
+      latestCreatedAt: number;
+    };
+
     const result: Array<IMessageVO> = [];
     let diffsChanges: FileChangeInfo[] = [];
     let diffsSourceMessageIds: string[] = [];
-    let toolList: Array<IMessageToolGroup | IMessageAcpToolCall | IMessageToolCall> = [];
-    let toolSourceMessageIds: string[] = [];
+    let pendingWorkSummary: PendingWorkSummary | undefined;
+    const pendingWorkErrorIdByCallKey = new Map<string, string>();
+    const supersededWorkErrorIds = new Set<string>();
 
     const pushFileDffChanges = (changes: FileChangeInfo, sourceMessageId: string, created_at: number) => {
       if (!diffsChanges.length) {
@@ -307,28 +330,69 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       }
       diffsChanges.push(changes);
       diffsSourceMessageIds.push(sourceMessageId);
-      toolList = [];
-      toolSourceMessageIds = [];
     };
-    const pushToolList = (message: IMessageToolGroup | IMessageAcpToolCall | IMessageToolCall) => {
-      if (!toolList.length) {
-        toolSourceMessageIds = [];
-        result.push({
-          type: 'tool_summary',
-          id: `tool-summary-${message.id}`,
-          messages: toolList,
-          sourceMessageIds: toolSourceMessageIds,
-          created_at: message.created_at ?? 0,
-        });
-      }
-      toolList.push(message);
-      toolSourceMessageIds.push(message.id);
+    const resetFileDiffChanges = () => {
       diffsChanges = [];
       diffsSourceMessageIds = [];
+    };
+    const pushWorkMessage = (message: WorkJournalSourceMessage) => {
+      if (!pendingWorkSummary) {
+        pendingWorkSummary = {
+          messages: [],
+          sourceMessageIds: [],
+          latestResultIndex: result.length,
+          latestCreatedAt: message.created_at ?? 0,
+        };
+      }
+      pendingWorkSummary.messages.push(message);
+      pendingWorkSummary.sourceMessageIds.push(message.id);
+      pendingWorkSummary.latestResultIndex = result.length;
+      pendingWorkSummary.latestCreatedAt = message.created_at ?? 0;
+      resetFileDiffChanges();
+    };
+    const pushWorkErrors = (message: ToolMessage) => {
+      normalizeToolMessages([message]).forEach((call, index) => {
+        const previousErrorId = call.key ? pendingWorkErrorIdByCallKey.get(call.key) : undefined;
+        if (previousErrorId) supersededWorkErrorIds.add(previousErrorId);
+
+        if (call.status !== 'error') {
+          if (call.key) pendingWorkErrorIdByCallKey.delete(call.key);
+          return;
+        }
+
+        const step = coalesceToolCalls([call])[0];
+        if (!step) return;
+        const id = `work-error-${message.id}-${call.key || index}`;
+        result.push({
+          type: 'work_error',
+          id,
+          step,
+          sourceMessageIds: [message.id],
+          created_at: message.created_at ?? 0,
+        });
+        if (call.key) pendingWorkErrorIdByCallKey.set(call.key, id);
+      });
+    };
+    const flushPendingWorkSummary = () => {
+      if (!pendingWorkSummary) return;
+      result.splice(pendingWorkSummary.latestResultIndex, 0, {
+        type: 'work_summary',
+        id: `work-summary-${pendingWorkSummary.messages.at(-1)?.id}`,
+        messages: pendingWorkSummary.messages,
+        sourceMessageIds: pendingWorkSummary.sourceMessageIds,
+        created_at: pendingWorkSummary.latestCreatedAt,
+      });
+      pendingWorkSummary = undefined;
     };
 
     for (let i = 0, len = list.length; i < len; i++) {
       const message = list[i];
+      if (isHistoryGapMarker(message)) {
+        flushPendingWorkSummary();
+        pendingWorkErrorIdByCallKey.clear();
+        resetFileDiffChanges();
+        continue;
+      }
       // Skip hidden and available_commands messages
       if (message.hidden) continue;
       if (message.type === 'available_commands') continue;
@@ -353,25 +417,40 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
             continue;
           }
         }
-        pushToolList(message);
-        continue;
+        if (message.position === 'left') {
+          pushWorkErrors(message);
+          pushWorkMessage(message);
+          continue;
+        }
       }
       if (message.type === 'acp_tool_call') {
         if (isDiagnosticToolMessage(message)) continue;
-        pushToolList(message);
-        continue;
+        if (message.position === 'left') {
+          pushWorkErrors(message);
+          pushWorkMessage(message);
+          continue;
+        }
       }
       if (message.type === 'tool_call') {
         if (isDiagnosticToolMessage(message)) continue;
-        pushToolList(message);
+        if (message.position === 'left') {
+          pushWorkErrors(message);
+          pushWorkMessage(message);
+          continue;
+        }
+      }
+      if (message.position === 'left' && (message.type === 'plan' || message.type === 'thinking')) {
+        pushWorkMessage(message);
         continue;
       }
-      toolList = [];
-      toolSourceMessageIds = [];
-      diffsChanges = [];
-      diffsSourceMessageIds = [];
+      if (message.position === 'right') {
+        flushPendingWorkSummary();
+        pendingWorkErrorIdByCallKey.clear();
+      }
+      resetFileDiffChanges();
       result.push(message);
     }
+    flushPendingWorkSummary();
     const visibleArtifacts = artifacts
       .filter((artifact) => {
         if (artifact.kind === 'cron_trigger') return artifact.status === 'active';
@@ -385,10 +464,37 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         created_at: artifact.created_at,
       }));
 
-    return [...result, ...visibleArtifacts].toSorted(
-      (a, b) => getProcessedItemCreatedAt(a) - getProcessedItemCreatedAt(b)
-    );
+    return [
+      ...result.filter((item) => item.type !== 'work_error' || !supersededWorkErrorIds.has(item.id)),
+      ...visibleArtifacts,
+    ].toSorted((a, b) => getProcessedItemCreatedAt(a) - getProcessedItemCreatedAt(b));
   }, [artifacts, list]);
+
+  const activeWorkSummaryId = useMemo(() => {
+    if (!isProcessing) return undefined;
+    const sourceIndexById = new Map(list.map((message, index) => [message.id, index]));
+    let lastHistoryGapIndex = -1;
+    for (let index = list.length - 1; index >= 0; index--) {
+      if (isHistoryGapMarker(list[index])) {
+        lastHistoryGapIndex = index;
+        break;
+      }
+    }
+    for (let index = processedList.length - 1; index >= 0; index--) {
+      const item = processedList[index];
+      if (item.type === 'artifact') continue;
+      if (item.type === 'work_summary') {
+        const followsHistoryGap = item.sourceMessageIds.some(
+          (sourceId) => (sourceIndexById.get(sourceId) ?? -1) > lastHistoryGapIndex
+        );
+        return followsHistoryGap ? item.id : undefined;
+      }
+      if (item.type === 'file_summary' || item.type === 'work_error') continue;
+      if (item.position === 'right') return undefined;
+      if (item.type === 'text' && item.position === 'left' && item.status === 'finish') return undefined;
+    }
+    return undefined;
+  }, [isProcessing, list, processedList]);
 
   // An AI reply can be split into several messages (thinking / multiple text /
   // tool blocks). The hover copy + timestamp row should appear once per turn,
@@ -410,7 +516,10 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
     for (const item of processedList) {
       if (
         'type' in item &&
-        (item.type === 'file_summary' || item.type === 'tool_summary' || item.type === 'artifact')
+        (item.type === 'file_summary' ||
+          item.type === 'work_summary' ||
+          item.type === 'work_error' ||
+          item.type === 'artifact')
       ) {
         continue;
       }
@@ -437,7 +546,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
 
     for (let index = processedList.length - 1; index >= 0; index -= 1) {
       const item = processedList[index];
-      if ('type' in item && ['file_summary', 'tool_summary', 'artifact'].includes(item.type)) {
+      if ('type' in item && ['file_summary', 'work_summary', 'work_error', 'artifact'].includes(item.type)) {
         continue;
       }
       const message = item as TMessage;
@@ -552,11 +661,10 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         return;
 
       const targetIndex = processedList.findIndex((item) => {
-        if (
-          (item as { type?: string }).type === 'file_summary' ||
-          (item as { type?: string }).type === 'tool_summary' ||
-          (item as { type?: string }).type === 'artifact'
-        ) {
+        if (item.type === 'work_summary') {
+          return matchesTargetMessage(item, detail.messageId);
+        }
+        if (item.type === 'file_summary' || item.type === 'artifact') {
           return false;
         }
         const message = item as TMessage;
@@ -633,7 +741,19 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         </div>
       );
     }
-    if ('type' in item && ['file_summary', 'tool_summary'].includes(item.type)) {
+    if ('type' in item && item.type === 'work_error') {
+      return (
+        <div
+          key={item.id}
+          id={`message-${getProcessedItemAnchorId(item)}`}
+          className={`${rowWidthClass} min-w-0 message-item px-8px m-t-10px work_error`}
+          style={highlighted ? highlightStyle : undefined}
+        >
+          <ToolActivityError step={item.step} />
+        </div>
+      );
+    }
+    if ('type' in item && ['file_summary', 'work_summary'].includes(item.type)) {
       return (
         <div
           key={item.id}
@@ -642,7 +762,9 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
           style={highlighted ? highlightStyle : undefined}
         >
           {item.type === 'file_summary' && <MessageFileChanges diffsChanges={item.diffs} />}
-          {item.type === 'tool_summary' && <MessageToolGroupSummary messages={item.messages}></MessageToolGroupSummary>}
+          {item.type === 'work_summary' && (
+            <MessageToolGroupSummary messages={item.messages} isActive={item.id === activeWorkSummaryId} />
+          )}
         </div>
       );
     }

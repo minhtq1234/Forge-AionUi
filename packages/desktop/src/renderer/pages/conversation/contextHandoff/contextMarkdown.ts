@@ -33,6 +33,7 @@ const FILE_PATH_RE =
   /(?:^|\s)([~./\w-][^\s"'`<>]*\.(?:md|txt|json|csv|xlsx?|docx?|pptx?|pdf|png|jpe?g|gif|svg|html|css|tsx?|jsx?))/gi;
 const INVALID_CONTEXT_FILE_CHARS_RE = /[<>:"/\\|?*]+/g;
 const PLAIN_BULLET_RE = /^[-*+]\s+/;
+const RENDERER_HISTORY_GAP_CODE = '__aionui_renderer_history_gap__';
 
 const SNAPSHOT_SECTION_BY_MARKDOWN_SECTION = {
   Goal: 'goal',
@@ -111,8 +112,12 @@ const latestAssistantMessage = (messages: TMessage[]): TMessage | undefined => {
   return [...messages].toReversed().find((message) => message.position === 'left' && message.type === 'text');
 };
 
+const isRendererHistoryGap = (message: TMessage): boolean =>
+  message.type === 'tips' && message.hidden === true && message.content.code === RENDERER_HISTORY_GAP_CODE;
+
 const recentMessages = (messages: TMessage[], maxRecentMessages: number): string[] => {
   return messages
+    .filter((message) => !isRendererHistoryGap(message))
     .slice(-maxRecentMessages)
     .map((message) => `${messageRole(message)}: ${excerpt(readMessageContent(message))}`)
     .filter((line) => line.trim() !== '');

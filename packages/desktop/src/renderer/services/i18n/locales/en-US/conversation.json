@@ -597,7 +597,15 @@
     "queueTooLarge": "Queue data is too large to persist safely. Remove some queued commands first."
   },
   "contextUsage": {
-    "contextUsed": "context used"
+    "contextUsed": "context used",
+    "contextWindow": "Context window",
+    "percentUsed": "{{percent}}% used",
+    "tokenCount": "{{used}} of {{limit}} tokens",
+    "localTokenUsage": "Local token usage",
+    "today": "Today",
+    "weekToDate": "Week to date",
+    "monthToDate": "Month to date",
+    "triggerLabel": "Show context usage"
   },
   "skill_generator": {
     "title": "Generate Skill/Rule",
@@ -638,6 +646,9 @@
       "failed": "Failed",
       "unsupported": "Unsupported"
     }
+  },
+  "status": {
+    "waitingApproval": "Awaiting approval"
   },
   "runtimePreparing": {
     "sendboxHint": "Preparing the runtime environment. First startup can take a little longer."

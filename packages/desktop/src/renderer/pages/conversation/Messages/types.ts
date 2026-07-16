@@ -9,6 +9,21 @@
  * 消息工具结果类型定义
  */
 
+import type {
+  IMessageAcpToolCall,
+  IMessagePlan,
+  IMessageThinking,
+  IMessageToolCall,
+  IMessageToolGroup,
+} from '@/common/chat/chatLib';
+
+export type WorkJournalSourceMessage =
+  | IMessagePlan
+  | IMessageThinking
+  | IMessageToolGroup
+  | IMessageAcpToolCall
+  | IMessageToolCall;
+
 export interface ImageGenerationResult {
   img_url?: string;
   relative_path?: string;

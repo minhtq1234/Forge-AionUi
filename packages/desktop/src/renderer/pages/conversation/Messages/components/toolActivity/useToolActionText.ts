@@ -6,7 +6,6 @@
 
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { resolveToolAction } from '@/common/chat/toolActivity/resolveToolAction';
 import type { CoalescedStep } from '@/common/chat/toolActivity/types';
 
 type Form = 'running' | 'done' | 'failedTitle';
@@ -16,30 +15,29 @@ type Form = 'running' | 'done' | 'failedTitle';
 export const useToolActionText = () => {
   const { t } = useTranslation();
   return useMemo(() => {
-    // The command/args carry signals the tool name doesn't (e.g. a generic
-    // "Skill" wrapper running officecli on an .xlsx), so pass them to the resolver.
-    const collectDetail = (step: CoalescedStep): string =>
-      step.calls.map((call) => [call.description, call.input].filter(Boolean).join(' ')).join(' ');
-    const resolveForm = (rawName: string, kind: string | undefined, detail: string, form: Form): string => {
-      const { toolKey, category } = resolveToolAction(rawName, kind, detail);
+    const resolveForm = (step: CoalescedStep, form: Form): string => {
+      const { toolKey, category } = step.action;
       const generic = t(`messages.toolActivity.generic.${form}`);
-      const cat = t(`messages.toolActivity.categories.${category}.${form}`, { defaultValue: generic });
-      if (!toolKey) return cat;
-      return t(`messages.toolActivity.tools.${toolKey}.${form}`, { defaultValue: cat });
+      const categoryText = t(`messages.toolActivity.categories.${category}.${form}`, { defaultValue: generic });
+      if (!toolKey) return categoryText;
+      return t(`messages.toolActivity.tools.${toolKey}.${form}`, { defaultValue: categoryText });
     };
 
     return {
       label(step: CoalescedStep): string {
         if (step.status === 'canceled') return t('messages.toolActivity.status.stopped');
         const form: Form = step.status === 'completed' ? 'done' : 'running';
-        const base = resolveForm(step.rawName, step.kind, collectDetail(step), form);
-        if (step.attempts > 1 && step.status !== 'completed') {
+        const base = resolveForm(step, form);
+        if (step.status === 'completed' && step.hadError) {
+          return `${base} ${t('messages.toolActivity.status.recovered')}`;
+        }
+        if (step.attempts > 1 && step.status === 'running') {
           return `${base} ${t('messages.toolActivity.attempt', { n: step.attempts })}`;
         }
         return base;
       },
       failedTitle(step: CoalescedStep): string {
-        return resolveForm(step.rawName, step.kind, collectDetail(step), 'failedTitle');
+        return resolveForm(step, 'failedTitle');
       },
       suggestion(): string {
         return t('messages.toolActivity.error.suggestion');

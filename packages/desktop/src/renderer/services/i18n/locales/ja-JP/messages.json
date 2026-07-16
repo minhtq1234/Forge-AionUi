@@ -66,5 +66,144 @@
     "yesAlwaysAllowTool": "はい、サーバー \"{{serverName}}\" のツール \"{{toolName}}\" を常に許可",
     "yesAlwaysAllowServer": "はい、サーバー \"{{serverName}}\" のすべてのツールを常に許可",
     "no": "いいえ (esc)"
+  },
+  "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "作業中（合計 {{total, number}} 件）",
+        "completed": "作業が完了しました（合計 {{total, number}} 件）",
+        "recovered": "作業を復旧して完了しました（合計 {{total, number}} 件）",
+        "partial": "作業は一部完了しました（合計 {{total, number}} 件）",
+        "failed": "作業を完了できませんでした（合計 {{total, number}} 件）",
+        "canceled": "作業を停止しました（合計 {{total, number}} 件）"
+      },
+      "activity": "このターンでは{{categories}}を行いました。",
+      "subject": "焦点: {{subject}}。",
+      "overflow": "その他 {{count, number}} 件",
+      "category": {
+        "web": "Web検索 ({{count, number}})",
+        "search": "プロジェクト検索 ({{count, number}})",
+        "fileRead": "ファイル確認 ({{count, number}})",
+        "fileWrite": "実装更新 ({{count, number}})",
+        "data": "データ確認 ({{count, number}})",
+        "report": "レポート作業 ({{count, number}})",
+        "export": "エクスポート ({{count, number}})",
+        "memory": "記憶更新 ({{count, number}})",
+        "code": "プロジェクト手順 ({{count, number}})",
+        "verify": "検証 ({{count, number}})",
+        "office": "文書作業 ({{count, number}})",
+        "generic": "プロジェクト手順 ({{count, number}})"
+      },
+      "outcome": {
+        "active": "順調に進んでいます。完了: {{completed, number}} / {{total, number}}。進行中: {{pending, number}}。",
+        "activeWithFailure": "作業は進んでいますが、一部は再試行が必要です。完了: {{completed, number}} / {{total, number}}。進行中: {{pending, number}}。再試行が必要: {{failed, number}}。",
+        "activeWithCanceled": "作業は進んでいますが、一部は停止されました。完了: {{completed, number}} / {{total, number}}。進行中: {{pending, number}}。停止: {{canceled, number}}。",
+        "activeWithFailureAndCanceled": "作業は進んでいますが、一部には対応が必要です。完了: {{completed, number}} / {{total, number}}。進行中: {{pending, number}}。再試行が必要: {{failed, number}}。停止: {{canceled, number}}。",
+        "completed": "このターンで予定した作業をすべて完了しました。",
+        "recovered": "再試行の後、このターンで予定した作業をすべて完了しました。",
+        "partial": "予定した作業の一部を完了しました。完了: {{completed, number}} / {{total, number}}。再試行が必要: {{failed, number}}。",
+        "partialWithCanceled": "予定した作業の一部を完了しました。完了: {{completed, number}} / {{total, number}}。再試行が必要: {{failed, number}}。停止: {{canceled, number}}。",
+        "failed": "予定した作業を完了できませんでした。予定数: {{total, number}}。再試行が必要: {{failed, number}}。",
+        "failedWithCanceled": "予定した作業を完了できませんでした。予定数: {{total, number}}。再試行が必要: {{failed, number}}。停止: {{canceled, number}}。",
+        "canceled": "予定した作業が完了する前に、このターンを停止しました。予定数: {{total, number}}。未完了: {{unfinished, number}}。停止: {{canceled, number}}。"
+      }
+    },
+    "attempt": "（{{n}} 回目の試行）",
+    "generic": {
+      "running": "次の手順を進めています。",
+      "done": "次の手順を完了しました。",
+      "failedTitle": "この手順を完了できませんでした"
+    },
+    "status": {
+      "stopped": "停止しました",
+      "recovered": "再試行後に復旧しました。"
+    },
+    "error": {
+      "suggestion": "エラーの詳細は下に表示されています。準備ができたら、この手順を再試行できます。"
+    },
+    "categories": {
+      "web": {
+        "running": "関連情報を探しています。",
+        "done": "関連情報を見つけました。",
+        "failedTitle": "情報の検索を完了できませんでした"
+      },
+      "search": {
+        "running": "関連するプロジェクトファイルを探しています。",
+        "done": "関連するプロジェクトファイルを見つけました。",
+        "failedTitle": "プロジェクトファイルの検索を完了できませんでした"
+      },
+      "fileRead": {
+        "running": "現在の動作を把握するため、関連ファイルを確認しています。",
+        "done": "関連ファイルを確認しました。",
+        "failedTitle": "関連ファイルを確認できませんでした"
+      },
+      "fileWrite": {
+        "running": "実装を更新しています。",
+        "done": "実装を更新しました。",
+        "failedTitle": "実装を更新できませんでした"
+      },
+      "data": {
+        "running": "現在の動作を把握するため、関連データを確認しています。",
+        "done": "関連データを確認しました。",
+        "failedTitle": "関連データを確認できませんでした"
+      },
+      "report": {
+        "running": "完成したファイルを準備しています。",
+        "done": "完成したファイルを準備しました。",
+        "failedTitle": "完成したファイルを準備できませんでした"
+      },
+      "export": {
+        "running": "完成したファイルを準備しています。",
+        "done": "完成したファイルを準備しました。",
+        "failedTitle": "完成したファイルを準備できませんでした"
+      },
+      "memory": {
+        "running": "保存済みのコンテキストを更新しています。",
+        "done": "保存済みのコンテキストを更新しました。",
+        "failedTitle": "保存済みのコンテキストを更新できませんでした"
+      },
+      "code": {
+        "running": "プロジェクトの次の手順を実行しています。",
+        "done": "プロジェクトの手順を完了しました。",
+        "failedTitle": "プロジェクトの手順を完了できませんでした"
+      },
+      "verify": {
+        "running": "変更後も正常に動作するか確認しています。",
+        "done": "変更による問題がないことを確認しました。",
+        "failedTitle": "変更の確認を完了できませんでした"
+      },
+      "office": {
+        "running": "完成したファイルを準備しています。",
+        "done": "完成したファイルを準備しました。",
+        "failedTitle": "完成したファイルを準備できませんでした"
+      }
+    },
+    "tools": {
+      "data_open": {
+        "running": "現在の動作を把握するため、関連データを確認しています。",
+        "done": "関連データを確認しました。",
+        "failedTitle": "関連データを確認できませんでした"
+      },
+      "data_get_schema": {
+        "running": "現在の動作を把握するため、関連データを確認しています。",
+        "done": "関連データを確認しました。",
+        "failedTitle": "関連データを確認できませんでした"
+      },
+      "data_run_sql": {
+        "running": "現在の動作を把握するため、関連データを確認しています。",
+        "done": "関連データを確認しました。",
+        "failedTitle": "関連データを確認できませんでした"
+      },
+      "render_report": {
+        "running": "完成したファイルを準備しています。",
+        "done": "完成したファイルを準備しました。",
+        "failedTitle": "完成したファイルを準備できませんでした"
+      },
+      "export_pdf": {
+        "running": "完成したファイルを準備しています。",
+        "done": "完成したファイルを準備しました。",
+        "failedTitle": "完成したファイルを準備できませんでした"
+      }
+    }
   }
 }

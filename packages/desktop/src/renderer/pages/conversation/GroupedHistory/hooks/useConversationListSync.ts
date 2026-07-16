@@ -5,7 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
-import type { TChatConversation } from '@/common/config/storage';
+import type { TChatConversation, TConversationRuntimeSummary } from '@/common/config/storage';
 import { addEventListener } from '@/renderer/utils/emitter';
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
@@ -47,9 +47,7 @@ const isTerminalStreamMessage = (message: { type: string; data: unknown }): bool
   );
 };
 
-const isTerminalTurnState = (state: string): boolean => {
-  return state === 'ai_waiting_input' || state === 'error' || state === 'stopped';
-};
+const isPermissionStreamMessage = (type: string): boolean => type === 'acp_permission' || type === 'permission';
 
 export type SidebarStreamGuardDecision = {
   markGenerating: boolean;
@@ -98,7 +96,7 @@ export const getSidebarStreamGuardDecision = ({
 type ConversationListSyncSnapshot = {
   conversations: TChatConversation[];
   generatingConversationIds: Set<string>;
-  completionUnreadConversationIds: Set<string>;
+  recentCompletionAtByConversationId: Map<string, number>;
 };
 
 const listeners = new Set<() => void>();
@@ -106,21 +104,24 @@ const listeners = new Set<() => void>();
 let isStoreInitialized = false;
 let conversationsState: TChatConversation[] = [];
 let generatingConversationIdsState = new Set<string>();
-let completionUnreadConversationIdsState = new Set<string>();
+let recentCompletionAtByConversationIdState = new Map<string, number>();
+let runtimeByConversationIdState = new Map<string, TConversationRuntimeSummary>();
 let completedConversationIdsState = new Set<string>();
 let conversation_idsState = new Set<string>();
-let activeConversationIdState: string | null = null;
+let latestRefreshRequestId = 0;
+let latestRuntimeRefreshRequestId = 0;
+let runtimeRefreshRequestIdByConversationId = new Map<string, number>();
 let snapshotState: ConversationListSyncSnapshot = {
   conversations: conversationsState,
   generatingConversationIds: generatingConversationIdsState,
-  completionUnreadConversationIds: completionUnreadConversationIdsState,
+  recentCompletionAtByConversationId: recentCompletionAtByConversationIdState,
 };
 
 const emitStoreChange = () => {
   snapshotState = {
     conversations: conversationsState,
     generatingConversationIds: generatingConversationIdsState,
-    completionUnreadConversationIds: completionUnreadConversationIdsState,
+    recentCompletionAtByConversationId: recentCompletionAtByConversationIdState,
   };
   listeners.forEach((listener) => listener());
 };
@@ -135,9 +136,14 @@ const subscribeConversationListSync = (listener: () => void) => {
 const getConversationListSyncSnapshot = (): ConversationListSyncSnapshot => snapshotState;
 
 const refreshConversations = () => {
+  const requestId = ++latestRefreshRequestId;
   void ipcBridge.database.getUserConversations
     .invoke({ limit: 10000 })
     .then((result) => {
+      if (requestId !== latestRefreshRequestId) {
+        return;
+      }
+
       const items = result?.items;
       if (items && Array.isArray(items)) {
         const filteredData = items.filter((conv) => {
@@ -146,7 +152,17 @@ const refreshConversations = () => {
           const extra = conv.extra as { is_health_check?: boolean; team_id?: string; teamId?: string } | undefined;
           return extra?.is_health_check !== true && !extra?.team_id && !extra?.teamId;
         });
-        conversationsState = filteredData;
+        const nextRuntimeByConversationId = new Map(runtimeByConversationIdState);
+        conversationsState = filteredData.map((conversation) => {
+          if (conversation.runtime) {
+            nextRuntimeByConversationId.set(conversation.id, conversation.runtime);
+            return conversation;
+          }
+
+          const runtime = nextRuntimeByConversationId.get(conversation.id);
+          return runtime ? { ...conversation, runtime } : conversation;
+        });
+        runtimeByConversationIdState = nextRuntimeByConversationId;
         // Use ALL conversation IDs (including team/legacy health-check rows) so the
         // responseStream listener recognises them as known and doesn't
         // trigger an infinite refreshConversations loop.
@@ -160,6 +176,10 @@ const refreshConversations = () => {
       emitStoreChange();
     })
     .catch((error) => {
+      if (requestId !== latestRefreshRequestId) {
+        return;
+      }
+
       console.error('[WorkspaceGroupedHistory] Failed to load conversations:', error);
       conversationsState = [];
       conversation_idsState = new Set();
@@ -187,23 +207,69 @@ const clearGenerating = (conversation_id: string) => {
   emitStoreChange();
 };
 
-const markCompletionUnread = (conversation_id: string) => {
-  if (completionUnreadConversationIdsState.has(conversation_id)) {
+const applyConversationRuntime = (conversation_id: string, runtime: TConversationRuntimeSummary) => {
+  runtimeByConversationIdState = new Map(runtimeByConversationIdState).set(conversation_id, runtime);
+  const conversationIndex = conversationsState.findIndex((conversation) => conversation.id === conversation_id);
+  const conversation = conversationsState[conversationIndex];
+  if (!conversation) {
     return;
   }
 
-  completionUnreadConversationIdsState = new Set(completionUnreadConversationIdsState).add(conversation_id);
+  const nextConversations = conversationsState.slice();
+  nextConversations[conversationIndex] = { ...conversation, runtime };
+  conversationsState = nextConversations;
   emitStoreChange();
 };
 
-const clearCompletionUnreadState = (conversation_id: string) => {
-  if (!completionUnreadConversationIdsState.has(conversation_id)) {
+const advanceConversationRuntimeRequest = (conversation_id: string) => {
+  const requestId = ++latestRuntimeRefreshRequestId;
+  runtimeRefreshRequestIdByConversationId = new Map(runtimeRefreshRequestIdByConversationId).set(
+    conversation_id,
+    requestId
+  );
+  return requestId;
+};
+
+const refreshConversationRuntimeState = (conversation_id: string) => {
+  const requestId = advanceConversationRuntimeRequest(conversation_id);
+  void ipcBridge.conversation.get
+    .invoke({ id: conversation_id })
+    .then((conversation) => {
+      if (runtimeRefreshRequestIdByConversationId.get(conversation_id) !== requestId || !conversation?.runtime) {
+        return;
+      }
+      applyConversationRuntime(conversation_id, conversation.runtime);
+    })
+    .catch(() => {});
+};
+
+const clearConversationRuntimeState = (conversation_id: string) => {
+  advanceConversationRuntimeRequest(conversation_id);
+  if (!runtimeByConversationIdState.has(conversation_id)) {
     return;
   }
 
-  const next = new Set(completionUnreadConversationIdsState);
-  next.delete(conversation_id);
-  completionUnreadConversationIdsState = next;
+  const nextRuntimeByConversationId = new Map(runtimeByConversationIdState);
+  nextRuntimeByConversationId.delete(conversation_id);
+  runtimeByConversationIdState = nextRuntimeByConversationId;
+};
+
+const markRecentCompletion = (conversation_id: string) => {
+  recentCompletionAtByConversationIdState = new Map(recentCompletionAtByConversationIdState).set(
+    conversation_id,
+    Date.now()
+  );
+  emitStoreChange();
+};
+
+const clearRecentCompletionState = (conversation_id: string) => {
+  if (!recentCompletionAtByConversationIdState.has(conversation_id)) {
+    return;
+  }
+
+  const nextCompletionTimes = new Map(recentCompletionAtByConversationIdState);
+  nextCompletionTimes.delete(conversation_id);
+  recentCompletionAtByConversationIdState = nextCompletionTimes;
   emitStoreChange();
 };
 
@@ -235,10 +301,6 @@ const logLateStreamIgnored = (conversation_id: string, type: string) => {
     .catch(() => {});
 };
 
-const setActiveConversationState = (conversation_id: string | null) => {
-  activeConversationIdState = conversation_id;
-};
-
 const initializeConversationListSyncStore = () => {
   if (isStoreInitialized) {
     return;
@@ -251,10 +313,17 @@ const initializeConversationListSyncStore = () => {
   ipcBridge.conversation.listChanged.on((event) => {
     if (event.action === 'deleted') {
       clearGenerating(event.conversation_id);
-      clearCompletionUnreadState(event.conversation_id);
+      clearRecentCompletionState(event.conversation_id);
+      clearConversationRuntimeState(event.conversation_id);
       clearCompleted(event.conversation_id);
     }
     refreshConversations();
+  });
+  ipcBridge.conversation.confirmation.add.on((event) => {
+    refreshConversationRuntimeState(event.conversation_id);
+  });
+  ipcBridge.conversation.confirmation.remove.on((event) => {
+    refreshConversationRuntimeState(event.conversation_id);
   });
   ipcBridge.conversation.responseStream.on((message) => {
     const conversation_id = message.conversation_id;
@@ -262,14 +331,21 @@ const initializeConversationListSyncStore = () => {
       return;
     }
 
+    const conversation = conversationsState.find((item) => item.id === conversation_id);
+    const wasWaitingApproval =
+      conversation?.runtime?.state === 'waiting_confirmation' ||
+      (conversation?.runtime?.pending_confirmations ?? 0) > 0;
     if (!conversation_idsState.has(conversation_id)) {
       refreshConversations();
+    }
+    if (isPermissionStreamMessage(message.type)) {
+      refreshConversationRuntimeState(conversation_id);
     }
 
     if (isTerminalStreamMessage(message)) {
       const wasGenerating = generatingConversationIdsState.has(conversation_id);
-      if (wasGenerating && activeConversationIdState !== conversation_id) {
-        markCompletionUnread(conversation_id);
+      if (message.type === 'finish' && wasGenerating) {
+        markRecentCompletion(conversation_id);
       }
       clearGenerating(conversation_id);
       return;
@@ -287,12 +363,17 @@ const initializeConversationListSyncStore = () => {
       return;
     }
     if (decision.markGenerating) {
+      if (wasWaitingApproval && !isPermissionStreamMessage(message.type)) {
+        refreshConversationRuntimeState(conversation_id);
+      }
       markGenerating(conversation_id);
     }
   });
   ipcBridge.conversation.turnCompleted.on((event) => {
-    if (isTerminalTurnState(event.state) && activeConversationIdState !== event.session_id) {
-      markCompletionUnread(event.session_id);
+    advanceConversationRuntimeRequest(event.session_id);
+    applyConversationRuntime(event.session_id, event.runtime);
+    if (event.state === 'ai_waiting_input') {
+      markRecentCompletion(event.session_id);
     }
     markCompleted(event.session_id);
     clearGenerating(event.session_id);
@@ -305,19 +386,11 @@ export const useConversationListSync = () => {
     initializeConversationListSyncStore();
   }, []);
 
-  const { conversations, generatingConversationIds, completionUnreadConversationIds } = useSyncExternalStore(
+  const { conversations, generatingConversationIds, recentCompletionAtByConversationId } = useSyncExternalStore(
     subscribeConversationListSync,
     getConversationListSyncSnapshot,
     getConversationListSyncSnapshot
   );
-
-  const clearCompletionUnread = useCallback((conversation_id: string) => {
-    clearCompletionUnreadState(conversation_id);
-  }, []);
-
-  const setActiveConversation = useCallback((conversation_id: string | null) => {
-    setActiveConversationState(conversation_id);
-  }, []);
 
   const isConversationGenerating = useCallback(
     (conversation_id: string) => {
@@ -326,18 +399,21 @@ export const useConversationListSync = () => {
     [generatingConversationIds]
   );
 
-  const hasCompletionUnread = useCallback(
+  const getRecentCompletionAt = useCallback(
     (conversation_id: string) => {
-      return completionUnreadConversationIds.has(conversation_id);
+      return recentCompletionAtByConversationId.get(conversation_id);
     },
-    [completionUnreadConversationIds]
+    [recentCompletionAtByConversationId]
   );
+
+  const refreshConversationRuntime = useCallback((conversation_id: string) => {
+    refreshConversationRuntimeState(conversation_id);
+  }, []);
 
   return {
     conversations,
     isConversationGenerating,
-    hasCompletionUnread,
-    clearCompletionUnread,
-    setActiveConversation,
+    getRecentCompletionAt,
+    refreshConversationRuntime,
   };
 };

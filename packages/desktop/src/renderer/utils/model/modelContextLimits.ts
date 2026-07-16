@@ -27,6 +27,11 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   'gpt-5.1-chat': 128_000,
   'gpt-5': 400_000,
   'gpt-5-chat': 128_000,
+  'gpt-5-mini': 400_000,
+  'gpt-5-nano': 400_000,
+  'gpt-4.1': 1_047_576,
+  'gpt-4.1-mini': 1_047_576,
+  'gpt-4.1-nano': 1_047_576,
   'gpt-4o': 128_000,
   'gpt-4o-mini': 128_000,
   'gpt-4-turbo': 128_000,
@@ -39,21 +44,56 @@ const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   'o1-mini': 128_000,
   o3: 200_000,
   'o3-mini': 200_000,
+  'o4-mini': 200_000,
 
   // Claude 系列
+  'claude-fable-5': 1_000_000,
+  'claude-opus-4-8': 1_000_000,
+  'claude-opus-4-7': 1_000_000,
+  'claude-opus-4-6': 1_000_000,
+  'claude-sonnet-5': 1_000_000,
+  'claude-sonnet-4-6': 1_000_000,
+  'claude-opus-4-5': 200_000,
+  'claude-haiku-4-5': 200_000,
+  'claude-sonnet-4-5': 200_000,
+  'claude-3-7-sonnet': 200_000,
   'claude-opus-4.5': 200_000,
   'claude-haiku-4.5': 200_000,
-  'claude-sonnet-4.5': 1_000_000,
+  'claude-sonnet-4.5': 200_000,
   'claude-opus-4.1': 200_000,
   'claude-opus-4': 200_000,
-  'claude-sonnet-4': 1_000_000,
+  'claude-sonnet-4': 200_000,
   'claude-3.7-sonnet': 200_000,
   'claude-3.5-haiku': 200_000,
   'claude-3-opus': 200_000,
   'claude-3-haiku': 200_000,
 
   // MiniMax 系列
-  'minimax-m2.5': 192_000,
+  'minimax-m3': 1_000_000,
+  'minimax-m2.7': 204_800,
+  'minimax-m2.5': 204_800,
+  'minimax-m2.1': 204_800,
+  'minimax-m2': 204_800,
+
+  // DeepSeek 系列
+  'deepseek-chat': 128_000,
+  'deepseek-reasoner': 128_000,
+
+  // xAI 系列
+  'grok-4.5': 500_000,
+  'grok-4.3': 1_000_000,
+  'grok-build-0.1': 256_000,
+
+  // Mistral 系列
+  'mistral-large-3': 256_000,
+  'mistral-medium-3.5': 256_000,
+  'mistral-small-4': 256_000,
+  codestral: 128_000,
+  'devstral-2': 256_000,
+
+  // Qwen 系列
+  'qwen3-235b-a22b-instruct-2507': 262_144,
+  'qwen2.5-turbo': 1_000_000,
 };
 
 /**

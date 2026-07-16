@@ -91,10 +91,9 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
     addDomSnippet,
   } = usePreviewContext();
 
-  // The artifact pane is always mounted while expanded; ChatLayout owns its
-  // visibility via collapse state, so the pane no longer self-hides on the
-  // preview `isOpen` flag. When there is no active tab it renders the empty
-  // state below.
+  // ChatLayout owns pane visibility. An expanded pane without tabs immediately
+  // asks its owner to collapse, while the empty state remains as a defensive
+  // fallback for hosts that do not provide onRequestCollapse.
   const handleClosePanel = onRequestCollapse ?? closePreview;
   const layout = useLayoutContext();
 
@@ -457,6 +456,10 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ fullBleed = false, onReques
     if (!metadata?.file_path) return;
     void ipcBridge.shell.showItemInFolder.invoke(metadata.file_path).catch(() => {});
   }, [metadata?.file_path]);
+
+  useEffect(() => {
+    if (tabs.length === 0) onRequestCollapse?.();
+  }, [onRequestCollapse, tabs.length]);
 
   // 没有打开的 tab 时展示占位空状态，而不是按类型渲染内容
   // Show a placeholder empty state instead of type-specific content when no tab is

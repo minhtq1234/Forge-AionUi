@@ -49,6 +49,13 @@ function createTextMessage(msgId: string, content: string): IMessageText {
   };
 }
 
+function createUserMessage(msgId: string, content: string): IMessageText {
+  return {
+    ...createTextMessage(msgId, content),
+    position: 'right',
+  };
+}
+
 function createThinkingMessage(msgId: string, content: string): IMessageThinking {
   return {
     id: `thinking-${msgId}-${content}`,
@@ -239,15 +246,74 @@ describe('message merging', () => {
     await flushMessageQueue();
 
     act(() => {
-      result.current.replaceWithAnchorWindow(CONVERSATION_ID, [
-        createTextMessage('user-anchor', 'anchor'),
-        createTextMessage('agent-1', 'partial'),
-      ]);
+      result.current.replaceWithAnchorWindow(
+        CONVERSATION_ID,
+        [createTextMessage('user-anchor', 'anchor'), createTextMessage('agent-1', 'partial')],
+        { hasMoreAfter: false }
+      );
     });
 
     expect(result.current.messages.map((message) => message.msg_id)).toEqual(['user-anchor', 'agent-1', 'agent-2']);
     expect((result.current.messages[1] as IMessageText).content.content).toBe('partial streaming response');
     expect((result.current.messages[2] as IMessageText).content.content).toBe('live tail');
+  });
+
+  it('preserves a disjoint live tail behind a hidden marker when an anchor window has newer pages', async () => {
+    const { result } = renderHook(() => useAnchorMessageHarness(), {
+      wrapper: TestWrapper,
+    });
+
+    act(() => {
+      result.current.addOrUpdateMessage(createUserMessage('live-user', 'current question'));
+      result.current.addOrUpdateMessage(createTextMessage('live-agent', 'current answer'));
+    });
+    await flushMessageQueue();
+
+    act(() => {
+      result.current.replaceWithAnchorWindow(
+        CONVERSATION_ID,
+        [createUserMessage('anchor-user', 'older question'), createTextMessage('anchor-agent', 'older answer')],
+        { hasMoreAfter: true }
+      );
+    });
+
+    expect(result.current.messages).toHaveLength(5);
+    expect(result.current.messages.map((message) => message.msg_id)).toEqual([
+      'anchor-user',
+      'anchor-agent',
+      undefined,
+      'live-user',
+      'live-agent',
+    ]);
+    expect(result.current.messages[2]).toMatchObject({ type: 'tips', hidden: true });
+  });
+
+  it('keeps later live assistant arrivals after an anchored history gap', async () => {
+    const { result } = renderHook(() => useAnchorMessageHarness(), {
+      wrapper: TestWrapper,
+    });
+
+    act(() => {
+      result.current.replaceWithAnchorWindow(
+        CONVERSATION_ID,
+        [createUserMessage('anchor-user', 'older question'), createTextMessage('anchor-agent', 'same answer')],
+        { hasMoreAfter: true }
+      );
+    });
+
+    act(() => {
+      result.current.addOrUpdateMessage(createTextMessage('live-agent', 'same answer'));
+    });
+    await flushMessageQueue();
+
+    expect(result.current.messages).toHaveLength(4);
+    expect(result.current.messages.map((message) => message.msg_id)).toEqual([
+      'anchor-user',
+      'anchor-agent',
+      undefined,
+      'live-agent',
+    ]);
+    expect(result.current.messages[2]).toMatchObject({ type: 'tips', hidden: true });
   });
 
   it('requests compact tool content when hydrating historical messages', async () => {

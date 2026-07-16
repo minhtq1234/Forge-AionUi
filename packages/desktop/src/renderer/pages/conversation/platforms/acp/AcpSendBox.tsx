@@ -4,6 +4,7 @@ import { isBackendHttpError } from '@/common/adapter/httpBridge';
 import { isSideQuestionSupported } from '@/common/chat/sideQuestion';
 import { parseError, uuid } from '@/common/utils';
 import AgentModeSelector from '@/renderer/components/agent/AgentModeSelector';
+import ContextUsageIndicator from '@/renderer/components/agent/ContextUsageIndicator';
 import CommandQueuePanel from '@/renderer/components/chat/CommandQueuePanel';
 import MobileActionSheet, {
   type MobileActionSheetEntry,
@@ -23,6 +24,7 @@ import { createSetUploadFile, useSendBoxFiles } from '@/renderer/hooks/chat/useS
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useOpenFileSelector } from '@/renderer/hooks/file/useOpenFileSelector';
+import { useLocalTokenUsage } from '@/renderer/hooks/useLocalTokenUsage';
 import { useLatestRef } from '@/renderer/hooks/ui/useLatestRef';
 import { useAddOrUpdateMessage } from '@/renderer/pages/conversation/Messages/hooks';
 import {
@@ -121,8 +123,17 @@ const AcpSendBox: React.FC<{
   teamSendMessage,
   teamRuntime,
 }) => {
-  const { aiProcessing, setAiProcessing, resetState, hasThinkingMessage, slashCommands, fetchSlashCommands } =
-    messageState;
+  const {
+    aiProcessing,
+    setAiProcessing,
+    resetState,
+    tokenUsage,
+    context_limit,
+    hasThinkingMessage,
+    slashCommands,
+    fetchSlashCommands,
+  } = messageState;
+  const localUsage = useLocalTokenUsage();
   const { t } = useTranslation();
   const teamPermission = useTeamPermission();
   // In team mode, all agents show the permission mode selector (members don't propagate)
@@ -709,6 +720,11 @@ Please check your local CLI tool authentication status`,
                 beforeRuntimeSync={prepareRuntimeConfig}
               />
             )}
+            <ContextUsageIndicator
+              tokenUsage={tokenUsage}
+              context_limit={context_limit > 0 ? context_limit : undefined}
+              localUsage={localUsage}
+            />
           </div>
         }
         prefix={

@@ -530,7 +530,15 @@
     "queueTooLarge": "队列数据过大，无法安全缓存，请先移除部分排队指令。"
   },
   "contextUsage": {
-    "contextUsed": "上下文已使用"
+    "contextUsed": "上下文已使用",
+    "contextWindow": "上下文窗口",
+    "percentUsed": "已使用 {{percent}}%",
+    "tokenCount": "{{used}} / {{limit}} 个令牌",
+    "localTokenUsage": "本地令牌用量",
+    "today": "今天",
+    "weekToDate": "本周至今",
+    "monthToDate": "本月至今",
+    "triggerLabel": "显示上下文用量"
   },
   "skill_generator": {
     "title": "生成 Skill/规则",
@@ -571,6 +579,9 @@
       "failed": "失败",
       "unsupported": "不支持"
     }
+  },
+  "status": {
+    "waitingApproval": "等待你的批准"
   },
   "runtimePreparing": {
     "sendboxHint": "正在准备运行环境。首次启动可能会稍慢一些。"

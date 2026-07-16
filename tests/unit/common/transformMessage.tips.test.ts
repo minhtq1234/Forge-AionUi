@@ -16,6 +16,10 @@ const tip = (content: string, type: 'success' | 'info' | 'warning' | 'error' = '
 });
 
 describe('transformMessage — aioncore diagnostic tips are filtered out', () => {
+  it('drops Microcompact telemetry tips', () => {
+    expect(transformMessage(tip('Microcompact: cleared 6 tool results (~108 tokens freed)'))).toBeUndefined();
+  });
+
   it('drops "Token watermark override" telemetry tips', () => {
     expect(
       transformMessage(tip('Token watermark override: provider=0, local_estimate=19756, using=19756'))

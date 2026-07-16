@@ -8,7 +8,7 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { useWorkspaceCollapse } from '@/renderer/pages/conversation/hooks/useWorkspaceCollapse';
-import { WORKSPACE_EXPAND_EVENT } from '@/renderer/utils/workspace/workspaceEvents';
+import { WORKSPACE_EXPAND_EVENT, WORKSPACE_HAS_FILES_EVENT } from '@/renderer/utils/workspace/workspaceEvents';
 
 describe('useWorkspaceCollapse — explicit expand', () => {
   beforeEach(() => {
@@ -26,6 +26,7 @@ describe('useWorkspaceCollapse — explicit expand', () => {
         isMobile: false,
         conversation_id: 'conv-1',
         preferenceKey: 'conv-1',
+        autoExpandOnWorkspaceFiles: false,
       })
     );
 
@@ -56,5 +57,45 @@ describe('useWorkspaceCollapse — explicit expand', () => {
     });
 
     expect(result.current.rightSiderCollapsed).toBe(true);
+  });
+
+  it('keeps a single-chat artifact pane collapsed when project files are present', () => {
+    const { result } = renderHook(() =>
+      useWorkspaceCollapse({
+        workspaceEnabled: true,
+        isMobile: false,
+        conversation_id: 'conv-3',
+        preferenceKey: 'conv-3',
+        autoExpandOnWorkspaceFiles: false,
+      })
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(WORKSPACE_HAS_FILES_EVENT, { detail: { hasFiles: true, isInitial: false } })
+      );
+    });
+
+    expect(result.current.rightSiderCollapsed).toBe(true);
+  });
+
+  it('keeps file-driven expansion for a team workspace pane', () => {
+    const { result } = renderHook(() =>
+      useWorkspaceCollapse({
+        workspaceEnabled: true,
+        isMobile: false,
+        conversation_id: 'conv-4',
+        preferenceKey: 'team-1',
+        autoExpandOnWorkspaceFiles: true,
+      })
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(WORKSPACE_HAS_FILES_EVENT, { detail: { hasFiles: true, isInitial: false } })
+      );
+    });
+
+    expect(result.current.rightSiderCollapsed).toBe(false);
   });
 });

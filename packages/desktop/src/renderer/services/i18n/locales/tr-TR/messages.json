@@ -66,5 +66,144 @@
     "yesAlwaysAllowTool": "Evet, \"{{serverName}}\" sunucusundan \"{{toolName}}\" aracına her zaman izin ver",
     "yesAlwaysAllowServer": "Evet, \"{{serverName}}\" sunucusundaki tüm araçlara her zaman izin ver",
     "no": "Hayır (esc)"
+  },
+  "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "Çalışma sürüyor (toplam {{total, number}})",
+        "completed": "Çalışma tamamlandı (toplam {{total, number}})",
+        "recovered": "Çalışma kurtarıldı ve tamamlandı (toplam {{total, number}})",
+        "partial": "Çalışma kısmen tamamlandı (toplam {{total, number}})",
+        "failed": "Çalışma tamamlanamadı (toplam {{total, number}})",
+        "canceled": "Çalışma durduruldu (toplam {{total, number}})"
+      },
+      "activity": "Bu turda {{categories}} yapıldı.",
+      "subject": "Odak: {{subject}}.",
+      "overflow": "{{count, number}} daha",
+      "category": {
+        "web": "Web araması ({{count, number}})",
+        "search": "Proje araması ({{count, number}})",
+        "fileRead": "Dosya incelemesi ({{count, number}})",
+        "fileWrite": "Uygulama güncellemesi ({{count, number}})",
+        "data": "Veri incelemesi ({{count, number}})",
+        "report": "Rapor görevi ({{count, number}})",
+        "export": "Dışa aktarma ({{count, number}})",
+        "memory": "Bellek güncellemesi ({{count, number}})",
+        "code": "Proje adımı ({{count, number}})",
+        "verify": "Doğrulama ({{count, number}})",
+        "office": "Belge görevi ({{count, number}})",
+        "generic": "Proje adımı ({{count, number}})"
+      },
+      "outcome": {
+        "active": "Çalışma iyi ilerliyor. Tamamlanan: {{completed, number}} / {{total, number}}. Devam eden: {{pending, number}}.",
+        "activeWithFailure": "Çalışma ilerliyor, ancak bazı adımların yeniden denenmesi gerekiyor. Tamamlanan: {{completed, number}} / {{total, number}}. Devam eden: {{pending, number}}. Yeniden denenmesi gereken: {{failed, number}}.",
+        "activeWithCanceled": "Çalışma ilerliyor, ancak bazı adımlar durduruldu. Tamamlanan: {{completed, number}} / {{total, number}}. Devam eden: {{pending, number}}. Durdurulan: {{canceled, number}}.",
+        "activeWithFailureAndCanceled": "Çalışma ilerliyor, ancak bazı adımların incelenmesi gerekiyor. Tamamlanan: {{completed, number}} / {{total, number}}. Devam eden: {{pending, number}}. Yeniden denenmesi gereken: {{failed, number}}. Durdurulan: {{canceled, number}}.",
+        "completed": "Bu tur için planlanan her şeyi tamamladım.",
+        "recovered": "Çalışmayı yeniden denedikten sonra bu tur için planlanan her şeyi tamamladım.",
+        "partial": "Planlanan çalışmanın bir bölümünü tamamladım. Tamamlanan: {{completed, number}} / {{total, number}}. Yeniden denenmesi gereken: {{failed, number}}.",
+        "partialWithCanceled": "Planlanan çalışmanın bir bölümünü tamamladım. Tamamlanan: {{completed, number}} / {{total, number}}. Yeniden denenmesi gereken: {{failed, number}}. Durdurulan: {{canceled, number}}.",
+        "failed": "Planlanan çalışmayı tamamlayamadım. Planlanan: {{total, number}}. Yeniden denenmesi gereken: {{failed, number}}.",
+        "failedWithCanceled": "Planlanan çalışmayı tamamlayamadım. Planlanan: {{total, number}}. Yeniden denenmesi gereken: {{failed, number}}. Durdurulan: {{canceled, number}}.",
+        "canceled": "Planlanan çalışma tamamlanmadan bu turu durdurdum. Planlanan: {{total, number}}. Tamamlanmayan: {{unfinished, number}}. Durdurulan: {{canceled, number}}."
+      }
+    },
+    "attempt": "({{n}}. deneme)",
+    "generic": {
+      "running": "Sıradaki adım üzerinde çalışıyorum.",
+      "done": "Sıradaki adımı tamamladım.",
+      "failedTitle": "Bu adımı tamamlayamadım"
+    },
+    "status": {
+      "stopped": "Durduruldu",
+      "recovered": "Yeniden denemenin ardından kurtarıldı."
+    },
+    "error": {
+      "suggestion": "Hata ayrıntıları aşağıda yer alıyor. Hazır olduğunuzda bu adımı yeniden deneyebilirsiniz."
+    },
+    "categories": {
+      "web": {
+        "running": "İlgili bilgileri buluyorum.",
+        "done": "İlgili bilgileri buldum.",
+        "failedTitle": "Bilgi aramasını tamamlayamadım"
+      },
+      "search": {
+        "running": "İlgili proje dosyalarını buluyorum.",
+        "done": "İlgili proje dosyalarını buldum.",
+        "failedTitle": "Proje dosyası aramasını tamamlayamadım"
+      },
+      "fileRead": {
+        "running": "Mevcut davranışı anlamak için ilgili dosyaları inceliyorum.",
+        "done": "İlgili dosyaları inceledim.",
+        "failedTitle": "İlgili dosyaları inceleyemedim"
+      },
+      "fileWrite": {
+        "running": "Uygulama kodunu güncelliyorum.",
+        "done": "Uygulama kodunu güncelledim.",
+        "failedTitle": "Uygulama kodunu güncelleyemedim"
+      },
+      "data": {
+        "running": "Mevcut davranışı anlamak için ilgili verileri inceliyorum.",
+        "done": "İlgili verileri inceledim.",
+        "failedTitle": "İlgili verileri inceleyemedim"
+      },
+      "report": {
+        "running": "Tamamlanmış dosyayı hazırlıyorum.",
+        "done": "Tamamlanmış dosyayı hazırladım.",
+        "failedTitle": "Tamamlanmış dosyayı hazırlayamadım"
+      },
+      "export": {
+        "running": "Tamamlanmış dosyayı hazırlıyorum.",
+        "done": "Tamamlanmış dosyayı hazırladım.",
+        "failedTitle": "Tamamlanmış dosyayı hazırlayamadım"
+      },
+      "memory": {
+        "running": "Kaydedilmiş bağlamı güncelliyorum.",
+        "done": "Kaydedilmiş bağlamı güncelledim.",
+        "failedTitle": "Kaydedilmiş bağlamı güncelleyemedim"
+      },
+      "code": {
+        "running": "Sıradaki proje adımını çalıştırıyorum.",
+        "done": "Proje adımını tamamladım.",
+        "failedTitle": "Proje adımını tamamlayamadım"
+      },
+      "verify": {
+        "running": "Her şeyin çalışmaya devam ettiğinden emin olmak için değişiklikleri kontrol ediyorum.",
+        "done": "Değişiklikleri olası sorunlara karşı kontrol ettim.",
+        "failedTitle": "Değişiklikleri kontrol etmeyi tamamlayamadım"
+      },
+      "office": {
+        "running": "Tamamlanmış dosyayı hazırlıyorum.",
+        "done": "Tamamlanmış dosyayı hazırladım.",
+        "failedTitle": "Tamamlanmış dosyayı hazırlayamadım"
+      }
+    },
+    "tools": {
+      "data_open": {
+        "running": "Mevcut davranışı anlamak için ilgili verileri inceliyorum.",
+        "done": "İlgili verileri inceledim.",
+        "failedTitle": "İlgili verileri inceleyemedim"
+      },
+      "data_get_schema": {
+        "running": "Mevcut davranışı anlamak için ilgili verileri inceliyorum.",
+        "done": "İlgili verileri inceledim.",
+        "failedTitle": "İlgili verileri inceleyemedim"
+      },
+      "data_run_sql": {
+        "running": "Mevcut davranışı anlamak için ilgili verileri inceliyorum.",
+        "done": "İlgili verileri inceledim.",
+        "failedTitle": "İlgili verileri inceleyemedim"
+      },
+      "render_report": {
+        "running": "Tamamlanmış dosyayı hazırlıyorum.",
+        "done": "Tamamlanmış dosyayı hazırladım.",
+        "failedTitle": "Tamamlanmış dosyayı hazırlayamadım"
+      },
+      "export_pdf": {
+        "running": "Tamamlanmış dosyayı hazırlıyorum.",
+        "done": "Tamamlanmış dosyayı hazırladım.",
+        "failedTitle": "Tamamlanmış dosyayı hazırlayamadım"
+      }
+    }
   }
 }

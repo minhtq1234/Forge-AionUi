@@ -66,5 +66,144 @@
     "yesAlwaysAllowTool": "是，始終允許來自伺服器 \"{{serverName}}\" 的工具 \"{{toolName}}\"",
     "yesAlwaysAllowServer": "是，始終允許來自伺服器 \"{{serverName}}\" 的所有工具",
     "no": "否 (esc)"
+  },
+  "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "工作進行中（共 {{total, number}} 項）",
+        "completed": "工作已完成（共 {{total, number}} 項）",
+        "recovered": "工作已恢復並完成（共 {{total, number}} 項）",
+        "partial": "工作部分完成（共 {{total, number}} 項）",
+        "failed": "無法完成工作（共 {{total, number}} 項）",
+        "canceled": "工作已停止（共 {{total, number}} 項）"
+      },
+      "activity": "本輪涵蓋了{{categories}}。",
+      "subject": "重點：{{subject}}。",
+      "overflow": "另外 {{count, number}} 項",
+      "category": {
+        "web": "網頁搜尋（{{count, number}}）",
+        "search": "專案搜尋（{{count, number}}）",
+        "fileRead": "檔案檢閱（{{count, number}}）",
+        "fileWrite": "實作更新（{{count, number}}）",
+        "data": "資料檢閱（{{count, number}}）",
+        "report": "報告工作（{{count, number}}）",
+        "export": "匯出（{{count, number}}）",
+        "memory": "記憶更新（{{count, number}}）",
+        "code": "專案步驟（{{count, number}}）",
+        "verify": "驗證（{{count, number}}）",
+        "office": "文件工作（{{count, number}}）",
+        "generic": "專案步驟（{{count, number}}）"
+      },
+      "outcome": {
+        "active": "工作進展順利。已完成：{{completed, number}} / {{total, number}}。仍在進行：{{pending, number}}。",
+        "activeWithFailure": "工作正在推進，但部分步驟需要再次嘗試。已完成：{{completed, number}} / {{total, number}}。仍在進行：{{pending, number}}。需要再次嘗試：{{failed, number}}。",
+        "activeWithCanceled": "工作正在推進，但部分步驟已停止。已完成：{{completed, number}} / {{total, number}}。仍在進行：{{pending, number}}。已停止：{{canceled, number}}。",
+        "activeWithFailureAndCanceled": "工作正在推進，但部分步驟需要處理。已完成：{{completed, number}} / {{total, number}}。仍在進行：{{pending, number}}。需要再次嘗試：{{failed, number}}。已停止：{{canceled, number}}。",
+        "completed": "我已完成本輪計劃的全部工作。",
+        "recovered": "重新嘗試工作後，我已完成本輪計劃的全部工作。",
+        "partial": "我已完成部分計劃工作。已完成：{{completed, number}} / {{total, number}}。需要再次嘗試：{{failed, number}}。",
+        "partialWithCanceled": "我已完成部分計劃工作。已完成：{{completed, number}} / {{total, number}}。需要再次嘗試：{{failed, number}}。已停止：{{canceled, number}}。",
+        "failed": "我未能完成計劃工作。計劃工作：{{total, number}}。需要再次嘗試：{{failed, number}}。",
+        "failedWithCanceled": "我未能完成計劃工作。計劃工作：{{total, number}}。需要再次嘗試：{{failed, number}}。已停止：{{canceled, number}}。",
+        "canceled": "我在計劃工作完成前停止了本輪。計劃工作：{{total, number}}。尚未完成：{{unfinished, number}}。已停止：{{canceled, number}}。"
+      }
+    },
+    "attempt": "（第 {{n}} 次嘗試）",
+    "generic": {
+      "running": "我正在處理下一個步驟。",
+      "done": "已完成下一個步驟。",
+      "failedTitle": "我無法完成此步驟"
+    },
+    "status": {
+      "stopped": "已停止",
+      "recovered": "重試後已恢復。"
+    },
+    "error": {
+      "suggestion": "下方提供了錯誤詳細資料。準備好後，您可以重試此步驟。"
+    },
+    "categories": {
+      "web": {
+        "running": "我正在尋找相關資訊。",
+        "done": "已找到相關資訊。",
+        "failedTitle": "我無法完成資訊搜尋"
+      },
+      "search": {
+        "running": "我正在尋找相關的專案檔案。",
+        "done": "已找到相關的專案檔案。",
+        "failedTitle": "我無法完成專案檔案搜尋"
+      },
+      "fileRead": {
+        "running": "我正在檢閱相關檔案，以瞭解目前的運作方式。",
+        "done": "已檢閱相關檔案。",
+        "failedTitle": "我無法檢閱相關檔案"
+      },
+      "fileWrite": {
+        "running": "我正在更新實作。",
+        "done": "已更新實作。",
+        "failedTitle": "我無法更新實作"
+      },
+      "data": {
+        "running": "我正在檢閱相關資料，以瞭解目前的運作方式。",
+        "done": "已檢閱相關資料。",
+        "failedTitle": "我無法檢閱相關資料"
+      },
+      "report": {
+        "running": "我正在準備最終檔案。",
+        "done": "已準備好最終檔案。",
+        "failedTitle": "我無法準備最終檔案"
+      },
+      "export": {
+        "running": "我正在準備最終檔案。",
+        "done": "已準備好最終檔案。",
+        "failedTitle": "我無法準備最終檔案"
+      },
+      "memory": {
+        "running": "我正在更新已儲存的內容。",
+        "done": "已更新儲存的內容。",
+        "failedTitle": "我無法更新儲存的內容"
+      },
+      "code": {
+        "running": "我正在執行下一個專案步驟。",
+        "done": "已完成該專案步驟。",
+        "failedTitle": "我無法完成該專案步驟"
+      },
+      "verify": {
+        "running": "我正在檢查這些變更，確保一切仍正常運作。",
+        "done": "已完成變更檢查。",
+        "failedTitle": "我無法完成變更檢查"
+      },
+      "office": {
+        "running": "我正在準備最終檔案。",
+        "done": "已準備好最終檔案。",
+        "failedTitle": "我無法準備最終檔案"
+      }
+    },
+    "tools": {
+      "data_open": {
+        "running": "我正在檢閱相關資料，以瞭解目前的運作方式。",
+        "done": "已檢閱相關資料。",
+        "failedTitle": "我無法檢閱相關資料"
+      },
+      "data_get_schema": {
+        "running": "我正在檢閱相關資料，以瞭解目前的運作方式。",
+        "done": "已檢閱相關資料。",
+        "failedTitle": "我無法檢閱相關資料"
+      },
+      "data_run_sql": {
+        "running": "我正在檢閱相關資料，以瞭解目前的運作方式。",
+        "done": "已檢閱相關資料。",
+        "failedTitle": "我無法檢閱相關資料"
+      },
+      "render_report": {
+        "running": "我正在準備最終檔案。",
+        "done": "已準備好最終檔案。",
+        "failedTitle": "我無法準備最終檔案"
+      },
+      "export_pdf": {
+        "running": "我正在準備最終檔案。",
+        "done": "已準備好最終檔案。",
+        "failedTitle": "我無法準備最終檔案"
+      }
+    }
   }
 }

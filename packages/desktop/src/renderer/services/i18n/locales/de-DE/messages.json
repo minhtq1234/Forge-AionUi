@@ -66,5 +66,144 @@
     "yesAlwaysAllowTool": "Ja, Tool \"{{toolName}}\" vom Server \"{{serverName}}\" immer erlauben",
     "yesAlwaysAllowServer": "Ja, alle Tools vom Server \"{{serverName}}\" immer erlauben",
     "no": "Nein (Esc)"
+  },
+  "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "Arbeit läuft (insgesamt {{total, number}})",
+        "completed": "Arbeit abgeschlossen (insgesamt {{total, number}})",
+        "recovered": "Arbeit wiederhergestellt und abgeschlossen (insgesamt {{total, number}})",
+        "partial": "Arbeit teilweise abgeschlossen (insgesamt {{total, number}})",
+        "failed": "Arbeit konnte nicht abgeschlossen werden (insgesamt {{total, number}})",
+        "canceled": "Arbeit gestoppt (insgesamt {{total, number}})"
+      },
+      "activity": "Diese Runde umfasste {{categories}}.",
+      "subject": "Fokus: {{subject}}.",
+      "overflow": "{{count, number}} weitere",
+      "category": {
+        "web": "Websuche ({{count, number}})",
+        "search": "Projektsuche ({{count, number}})",
+        "fileRead": "Dateiprüfung ({{count, number}})",
+        "fileWrite": "Implementierungsänderung ({{count, number}})",
+        "data": "Datenprüfung ({{count, number}})",
+        "report": "Berichtsaufgabe ({{count, number}})",
+        "export": "Datenexport ({{count, number}})",
+        "memory": "Speicheraktualisierung ({{count, number}})",
+        "code": "Projektschritt ({{count, number}})",
+        "verify": "Überprüfung ({{count, number}})",
+        "office": "Dokumentaufgabe ({{count, number}})",
+        "generic": "Projektschritt ({{count, number}})"
+      },
+      "outcome": {
+        "active": "Ich komme gut voran. Abgeschlossen: {{completed, number}} von {{total, number}}. Noch in Arbeit: {{pending, number}}.",
+        "activeWithFailure": "Ich komme voran, einige Arbeitsschritte brauchen jedoch einen weiteren Versuch. Abgeschlossen: {{completed, number}} von {{total, number}}. Noch in Arbeit: {{pending, number}}. Erneut zu versuchen: {{failed, number}}.",
+        "activeWithCanceled": "Ich komme voran, einige Arbeitsschritte wurden jedoch gestoppt. Abgeschlossen: {{completed, number}} von {{total, number}}. Noch in Arbeit: {{pending, number}}. Gestoppt: {{canceled, number}}.",
+        "activeWithFailureAndCanceled": "Ich komme voran, einige Arbeitsschritte brauchen jedoch Aufmerksamkeit. Abgeschlossen: {{completed, number}} von {{total, number}}. Noch in Arbeit: {{pending, number}}. Erneut zu versuchen: {{failed, number}}. Gestoppt: {{canceled, number}}.",
+        "completed": "Ich habe alles abgeschlossen, was für diese Runde geplant war.",
+        "recovered": "Nach einem erneuten Versuch habe ich alles abgeschlossen, was für diese Runde geplant war.",
+        "partial": "Ich habe einen Teil der geplanten Arbeit abgeschlossen. Abgeschlossen: {{completed, number}} von {{total, number}}. Erneut zu versuchen: {{failed, number}}.",
+        "partialWithCanceled": "Ich habe einen Teil der geplanten Arbeit abgeschlossen. Abgeschlossen: {{completed, number}} von {{total, number}}. Erneut zu versuchen: {{failed, number}}. Gestoppt: {{canceled, number}}.",
+        "failed": "Ich konnte die geplante Arbeit nicht abschließen. Geplante Arbeitsschritte: {{total, number}}. Erneut zu versuchen: {{failed, number}}.",
+        "failedWithCanceled": "Ich konnte die geplante Arbeit nicht abschließen. Geplante Arbeitsschritte: {{total, number}}. Erneut zu versuchen: {{failed, number}}. Gestoppt: {{canceled, number}}.",
+        "canceled": "Ich habe diese Runde gestoppt, bevor die geplante Arbeit abgeschlossen war. Geplante Arbeitsschritte: {{total, number}}. Noch nicht abgeschlossen: {{unfinished, number}}. Gestoppt: {{canceled, number}}."
+      }
+    },
+    "attempt": "(Versuch {{n}})",
+    "generic": {
+      "running": "Ich arbeite am nächsten Schritt.",
+      "done": "Ich habe den nächsten Schritt abgeschlossen.",
+      "failedTitle": "Ich konnte diesen Schritt nicht abschließen"
+    },
+    "status": {
+      "stopped": "Gestoppt",
+      "recovered": "Nach erneutem Versuch wiederhergestellt."
+    },
+    "error": {
+      "suggestion": "Die Fehlerdetails finden Sie unten. Wenn Sie bereit sind, können Sie diesen Schritt erneut versuchen."
+    },
+    "categories": {
+      "web": {
+        "running": "Ich suche nach den relevanten Informationen.",
+        "done": "Ich habe die relevanten Informationen gefunden.",
+        "failedTitle": "Ich konnte die Informationssuche nicht abschließen"
+      },
+      "search": {
+        "running": "Ich suche nach den relevanten Projektdateien.",
+        "done": "Ich habe die relevanten Projektdateien gefunden.",
+        "failedTitle": "Ich konnte die Suche nach Projektdateien nicht abschließen"
+      },
+      "fileRead": {
+        "running": "Ich prüfe die relevanten Dateien, um das aktuelle Verhalten zu verstehen.",
+        "done": "Ich habe die relevanten Dateien geprüft.",
+        "failedTitle": "Ich konnte die relevanten Dateien nicht prüfen"
+      },
+      "fileWrite": {
+        "running": "Ich aktualisiere die Implementierung.",
+        "done": "Ich habe die Implementierung aktualisiert.",
+        "failedTitle": "Ich konnte die Implementierung nicht aktualisieren"
+      },
+      "data": {
+        "running": "Ich prüfe die relevanten Daten, um das aktuelle Verhalten zu verstehen.",
+        "done": "Ich habe die relevanten Daten geprüft.",
+        "failedTitle": "Ich konnte die relevanten Daten nicht prüfen"
+      },
+      "report": {
+        "running": "Ich bereite die fertige Datei vor.",
+        "done": "Ich habe die fertige Datei vorbereitet.",
+        "failedTitle": "Ich konnte die fertige Datei nicht vorbereiten"
+      },
+      "export": {
+        "running": "Ich bereite die fertige Datei vor.",
+        "done": "Ich habe die fertige Datei vorbereitet.",
+        "failedTitle": "Ich konnte die fertige Datei nicht vorbereiten"
+      },
+      "memory": {
+        "running": "Ich aktualisiere den gespeicherten Kontext.",
+        "done": "Ich habe den gespeicherten Kontext aktualisiert.",
+        "failedTitle": "Ich konnte den gespeicherten Kontext nicht aktualisieren"
+      },
+      "code": {
+        "running": "Ich führe den nächsten Projektschritt aus.",
+        "done": "Ich habe den Projektschritt abgeschlossen.",
+        "failedTitle": "Ich konnte den Projektschritt nicht abschließen"
+      },
+      "verify": {
+        "running": "Ich prüfe die Änderungen, damit weiterhin alles funktioniert.",
+        "done": "Ich habe die Änderungen auf Probleme geprüft.",
+        "failedTitle": "Ich konnte die Prüfung der Änderungen nicht abschließen"
+      },
+      "office": {
+        "running": "Ich bereite die fertige Datei vor.",
+        "done": "Ich habe die fertige Datei vorbereitet.",
+        "failedTitle": "Ich konnte die fertige Datei nicht vorbereiten"
+      }
+    },
+    "tools": {
+      "data_open": {
+        "running": "Ich prüfe die relevanten Daten, um das aktuelle Verhalten zu verstehen.",
+        "done": "Ich habe die relevanten Daten geprüft.",
+        "failedTitle": "Ich konnte die relevanten Daten nicht prüfen"
+      },
+      "data_get_schema": {
+        "running": "Ich prüfe die relevanten Daten, um das aktuelle Verhalten zu verstehen.",
+        "done": "Ich habe die relevanten Daten geprüft.",
+        "failedTitle": "Ich konnte die relevanten Daten nicht prüfen"
+      },
+      "data_run_sql": {
+        "running": "Ich prüfe die relevanten Daten, um das aktuelle Verhalten zu verstehen.",
+        "done": "Ich habe die relevanten Daten geprüft.",
+        "failedTitle": "Ich konnte die relevanten Daten nicht prüfen"
+      },
+      "render_report": {
+        "running": "Ich bereite die fertige Datei vor.",
+        "done": "Ich habe die fertige Datei vorbereitet.",
+        "failedTitle": "Ich konnte die fertige Datei nicht vorbereiten"
+      },
+      "export_pdf": {
+        "running": "Ich bereite die fertige Datei vor.",
+        "done": "Ich habe die fertige Datei vorbereitet.",
+        "failedTitle": "Ich konnte die fertige Datei nicht vorbereiten"
+      }
+    }
   }
 }

@@ -47,12 +47,12 @@ describe('resolveConversationContextLimit', () => {
 
   it('falls back to the per-model default when neither conversation nor provider supplies a limit', () => {
     const conversation = aionrsConversation({}, { use_model: 'minimax-m2.5' });
-    expect(resolveConversationContextLimit(conversation)).toBe(192_000);
+    expect(resolveConversationContextLimit(conversation)).toBe(204_800);
   });
 
   it('ignores a non-positive stored limit and still resolves the model default', () => {
     const conversation = aionrsConversation({ last_context_limit: 0 }, { use_model: 'minimax-m2.5' });
-    expect(resolveConversationContextLimit(conversation)).toBe(192_000);
+    expect(resolveConversationContextLimit(conversation)).toBe(204_800);
   });
 
   it('returns undefined when the limit is truly unknown so the budget stays "--"', () => {
@@ -70,6 +70,6 @@ describe('resolveConversationContextLimit', () => {
       use_model: null as unknown as string,
       model: 'minimax-m2.5',
     } as typeof conversation.model;
-    expect(resolveConversationContextLimit(conversation)).toBe(192_000);
+    expect(resolveConversationContextLimit(conversation)).toBe(204_800);
   });
 });

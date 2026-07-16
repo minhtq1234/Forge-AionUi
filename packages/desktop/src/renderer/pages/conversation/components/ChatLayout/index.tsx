@@ -17,7 +17,7 @@ import { isMacEnvironment, isWindowsEnvironment } from '@/renderer/pages/convers
 import { calcLayoutMetrics } from '@/renderer/pages/conversation/utils/layoutCalc';
 import { Layout as ArcoLayout } from '@arco-design/web-react';
 import { ExpandLeft, ExpandRight } from '@icon-park/react';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import './chat-layout.css';
 
@@ -80,8 +80,10 @@ const ChatLayout: React.FC<{
       conversation_id,
       preferenceKey: workspacePreferenceKey ?? conversation_id,
       isTemporaryWorkspace,
+      autoExpandOnWorkspaceFiles: isWorkspacePanePresentation,
     }
   );
+  const collapseArtifactPane = useCallback(() => setArtifactCollapsed(true), [setArtifactCollapsed]);
 
   // --- Hook B: container width ---
   const { containerRef, containerWidth } = useContainerWidth();
@@ -304,7 +306,7 @@ const ChatLayout: React.FC<{
           >
             {createArtifactDragHandle({ className: 'absolute left-0 top-0 bottom-0 z-30', linePlacement: 'start' })}
             <div className='flex-1 min-h-0 overflow-hidden'>
-              <PreviewPanel fullBleed onRequestCollapse={() => setArtifactCollapsed(true)} />
+              <PreviewPanel fullBleed onRequestCollapse={collapseArtifactPane} />
             </div>
           </div>
         )}
@@ -321,7 +323,7 @@ const ChatLayout: React.FC<{
               isWorkspacePanePresentation ? (
                 props.sider
               ) : (
-                <PreviewPanel fullBleed onRequestCollapse={() => setArtifactCollapsed(true)} />
+                <PreviewPanel fullBleed onRequestCollapse={collapseArtifactPane} />
               )
             }
             workspacePath={workspacePath}

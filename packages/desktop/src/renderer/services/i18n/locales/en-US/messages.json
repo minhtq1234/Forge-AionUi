@@ -68,67 +68,141 @@
     "no": "No (esc)"
   },
   "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "Work in progress ({{total, number}} total)",
+        "completed": "Work completed ({{total, number}} total)",
+        "recovered": "Work recovered and completed ({{total, number}} total)",
+        "partial": "Work partly completed ({{total, number}} total)",
+        "failed": "Work could not be completed ({{total, number}} total)",
+        "canceled": "Work stopped ({{total, number}} total)"
+      },
+      "activity": "This turn covered {{categories}}.",
+      "subject": "Focus: {{subject}}.",
+      "overflow": "{{count, number}} more",
+      "category": {
+        "web": "Web search ({{count, number}})",
+        "search": "Project search ({{count, number}})",
+        "fileRead": "File review ({{count, number}})",
+        "fileWrite": "Implementation update ({{count, number}})",
+        "data": "Data review ({{count, number}})",
+        "report": "Report task ({{count, number}})",
+        "export": "Export ({{count, number}})",
+        "memory": "Memory update ({{count, number}})",
+        "code": "Project step ({{count, number}})",
+        "verify": "Verification ({{count, number}})",
+        "office": "Document task ({{count, number}})",
+        "generic": "Project step ({{count, number}})"
+      },
+      "outcome": {
+        "active": "I'm making steady progress. Completed: {{completed, number}} of {{total, number}}. Actions still underway: {{pending, number}}.",
+        "activeWithFailure": "I'm making progress, though some work needs another attempt. Completed: {{completed, number}} of {{total, number}}. Actions still underway: {{pending, number}}. Actions needing another attempt: {{failed, number}}.",
+        "activeWithCanceled": "I'm making progress, with some work stopped. Completed: {{completed, number}} of {{total, number}}. Actions still underway: {{pending, number}}. Actions stopped: {{canceled, number}}.",
+        "activeWithFailureAndCanceled": "I'm making progress, though some work needs attention. Completed: {{completed, number}} of {{total, number}}. Actions still underway: {{pending, number}}. Actions needing another attempt: {{failed, number}}. Actions stopped: {{canceled, number}}.",
+        "completed": "I completed everything planned for this turn.",
+        "recovered": "I completed everything planned for this turn after retrying the work.",
+        "partial": "I completed part of the planned work. Completed: {{completed, number}} of {{total, number}}. Actions needing another attempt: {{failed, number}}.",
+        "partialWithCanceled": "I completed part of the planned work. Completed: {{completed, number}} of {{total, number}}. Actions needing another attempt: {{failed, number}}. Actions stopped: {{canceled, number}}.",
+        "failed": "I couldn't complete the planned work. Planned actions: {{total, number}}. Actions needing another attempt: {{failed, number}}.",
+        "failedWithCanceled": "I couldn't complete the planned work. Planned actions: {{total, number}}. Actions needing another attempt: {{failed, number}}. Actions stopped: {{canceled, number}}.",
+        "canceled": "I stopped this turn before the planned work was complete. Planned actions: {{total, number}}. Actions left unfinished: {{unfinished, number}}. Actions stopped: {{canceled, number}}."
+      }
+    },
     "attempt": "(attempt {{n}})",
-    "generic": { "running": "Working on it…", "done": "Done", "failedTitle": "Something went wrong" },
-    "status": { "stopped": "Stopped" },
-    "error": { "suggestion": "Something went wrong on that step — you can try again, or check the file name." },
+    "generic": {
+      "running": "I'm working through the next step.",
+      "done": "Completed the next step.",
+      "failedTitle": "I couldn't complete this step"
+    },
+    "status": {
+      "stopped": "Stopped",
+      "recovered": "Recovered after retry."
+    },
+    "error": {
+      "suggestion": "The error details are available below. You can try this step again when you're ready."
+    },
     "categories": {
       "web": {
-        "running": "Searching the web…",
-        "done": "Searched the web",
-        "failedTitle": "Couldn't complete the search"
+        "running": "I'm locating the relevant information.",
+        "done": "Located the relevant information.",
+        "failedTitle": "I couldn't complete the search"
       },
-      "search": { "running": "Searching…", "done": "Search complete", "failedTitle": "Couldn't complete the search" },
-      "fileRead": { "running": "Reading a file…", "done": "Read the file", "failedTitle": "Couldn't read the file" },
-      "fileWrite": { "running": "Saving a file…", "done": "Saved the file", "failedTitle": "Couldn't save the file" },
-      "data": { "running": "Querying data…", "done": "Got the data", "failedTitle": "Couldn't get the data" },
+      "search": {
+        "running": "I'm locating the relevant project files.",
+        "done": "Located the relevant project files.",
+        "failedTitle": "I couldn't complete the search"
+      },
+      "fileRead": {
+        "running": "I'm reviewing the relevant files to understand the current behavior.",
+        "done": "Reviewed the relevant files.",
+        "failedTitle": "I couldn't review the relevant files"
+      },
+      "fileWrite": {
+        "running": "I'm updating the implementation.",
+        "done": "Updated the implementation.",
+        "failedTitle": "I couldn't update the implementation"
+      },
+      "data": {
+        "running": "I'm reviewing the relevant data to understand the current behavior.",
+        "done": "Reviewed the relevant data.",
+        "failedTitle": "I couldn't review the relevant data"
+      },
       "report": {
-        "running": "Building your report…",
-        "done": "Report ready",
-        "failedTitle": "Couldn't build your report"
+        "running": "I'm preparing the finished file.",
+        "done": "Prepared the finished file.",
+        "failedTitle": "I couldn't prepare the finished file"
       },
       "export": {
-        "running": "Exporting your file…",
-        "done": "Export ready",
-        "failedTitle": "Couldn't export the file"
+        "running": "I'm preparing the finished file.",
+        "done": "Prepared the finished file.",
+        "failedTitle": "I couldn't prepare the finished file"
       },
-      "memory": { "running": "Saving to memory…", "done": "Saved to memory", "failedTitle": "Couldn't update memory" },
+      "memory": {
+        "running": "I'm updating the saved context.",
+        "done": "Updated the saved context.",
+        "failedTitle": "I couldn't update the saved context"
+      },
       "code": {
-        "running": "Running a command…",
-        "done": "Command finished",
-        "failedTitle": "The command didn't finish"
+        "running": "I'm running the next project step.",
+        "done": "Completed the project step.",
+        "failedTitle": "I couldn't complete the project step"
+      },
+      "verify": {
+        "running": "I'm checking the changes to make sure everything still works.",
+        "done": "Checked the changes for regressions.",
+        "failedTitle": "I couldn't finish checking the changes"
       },
       "office": {
-        "running": "Working with your Office file…",
-        "done": "Finished with your Office file",
-        "failedTitle": "Couldn't finish with your Office file"
+        "running": "I'm preparing the finished file.",
+        "done": "Prepared the finished file.",
+        "failedTitle": "I couldn't prepare the finished file"
       }
     },
     "tools": {
       "data_open": {
-        "running": "Opening your Excel file…",
-        "done": "Opened your Excel file",
-        "failedTitle": "Couldn't open your file"
+        "running": "I'm reviewing the relevant data to understand the current behavior.",
+        "done": "Reviewed the relevant data.",
+        "failedTitle": "I couldn't review the relevant data"
       },
       "data_get_schema": {
-        "running": "Reading the data columns…",
-        "done": "Read the data columns",
-        "failedTitle": "Couldn't read the data"
+        "running": "I'm reviewing the relevant data to understand the current behavior.",
+        "done": "Reviewed the relevant data.",
+        "failedTitle": "I couldn't review the relevant data"
       },
       "data_run_sql": {
-        "running": "Pulling your numbers…",
-        "done": "Pulled your numbers",
-        "failedTitle": "Couldn't pull your numbers"
+        "running": "I'm reviewing the relevant data to understand the current behavior.",
+        "done": "Reviewed the relevant data.",
+        "failedTitle": "I couldn't review the relevant data"
       },
       "render_report": {
-        "running": "Building your report…",
-        "done": "Report ready",
-        "failedTitle": "Couldn't build your report"
+        "running": "I'm preparing the finished file.",
+        "done": "Prepared the finished file.",
+        "failedTitle": "I couldn't prepare the finished file"
       },
       "export_pdf": {
-        "running": "Exporting to PDF…",
-        "done": "Exported to PDF",
-        "failedTitle": "Couldn't export the PDF"
+        "running": "I'm preparing the finished file.",
+        "done": "Prepared the finished file.",
+        "failedTitle": "I couldn't prepare the finished file"
       }
     }
   }

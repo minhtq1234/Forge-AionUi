@@ -10,12 +10,16 @@ export type ToolCategory =
   | 'export'
   | 'memory'
   | 'code'
+  | 'verify'
   | 'office'
   | 'generic';
+
+export type ToolActivityPurpose = 'discovering' | 'reviewing' | 'changing' | 'running' | 'verifying' | 'delivering';
 
 export type ResolvedToolAction = {
   toolKey?: string;
   category: ToolCategory;
+  purpose: ToolActivityPurpose;
 };
 
 export type CoalescedStep = {
@@ -23,6 +27,8 @@ export type CoalescedStep = {
   rawName: string;
   kind?: string;
   status: NormalizedToolStatus;
+  hadError: boolean;
   attempts: number;
   calls: NormalizedToolCall[];
+  action: ResolvedToolAction;
 };

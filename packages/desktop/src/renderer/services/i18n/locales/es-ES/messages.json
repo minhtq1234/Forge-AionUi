@@ -66,5 +66,144 @@
     "yesAlwaysAllowTool": "Sí, permitir siempre la herramienta \"{{toolName}}\" del servidor \"{{serverName}}\"",
     "yesAlwaysAllowServer": "Sí, permitir siempre todas las herramientas del servidor \"{{serverName}}\"",
     "no": "No (esc)"
+  },
+  "toolActivity": {
+    "recap": {
+      "headline": {
+        "active": "Trabajo en curso ({{total, number}} en total)",
+        "completed": "Trabajo completado ({{total, number}} en total)",
+        "recovered": "Trabajo recuperado y completado ({{total, number}} en total)",
+        "partial": "Trabajo completado parcialmente ({{total, number}} en total)",
+        "failed": "No se pudo completar el trabajo ({{total, number}} en total)",
+        "canceled": "Trabajo detenido ({{total, number}} en total)"
+      },
+      "activity": "Este turno incluyó {{categories}}.",
+      "subject": "Enfoque: {{subject}}.",
+      "overflow": "{{count, number}} más",
+      "category": {
+        "web": "Búsqueda web ({{count, number}})",
+        "search": "Búsqueda de proyecto ({{count, number}})",
+        "fileRead": "Revisión de archivo ({{count, number}})",
+        "fileWrite": "Actualización de implementación ({{count, number}})",
+        "data": "Revisión de datos ({{count, number}})",
+        "report": "Tarea de informe ({{count, number}})",
+        "export": "Exportación ({{count, number}})",
+        "memory": "Actualización de memoria ({{count, number}})",
+        "code": "Paso del proyecto ({{count, number}})",
+        "verify": "Verificación ({{count, number}})",
+        "office": "Tarea de documento ({{count, number}})",
+        "generic": "Paso del proyecto ({{count, number}})"
+      },
+      "outcome": {
+        "active": "Sigo avanzando a buen ritmo. Completadas: {{completed, number}} de {{total, number}}. Aún en curso: {{pending, number}}.",
+        "activeWithFailure": "Sigo avanzando, aunque parte del trabajo necesita otro intento. Completadas: {{completed, number}} de {{total, number}}. Aún en curso: {{pending, number}}. Pendientes de otro intento: {{failed, number}}.",
+        "activeWithCanceled": "Sigo avanzando, aunque parte del trabajo se detuvo. Completadas: {{completed, number}} de {{total, number}}. Aún en curso: {{pending, number}}. Detenidas: {{canceled, number}}.",
+        "activeWithFailureAndCanceled": "Sigo avanzando, aunque parte del trabajo necesita atención. Completadas: {{completed, number}} de {{total, number}}. Aún en curso: {{pending, number}}. Pendientes de otro intento: {{failed, number}}. Detenidas: {{canceled, number}}.",
+        "completed": "He completado todo lo previsto para este turno.",
+        "recovered": "He completado todo lo previsto para este turno tras volver a intentar el trabajo.",
+        "partial": "Completé parte del trabajo previsto. Completadas: {{completed, number}} de {{total, number}}. Pendientes de otro intento: {{failed, number}}.",
+        "partialWithCanceled": "Completé parte del trabajo previsto. Completadas: {{completed, number}} de {{total, number}}. Pendientes de otro intento: {{failed, number}}. Detenidas: {{canceled, number}}.",
+        "failed": "No pude completar el trabajo previsto. Acciones previstas: {{total, number}}. Pendientes de otro intento: {{failed, number}}.",
+        "failedWithCanceled": "No pude completar el trabajo previsto. Acciones previstas: {{total, number}}. Pendientes de otro intento: {{failed, number}}. Detenidas: {{canceled, number}}.",
+        "canceled": "Detuve este turno antes de completar el trabajo previsto. Acciones previstas: {{total, number}}. Sin completar: {{unfinished, number}}. Detenidas: {{canceled, number}}."
+      }
+    },
+    "attempt": "(intento {{n}})",
+    "generic": {
+      "running": "Estoy avanzando con el siguiente paso.",
+      "done": "He completado el siguiente paso.",
+      "failedTitle": "No pude completar este paso"
+    },
+    "status": {
+      "stopped": "Detenido",
+      "recovered": "Se recuperó tras volver a intentarlo."
+    },
+    "error": {
+      "suggestion": "Los detalles del error están disponibles más abajo. Cuando quieras, puedes volver a intentar este paso."
+    },
+    "categories": {
+      "web": {
+        "running": "Estoy buscando la información relevante.",
+        "done": "He encontrado la información relevante.",
+        "failedTitle": "No pude completar la búsqueda de información"
+      },
+      "search": {
+        "running": "Estoy buscando los archivos relevantes del proyecto.",
+        "done": "He encontrado los archivos relevantes del proyecto.",
+        "failedTitle": "No pude completar la búsqueda de archivos del proyecto"
+      },
+      "fileRead": {
+        "running": "Estoy revisando los archivos relevantes para entender el comportamiento actual.",
+        "done": "He revisado los archivos relevantes.",
+        "failedTitle": "No pude revisar los archivos relevantes"
+      },
+      "fileWrite": {
+        "running": "Estoy actualizando la implementación.",
+        "done": "He actualizado la implementación.",
+        "failedTitle": "No pude actualizar la implementación"
+      },
+      "data": {
+        "running": "Estoy revisando los datos relevantes para entender el comportamiento actual.",
+        "done": "He revisado los datos relevantes.",
+        "failedTitle": "No pude revisar los datos relevantes"
+      },
+      "report": {
+        "running": "Estoy preparando el archivo final.",
+        "done": "He preparado el archivo final.",
+        "failedTitle": "No pude preparar el archivo final"
+      },
+      "export": {
+        "running": "Estoy preparando el archivo final.",
+        "done": "He preparado el archivo final.",
+        "failedTitle": "No pude preparar el archivo final"
+      },
+      "memory": {
+        "running": "Estoy actualizando el contexto guardado.",
+        "done": "He actualizado el contexto guardado.",
+        "failedTitle": "No pude actualizar el contexto guardado"
+      },
+      "code": {
+        "running": "Estoy ejecutando el siguiente paso del proyecto.",
+        "done": "He completado el paso del proyecto.",
+        "failedTitle": "No pude completar el paso del proyecto"
+      },
+      "verify": {
+        "running": "Estoy comprobando los cambios para asegurarme de que todo siga funcionando.",
+        "done": "Comprobé que los cambios no causaran regresiones.",
+        "failedTitle": "No pude terminar de comprobar los cambios"
+      },
+      "office": {
+        "running": "Estoy preparando el archivo final.",
+        "done": "He preparado el archivo final.",
+        "failedTitle": "No pude preparar el archivo final"
+      }
+    },
+    "tools": {
+      "data_open": {
+        "running": "Estoy revisando los datos relevantes para entender el comportamiento actual.",
+        "done": "He revisado los datos relevantes.",
+        "failedTitle": "No pude revisar los datos relevantes"
+      },
+      "data_get_schema": {
+        "running": "Estoy revisando los datos relevantes para entender el comportamiento actual.",
+        "done": "He revisado los datos relevantes.",
+        "failedTitle": "No pude revisar los datos relevantes"
+      },
+      "data_run_sql": {
+        "running": "Estoy revisando los datos relevantes para entender el comportamiento actual.",
+        "done": "He revisado los datos relevantes.",
+        "failedTitle": "No pude revisar los datos relevantes"
+      },
+      "render_report": {
+        "running": "Estoy preparando el archivo final.",
+        "done": "He preparado el archivo final.",
+        "failedTitle": "No pude preparar el archivo final"
+      },
+      "export_pdf": {
+        "running": "Estoy preparando el archivo final.",
+        "done": "He preparado el archivo final.",
+        "failedTitle": "No pude preparar el archivo final"
+      }
+    }
   }
 }
