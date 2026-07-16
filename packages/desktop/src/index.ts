@@ -29,7 +29,7 @@ import type { BackendStartupFailureInfo } from './common/types/platform/electron
 import { registerWindowMaximizeListeners } from '@process/bridge';
 import { BackendLifecycleManager } from '@aionui/web-host';
 import { resolveBinaryPath } from '@process/backend';
-import './process/bridge/feedbackBridge';
+import { initFeedbackBridgeWithWindow } from './process/bridge/feedbackBridge';
 import { wasLaunchedAtLogin } from '@process/bridge/applicationBridge';
 import { onLanguageChanged } from './process/bridge/systemSettingsBridge';
 import { setInitialLanguage } from '@process/services/i18n';
@@ -666,6 +666,7 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
   }
 
   initMainAdapterWithWindow(mainWindow);
+  initFeedbackBridgeWithWindow(mainWindow);
   bindMainWindowReferences(mainWindow);
 
   setupApplicationMenu();

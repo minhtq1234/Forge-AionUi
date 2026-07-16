@@ -10,18 +10,55 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConfigProvider } from '@arco-design/web-react';
 
 vi.mock('@arco-design/web-react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@arco-design/web-react')>();
+  type MockUploadItem = {
+    name: string;
+    originFile?: File;
+    status?: string;
+    uid: string;
+  };
+  type MockUploadProps = {
+    accept?: string;
+    fileList?: MockUploadItem[];
+    limit?: number;
+    onChange?: (fileList: MockUploadItem[]) => void;
+  };
+  const MockUpload = ({ accept, fileList = [], limit = 3, onChange }: MockUploadProps) => (
+    <div>
+      <input
+        type='file'
+        accept={accept}
+        multiple
+        onChange={(event) => {
+          const selected = Array.from(event.currentTarget.files ?? []).map((file, index) => ({
+            uid: `selected-${index}-${file.name}`,
+            name: file.name,
+            originFile: file,
+            status: 'init',
+          }));
+          onChange?.([...fileList, ...selected]);
+        }}
+      />
+      {fileList.map((item) => (
+        <div className='arco-upload-list-item' key={item.uid}>
+          <span className='arco-upload-list-item-name'>{item.name}</span>
+        </div>
+      ))}
+      {fileList.length < limit ? <div className='arco-upload-trigger-picture' /> : null}
+    </div>
+  );
   return {
     ...actual,
     Message: {
       ...actual.Message,
       success: vi.fn(),
     },
+    Upload: MockUpload,
   };
 });
 
@@ -47,6 +84,13 @@ import FeedbackReportModal, {
 } from '@/renderer/components/settings/SettingsModal/contents/FeedbackReportModal';
 
 const renderModal = (ui: React.ReactElement) => render(<ConfigProvider>{ui}</ConfigProvider>);
+const MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024;
+
+const getUploadInput = (): HTMLInputElement => {
+  const input = screen.getByTestId('feedback-report-upload-trigger').querySelector('input[type="file"]');
+  if (!(input instanceof HTMLInputElement)) throw new Error('Expected screenshot upload input');
+  return input;
+};
 
 const buildScreenshot = (name: string, byte: number): PrefilledScreenshot => ({
   filename: name,
@@ -99,6 +143,61 @@ describe('FeedbackReportModal — prefill', () => {
     // The picture-card Upload renders one .arco-upload-list-item per screenshot.
     // Arco also appends a separate `+` trigger until the 3-item limit is hit.
     expect(document.querySelectorAll('.arco-upload-list-item').length).toBe(2);
+  });
+
+  it('advertises PNG-only selection in the screenshot picker', () => {
+    renderModal(<FeedbackReportModal visible={true} onCancel={vi.fn()} />);
+
+    expect(getUploadInput()).toHaveAttribute('accept', '.png');
+  });
+
+  it('shows a selected PNG at the 10 MiB boundary', async () => {
+    renderModal(<FeedbackReportModal visible={true} onCancel={vi.fn()} />);
+    const screenshot = new File([new Uint8Array(MAX_SCREENSHOT_BYTES)], 'boundary.png', { type: 'image/png' });
+
+    fireEvent.change(getUploadInput(), { target: { files: [screenshot] } });
+
+    await waitFor(() => expect(document.querySelectorAll('.arco-upload-list-item')).toHaveLength(1));
+  });
+
+  it.each([
+    ['an empty PNG', () => new File([], 'empty.png', { type: 'image/png' })],
+    ['a non-PNG image', () => new File([new Uint8Array([1])], 'screenshot.jpg', { type: 'image/jpeg' })],
+    [
+      'a PNG over 10 MiB',
+      () => new File([new Uint8Array(MAX_SCREENSHOT_BYTES + 1)], 'oversized.png', { type: 'image/png' }),
+    ],
+  ])('keeps %s out of visible screenshot state after file selection', async (_name, createFile) => {
+    renderModal(<FeedbackReportModal visible={true} onCancel={vi.fn()} />);
+
+    fireEvent.change(getUploadInput(), { target: { files: [createFile()] } });
+
+    await waitFor(() => expect(document.querySelectorAll('.arco-upload-list-item')).toHaveLength(0));
+  });
+
+  it('keeps invalid pasted images out of visible state while accepting a PNG', async () => {
+    renderModal(<FeedbackReportModal visible={true} onCancel={vi.fn()} />);
+    const jpeg = new File([new Uint8Array([1])], 'pasted.jpg', { type: 'image/jpeg' });
+    const png = new File([new Uint8Array([2])], 'pasted.png', { type: 'image/png' });
+
+    fireEvent.paste(document, { clipboardData: { files: [jpeg, png] } });
+
+    await waitFor(() => expect(document.querySelectorAll('.arco-upload-list-item')).toHaveLength(1));
+    expect(document.querySelector('.arco-upload-list-item-name')).toHaveTextContent('pasted.png');
+  });
+
+  it('filters invalid prefilled screenshots before applying the three-item limit', () => {
+    const shots: PrefilledScreenshot[] = [
+      { filename: 'not-png.jpg', data: new Uint8Array([1]), type: 'image/jpeg' },
+      { filename: 'empty.png', data: new Uint8Array(), type: 'image/png' },
+      { filename: 'oversized.png', data: new Uint8Array(MAX_SCREENSHOT_BYTES + 1), type: 'image/png' },
+      buildScreenshot('valid.png', 4),
+    ];
+
+    renderModal(<FeedbackReportModal visible={true} onCancel={vi.fn()} prefilledScreenshots={shots} />);
+
+    expect(document.querySelectorAll('.arco-upload-list-item')).toHaveLength(1);
+    expect(document.querySelector('.arco-upload-list-item-name')).toHaveTextContent('valid.png');
   });
 
   it('shows the uploaded count next to the screenshot label when seeded', () => {

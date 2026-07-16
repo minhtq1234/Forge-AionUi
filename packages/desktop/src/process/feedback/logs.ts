@@ -7,12 +7,20 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
+import { DIAGNOSTIC_REDACTION_MARKER, redactDiagnosticText } from '@/common/utils/diagnosticRedaction';
 
 const LOG_SUFFIXES = ['.log', '.aioncore.log', '.aionrs.log'];
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}/;
 const YEAR_DIR_PATTERN = /^\d{4}$/;
 const MONTH_OR_DAY_DIR_PATTERN = /^\d{2}$/;
 const DEFAULT_LOG_DAYS = 3;
+const AGGREGATE_TRUNCATION_MARKER = '\n[TRUNCATED: aggregate feedback log limit]\n';
+
+const DEFAULT_LOG_LIMITS: FeedbackLogCollectionLimits = {
+  maxAggregateBytes: 4 * 1024 * 1024,
+  maxCandidateFiles: 12,
+  maxFileBytes: 1024 * 1024,
+};
 
 export type FeedbackLogAttachment = {
   filename: string;
@@ -20,9 +28,29 @@ export type FeedbackLogAttachment = {
   contentType: 'application/gzip';
 };
 
+export type FeedbackLogCollectionLimits = {
+  maxAggregateBytes: number;
+  maxCandidateFiles: number;
+  maxFileBytes: number;
+};
+
 type FeedbackLogCandidate = {
   date: string;
   path: string;
+};
+
+type BoundedFileSystem = {
+  closeSync: (fd: number) => void;
+  fstatSync: (fd: number) => fs.Stats;
+  lstatSync: (filePath: fs.PathLike) => fs.Stats;
+  openSync: (filePath: fs.PathLike, flags: number) => number;
+  readSync: (fd: number, buffer: Buffer, offset: number, length: number, position: number) => number;
+};
+
+type BoundedLogText = {
+  beginsAtLineBoundary: boolean;
+  text: string;
+  truncated: boolean;
 };
 
 function isFeedbackLogFileForDate(file: string, date: string): boolean {
@@ -74,7 +102,8 @@ function collectFeedbackLogCandidates(logsDir: string): FeedbackLogCandidate[] {
   for (const name of yearsOrFiles) {
     const fullPath = path.join(logsDir, name);
     try {
-      const stat = fs.statSync(fullPath);
+      const stat = fs.lstatSync(fullPath);
+      if (stat.isSymbolicLink()) continue;
       if (stat.isFile()) {
         const match = DATE_PATTERN.exec(name);
         if (match && isFeedbackLogFileForDate(name, match[0])) {
@@ -136,7 +165,8 @@ function readDirNames(dir: string): string[] {
 
 function isDirectory(filePath: string): boolean {
   try {
-    return fs.statSync(filePath).isDirectory();
+    const stat = fs.lstatSync(filePath);
+    return !stat.isSymbolicLink() && stat.isDirectory();
   } catch {
     return false;
   }
@@ -144,7 +174,8 @@ function isDirectory(filePath: string): boolean {
 
 function isFile(filePath: string): boolean {
   try {
-    return fs.statSync(filePath).isFile();
+    const stat = fs.lstatSync(filePath);
+    return !stat.isSymbolicLink() && stat.isFile();
   } catch {
     return false;
   }
@@ -163,12 +194,92 @@ function getLogHeaderName(logPath: string, rootDir: string, showRelativePath: bo
   return relativePath.split(path.sep).join('/');
 }
 
+function getReadOnlyNoFollowFlags(): number {
+  const noFollow = fs.constants.O_NOFOLLOW;
+  return fs.constants.O_RDONLY | (typeof noFollow === 'number' ? noFollow : 0);
+}
+
+function readBoundedLogTail(
+  filePath: string,
+  maxBytes: number,
+  fileSystem: BoundedFileSystem = fs
+): BoundedLogText | null {
+  const selectedStat = fileSystem.lstatSync(filePath);
+  if (selectedStat.isSymbolicLink() || !selectedStat.isFile()) return null;
+
+  const fd = fileSystem.openSync(filePath, getReadOnlyNoFollowFlags());
+  try {
+    const openedStat = fileSystem.fstatSync(fd);
+    if (!openedStat.isFile() || openedStat.dev !== selectedStat.dev || openedStat.ino !== selectedStat.ino) return null;
+
+    const size = openedStat.size;
+    const bytesToRead = Math.min(size, maxBytes);
+    const position = Math.max(0, size - bytesToRead);
+    const precedingByte = Buffer.alloc(1);
+    const precedingBytesRead = position > 0 ? fileSystem.readSync(fd, precedingByte, 0, 1, position - 1) : 0;
+    const buffer = Buffer.alloc(bytesToRead);
+    const bytesRead = fileSystem.readSync(fd, buffer, 0, bytesToRead, position);
+    return {
+      beginsAtLineBoundary:
+        position === 0 || (precedingBytesRead === 1 && (precedingByte[0] === 0x0a || precedingByte[0] === 0x0d)),
+      text: buffer.subarray(0, bytesRead).toString('utf8'),
+      truncated: position > 0,
+    };
+  } finally {
+    fileSystem.closeSync(fd);
+  }
+}
+
+function discardFirstPartialLine(text: string): string {
+  const firstLineEnd = text.search(/[\r\n]/u);
+  if (firstLineEnd === -1) {
+    return '';
+  }
+
+  const nextOffset = text[firstLineEnd] === '\r' && text[firstLineEnd + 1] === '\n' ? 2 : 1;
+  return text.slice(firstLineEnd + nextOffset);
+}
+
+function fitUtf8Section(text: string, maxBytes: number): string {
+  const encoded = Buffer.from(text, 'utf8');
+  if (encoded.length <= maxBytes) {
+    return text;
+  }
+
+  const marker = Buffer.from(AGGREGATE_TRUNCATION_MARKER, 'utf8');
+  if (maxBytes <= marker.length) {
+    return marker
+      .subarray(0, maxBytes)
+      .toString('utf8')
+      .replace(/\uFFFD$/u, '');
+  }
+
+  return (
+    encoded
+      .subarray(0, maxBytes - marker.length)
+      .toString('utf8')
+      .replace(/\uFFFD$/u, '') + AGGREGATE_TRUNCATION_MARKER
+  );
+}
+
+function redactLogText(text: string, maxBytes: number): string {
+  const withPreservedStatus = text.replace(
+    /(\b(?:proxy[_-]?authorization|authorization)\s*[=:]\s*[^\r\n]*?)\s+status\s*[=:]\s*([1-5]\d{2})(?=\s|$)[^\r\n]*/gi,
+    `$1\nstatus=$2\n${DIAGNOSTIC_REDACTION_MARKER}`
+  );
+  return redactDiagnosticText(withPreservedStatus, maxBytes);
+}
+
 export function getRecentFeedbackLogPaths(logsDir: string, days = DEFAULT_LOG_DAYS): string[] {
   const normalizedDir = normalizeLogDirs(logsDir)[0];
   return getRecentFeedbackLogPathsFromDirs([normalizedDir], days);
 }
 
-export function collectFeedbackLogAttachment(logsDirs: string | string[]): FeedbackLogAttachment | null {
+export function collectFeedbackLogAttachment(
+  logsDirs: string | string[],
+  limits: Partial<FeedbackLogCollectionLimits> = {}
+): FeedbackLogAttachment | null {
+  const resolvedLimits = { ...DEFAULT_LOG_LIMITS, ...limits };
   const normalizedDirs = normalizeLogDirs(logsDirs);
   const logPaths =
     normalizedDirs.length === 1
@@ -179,15 +290,35 @@ export function collectFeedbackLogAttachment(logsDirs: string | string[]): Feedb
   }
 
   const parts: string[] = [];
-  for (const logPath of logPaths) {
+  let aggregateBytes = 0;
+  for (const logPath of logPaths.slice(0, resolvedLimits.maxCandidateFiles)) {
     const basename = getLogHeaderName(logPath, normalizedDirs[0], true);
-    const content = fs.readFileSync(logPath, 'utf8');
-    parts.push(`=== ${basename} ===\n${content}\n`);
+    const logTail = readBoundedLogTail(logPath, resolvedLimits.maxFileBytes);
+    if (!logTail) continue;
+    const logText =
+      logTail.truncated && !logTail.beginsAtLineBoundary ? discardFirstPartialLine(logTail.text) : logTail.text;
+    const truncationNotice = logTail.truncated ? '[TRUNCATED: recent tail retained]\n' : '';
+    const separator = parts.length > 0 ? '\n' : '';
+    const section = `${separator}=== ${basename} ===\n${truncationNotice}${redactLogText(logText, resolvedLimits.maxFileBytes)}\n`;
+    const sectionBytes = Buffer.byteLength(section, 'utf8');
+
+    if (aggregateBytes + sectionBytes > resolvedLimits.maxAggregateBytes) {
+      const availableBytes = resolvedLimits.maxAggregateBytes - aggregateBytes;
+      if (availableBytes > 0) {
+        parts.push(fitUtf8Section(section, availableBytes));
+      }
+      break;
+    }
+
+    parts.push(section);
+    aggregateBytes += sectionBytes;
   }
+
+  if (parts.length === 0) return null;
 
   return {
     filename: 'logs.gz',
-    data: zlib.gzipSync(Buffer.from(parts.join('\n'), 'utf8')),
+    data: zlib.gzipSync(Buffer.from(parts.join(''), 'utf8')),
     contentType: 'application/gzip',
   };
 }

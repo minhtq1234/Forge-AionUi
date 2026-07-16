@@ -6,6 +6,13 @@
 
 import { describe, it, expect } from 'vitest';
 import { uuid, parseError, resolveLocaleKey } from '@/common/utils/utils';
+import {
+  DIAGNOSTIC_REDACTION_MARKER,
+  DIAGNOSTIC_TRUNCATION_MARKER,
+  redactDiagnosticText,
+  redactDiagnosticTextToUtf8Bytes,
+  redactDiagnosticValue,
+} from '@/common/utils/diagnosticRedaction';
 
 describe('utils', () => {
   describe('uuid', () => {
@@ -183,6 +190,183 @@ describe('utils', () => {
 
     it('handles empty string', () => {
       expect(resolveLocaleKey('')).toBe('en-US');
+    });
+  });
+
+  describe('diagnostic redaction', () => {
+    it('redacts nested sensitive keys while preserving useful fields', () => {
+      const value = redactDiagnosticValue({
+        provider: 'openai',
+        authorization: 'Bearer auth-secret',
+        nested: {
+          api_key: 'sk-test-secret',
+          accessToken: 'access-secret',
+          status: 401,
+        },
+      });
+
+      expect(value).toEqual({
+        provider: 'openai',
+        authorization: DIAGNOSTIC_REDACTION_MARKER,
+        nested: {
+          api_key: DIAGNOSTIC_REDACTION_MARKER,
+          accessToken: DIAGNOSTIC_REDACTION_MARKER,
+          status: 401,
+        },
+      });
+    });
+
+    it('redacts authorization, URL credentials, and key-value secrets in text', () => {
+      const text = [
+        'Authorization: Bearer bearer-secret',
+        'https://user:password-secret@example.com/path',
+        'api_key=sk-inline-secret',
+      ].join('\n');
+
+      const result = redactDiagnosticText(text);
+
+      expect(result).not.toContain('bearer-secret');
+      expect(result).not.toContain('password-secret');
+      expect(result).not.toContain('sk-inline-secret');
+      expect(result).toContain(DIAGNOSTIC_REDACTION_MARKER);
+    });
+
+    it('redacts the entire authorization value for any scheme', () => {
+      const result = redactDiagnosticText('Authorization: Token credentials-that-must-not-leak');
+
+      expect(result).toBe(`Authorization: ${DIAGNOSTIC_REDACTION_MARKER}`);
+    });
+
+    it('bounds long safe alphabetic input before applying redaction patterns', { timeout: 5_000 }, () => {
+      const startedAt = performance.now();
+      const result = redactDiagnosticText('a'.repeat(50_000));
+      const elapsedMs = performance.now() - startedAt;
+
+      expect(result).toBe(`${'a'.repeat(16_384)}${DIAGNOSTIC_TRUNCATION_MARKER}`);
+      expect(elapsedMs).toBeLessThan(1_000);
+    });
+
+    it('redacts complete quoted secret assignments containing whitespace and escapes', () => {
+      const result = redactDiagnosticText(
+        String.raw`password="alpha beta \"secret\"" client_secret='gamma delta \'secret\''`
+      );
+
+      expect(result).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER} client_secret=${DIAGNOSTIC_REDACTION_MARKER}`);
+    });
+
+    it('redacts a double-quoted secret whose closing quote is beyond the retained boundary', () => {
+      const result = redactDiagnosticText('password="abcdefghijklmnopqrstuvwxyz"', 20);
+
+      expect(result).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER}${DIAGNOSTIC_TRUNCATION_MARKER}`);
+      expect(result).not.toContain('abcdefghij');
+    });
+
+    it('redacts a single-quoted secret whose closing quote is beyond the retained boundary', () => {
+      const result = redactDiagnosticText("password='abcdefghijklmnopqrstuvwxyz'", 20);
+
+      expect(result).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER}${DIAGNOSTIC_TRUNCATION_MARKER}`);
+      expect(result).not.toContain('abcdefghij');
+    });
+
+    it('redacts a bounded double-quoted secret ending in a lone escape', () => {
+      const result = redactDiagnosticText(String.raw`password="abcdefgh\more"`, 19);
+
+      expect(result).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER}${DIAGNOSTIC_TRUNCATION_MARKER}`);
+      expect(result).not.toContain('abcdefgh');
+    });
+
+    it('redacts an unterminated single-quoted secret ending in a lone escape', () => {
+      const result = redactDiagnosticText("password='abcdefgh" + '\\');
+
+      expect(result).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER}`);
+      expect(result).not.toContain('abcdefgh');
+    });
+
+    it('redacts a URL password whose at-sign is beyond the retained boundary', () => {
+      const result = redactDiagnosticText('https://user:abcdefghijklmnopqrstuvwxyz@example.com/path', 25);
+
+      expect(result).toBe(`https://user:${DIAGNOSTIC_REDACTION_MARKER}${DIAGNOSTIC_TRUNCATION_MARKER}`);
+      expect(result).not.toContain('abcdefghijkl');
+    });
+
+    it('preserves complete quoted and URL credential redaction output', () => {
+      expect(redactDiagnosticText('password="alpha beta"')).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER}`);
+      expect(redactDiagnosticText("password='gamma delta'")).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER}`);
+      expect(redactDiagnosticText('https://user:password-secret@example.com/path')).toBe(
+        `https://user:${DIAGNOSTIC_REDACTION_MARKER}@example.com/path`
+      );
+    });
+
+    it('stops an unterminated quoted secret at the line boundary', () => {
+      const result = redactDiagnosticText('password="alpha beta\nstatus=healthy');
+
+      expect(result).toBe(`password=${DIAGNOSTIC_REDACTION_MARKER}\nstatus=healthy`);
+    });
+
+    it('redacts proxy authorization assignments directly', () => {
+      const result = redactDiagnosticText('Proxy-Authorization: Basic proxy-secret');
+
+      expect(result).toBe(`Proxy-Authorization: ${DIAGNOSTIC_REDACTION_MARKER}`);
+    });
+
+    it('accepts diagnostic text at exactly 4,096 UTF-8 bytes', () => {
+      const result = redactDiagnosticTextToUtf8Bytes('x'.repeat(4_096), 4_096);
+
+      expect(new TextEncoder().encode(result)).toHaveLength(4_096);
+      expect(result).not.toContain(DIAGNOSTIC_TRUNCATION_MARKER);
+    });
+
+    it('fits multibyte diagnostic text and its truncation marker within 4,096 UTF-8 bytes', () => {
+      const result = redactDiagnosticTextToUtf8Bytes('\u{1F4A5}'.repeat(2_048), 4_096);
+
+      expect(new TextEncoder().encode(result).byteLength).toBeLessThanOrEqual(4_096);
+      expect(result.endsWith(DIAGNOSTIC_TRUNCATION_MARKER)).toBe(true);
+      expect(result).not.toContain('\uFFFD');
+    });
+
+    it('normalizes errors without preserving secrets', () => {
+      const error = new Error('request failed token=error-secret');
+      error.stack = 'Error: request failed\nAuthorization: Bearer stack-secret';
+
+      const serialized = JSON.stringify(redactDiagnosticValue(error));
+
+      expect(serialized).toContain('request failed');
+      expect(serialized).not.toContain('error-secret');
+      expect(serialized).not.toContain('stack-secret');
+    });
+
+    it('replaces circular references with a stable marker', () => {
+      const value: Record<string, unknown> = { status: 'failed' };
+      value.self = value;
+
+      expect(redactDiagnosticValue(value)).toEqual({
+        status: 'failed',
+        self: '[CIRCULAR]',
+      });
+    });
+
+    it('bounds depth, entries, and string length deterministically', () => {
+      const result = redactDiagnosticValue(
+        {
+          long: 'abcdefgh',
+          list: [1, 2, 3],
+          nested: { child: { value: 'hidden-by-depth' } },
+        },
+        { maxArrayItems: 2, maxDepth: 2, maxObjectEntries: 3, maxStringLength: 4 }
+      );
+
+      expect(result).toEqual({
+        long: 'abcd[TRUNCATED]',
+        list: [1, 2, '[TRUNCATED]'],
+        nested: { child: '[TRUNCATED]' },
+      });
+    });
+
+    it('uses safe placeholders for unsupported values', () => {
+      expect(redactDiagnosticValue({ value: 1n, callback: () => 'secret' })).toEqual({
+        value: '[UNSUPPORTED]',
+        callback: '[UNSUPPORTED]',
+      });
     });
   });
 });

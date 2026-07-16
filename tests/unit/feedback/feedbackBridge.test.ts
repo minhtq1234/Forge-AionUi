@@ -8,49 +8,125 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { app } from 'electron';
+import { DIAGNOSTIC_TRUNCATION_MARKER } from '@/common/utils/diagnosticRedaction';
 import { collectFeedbackLogAttachment } from '@/process/feedback/logs';
 
-// Table of handlers registered via ipcMain.handle during module import.
-const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>();
+const { handlers, eventHandlers, exposedMainWorld, ipcRenderer } = vi.hoisted(() => ({
+  eventHandlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
+  exposedMainWorld: new Map<string, unknown>(),
+  handlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
+  ipcRenderer: {
+    invoke: vi.fn(),
+    off: vi.fn(),
+    on: vi.fn(),
+    send: vi.fn(),
+    sendSync: vi.fn(),
+  },
+}));
 
 type FakeWebContents = {
   capturePage?: () => Promise<{ toPNG: () => Buffer }>;
+  isDestroyed: () => boolean;
 };
 
 type FakeWindow = {
   isDestroyed: () => boolean;
+  once: (event: string, callback: () => void) => void;
   webContents: FakeWebContents;
 };
 
-let currentWindow: FakeWindow | null = null;
+type FakeWindowFixture = {
+  close: () => void;
+  window: FakeWindow;
+};
+
+type ExposedElectronApi = {
+  logFeedbackEvent: (payload: { details?: unknown; level: 'info' | 'warn' | 'error'; message: string }) => void;
+};
+
+function createFakeWindow(webContents: FakeWebContents = { isDestroyed: () => false }): FakeWindowFixture {
+  let closedCallback: (() => void) | undefined;
+  const window: FakeWindow = {
+    isDestroyed: () => false,
+    once: vi.fn((event: string, callback: () => void) => {
+      if (event === 'closed') closedCallback = callback;
+    }),
+    webContents,
+  };
+
+  return {
+    close: () => {
+      if (!closedCallback) throw new Error('Expected a closed callback');
+      closedCallback();
+    },
+    window,
+  };
+}
+
+function createSizedAsciiLog(prefix: string, byteLength: number): string {
+  const remainingBytes = byteLength - Buffer.byteLength(prefix, 'utf8');
+  const line = `${'x'.repeat(1023)}\n`;
+  return `${prefix}${line.repeat(Math.floor(remainingBytes / line.length))}${'x'.repeat(remainingBytes % line.length)}`;
+}
+
+const allowedWindow: FakeWindow = {
+  isDestroyed: () => false,
+  once: vi.fn(),
+  webContents: {
+    isDestroyed: () => false,
+  },
+};
+
+const foreignSender: FakeWebContents = {
+  isDestroyed: () => false,
+};
+
+let initFeedbackBridgeWithWindow: typeof import('@/process/bridge/feedbackBridge').initFeedbackBridgeWithWindow;
 
 vi.mock('electron', () => ({
   ipcMain: {
-    handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => {
-      handlers.set(channel, fn);
-    },
-    on: vi.fn(),
+    handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => handlers.set(channel, fn),
+    on: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => eventHandlers.set(channel, fn),
   },
   app: {
     getPath: vi.fn(() => '/tmp/aionui-test-logs-nonexistent'),
     getVersion: vi.fn(() => '0.0.0'),
   },
-  BrowserWindow: {
-    fromWebContents: vi.fn(() => currentWindow),
+  contextBridge: {
+    exposeInMainWorld: (key: string, value: unknown) => exposedMainWorld.set(key, value),
+  },
+  ipcRenderer,
+  webUtils: {
+    getPathForFile: vi.fn(),
   },
 }));
 
+vi.mock('@sentry/electron/preload', () => ({}));
+
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return {
+    ...actual,
+    closeSync: vi.fn(actual.closeSync),
+    fstatSync: vi.fn(actual.fstatSync),
+    lstatSync: vi.fn(actual.lstatSync),
+    openSync: vi.fn(actual.openSync),
+    readSync: vi.fn(actual.readSync),
+  };
+});
+
 beforeEach(async () => {
   handlers.clear();
-  currentWindow = null;
+  eventHandlers.clear();
+  exposedMainWorld.clear();
   vi.resetModules();
-  // Importing registers the ipcMain.handle callbacks into our map.
-  await import('@/process/bridge/feedbackBridge');
+  ({ initFeedbackBridgeWithWindow } = await import('@/process/bridge/feedbackBridge'));
 });
 
 afterEach(() => {
@@ -64,67 +140,91 @@ describe('feedbackBridge — capture-screenshot', () => {
 
   it('returns png bytes and a timestamped filename on success', async () => {
     const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01, 0x02, 0x03]);
-    currentWindow = {
-      isDestroyed: () => false,
-      webContents: {
-        capturePage: vi.fn(async () => ({ toPNG: () => pngBytes })),
-      },
-    };
+    allowedWindow.webContents.capturePage = vi.fn(async () => ({ toPNG: () => pngBytes }));
+    initFeedbackBridgeWithWindow(allowedWindow as never);
 
     const handler = handlers.get('feedback:capture-screenshot')!;
-    const result = (await handler({ sender: {} })) as { filename: string; data: number[] } | null;
+    const result = (await handler({ sender: allowedWindow.webContents })) as {
+      filename: string;
+      data: number[];
+    } | null;
 
     expect(result).not.toBeNull();
     expect(result!.filename).toMatch(/^screenshot-.*\.png$/);
     expect(result!.data).toEqual(Array.from(pngBytes));
   });
 
-  it('returns null when no owning BrowserWindow is resolved', async () => {
-    currentWindow = null;
+  it('rejects screenshot capture from a foreign sender', async () => {
+    initFeedbackBridgeWithWindow(allowedWindow as never);
     const handler = handlers.get('feedback:capture-screenshot')!;
-    const result = await handler({ sender: {} });
-    expect(result).toBeNull();
+    await expect(handler({ sender: foreignSender })).rejects.toThrow('Feedback request rejected');
   });
 
-  it('returns null when the owning BrowserWindow is destroyed', async () => {
-    currentWindow = {
+  it('rejects screenshot capture when the registered window is destroyed', async () => {
+    const destroyedWindow: FakeWindow = {
       isDestroyed: () => true,
+      once: vi.fn(),
       webContents: {
         capturePage: vi.fn(),
+        isDestroyed: () => false,
       },
     };
+    initFeedbackBridgeWithWindow(destroyedWindow as never);
     const handler = handlers.get('feedback:capture-screenshot')!;
-    const result = await handler({ sender: {} });
-    expect(result).toBeNull();
-    expect(currentWindow.webContents.capturePage).not.toHaveBeenCalled();
+    await expect(handler({ sender: destroyedWindow.webContents })).rejects.toThrow('Feedback request rejected');
+    expect(destroyedWindow.webContents.capturePage).not.toHaveBeenCalled();
+  });
+
+  it('rejects screenshot capture when the registered webContents is destroyed', async () => {
+    const destroyedWebContents: FakeWebContents = {
+      capturePage: vi.fn(),
+      isDestroyed: () => true,
+    };
+    const window = createFakeWindow(destroyedWebContents);
+    initFeedbackBridgeWithWindow(window.window as never);
+
+    const handler = handlers.get('feedback:capture-screenshot')!;
+    await expect(handler({ sender: destroyedWebContents })).rejects.toThrow('Feedback request rejected');
+    expect(destroyedWebContents.capturePage).not.toHaveBeenCalled();
   });
 
   it('returns null when capturePage yields an empty buffer', async () => {
-    currentWindow = {
-      isDestroyed: () => false,
-      webContents: {
-        capturePage: vi.fn(async () => ({ toPNG: () => Buffer.alloc(0) })),
-      },
-    };
+    allowedWindow.webContents.capturePage = vi.fn(async () => ({ toPNG: () => Buffer.alloc(0) }));
+    initFeedbackBridgeWithWindow(allowedWindow as never);
 
     const handler = handlers.get('feedback:capture-screenshot')!;
-    const result = await handler({ sender: {} });
+    const result = await handler({ sender: allowedWindow.webContents });
     expect(result).toBeNull();
+  });
+
+  it('returns null when capturePage yields a png larger than 10 MiB', async () => {
+    allowedWindow.webContents.capturePage = vi.fn(async () => ({ toPNG: () => Buffer.alloc(10 * 1024 * 1024 + 1) }));
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    const handler = handlers.get('feedback:capture-screenshot')!;
+    const result = await handler({ sender: allowedWindow.webContents });
+    expect(result).toBeNull();
+  });
+
+  it('accepts a png exactly 10 MiB in size', async () => {
+    const png = Buffer.alloc(10 * 1024 * 1024);
+    allowedWindow.webContents.capturePage = vi.fn(async () => ({ toPNG: () => png }));
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    const handler = handlers.get('feedback:capture-screenshot')!;
+    const result = (await handler({ sender: allowedWindow.webContents })) as { data: number[] } | null;
+    expect(result?.data).toHaveLength(png.length);
   });
 
   it('returns null and does not throw when capturePage rejects', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    currentWindow = {
-      isDestroyed: () => false,
-      webContents: {
-        capturePage: vi.fn(async () => {
-          throw new Error('capture refused');
-        }),
-      },
-    };
+    allowedWindow.webContents.capturePage = vi.fn(async () => {
+      throw new Error('capture refused');
+    });
+    initFeedbackBridgeWithWindow(allowedWindow as never);
 
     const handler = handlers.get('feedback:capture-screenshot')!;
-    const result = await handler({ sender: {} });
+    const result = await handler({ sender: allowedWindow.webContents });
     expect(result).toBeNull();
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
@@ -132,6 +232,37 @@ describe('feedbackBridge — capture-screenshot', () => {
 });
 
 describe('feedback logs', () => {
+  it('rejects log collection from an unregistered sender', async () => {
+    const handler = handlers.get('feedback:collect-logs')!;
+    await expect(handler({ sender: foreignSender })).rejects.toThrow('Feedback request rejected');
+  });
+
+  it('rejects log collection from a foreign sender while a window is registered', async () => {
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+    const handler = handlers.get('feedback:collect-logs')!;
+    await expect(handler({ sender: foreignSender })).rejects.toThrow('Feedback request rejected');
+  });
+
+  it('removes authorization after the registered window closes', async () => {
+    const fixture = createFakeWindow();
+    initFeedbackBridgeWithWindow(fixture.window as never);
+    fixture.close();
+
+    const handler = handlers.get('feedback:collect-logs')!;
+    await expect(handler({ sender: fixture.window.webContents })).rejects.toThrow('Feedback request rejected');
+  });
+
+  it('keeps a newer registration when an older window closes late', async () => {
+    const older = createFakeWindow();
+    const newer = createFakeWindow();
+    initFeedbackBridgeWithWindow(older.window as never);
+    initFeedbackBridgeWithWindow(newer.window as never);
+    older.close();
+
+    const handler = handlers.get('feedback:collect-logs')!;
+    await expect(handler({ sender: newer.window.webContents })).resolves.toBeNull();
+  });
+
   it('collects top-level frontend logs and nested backend logs through the IPC handler', async () => {
     const logsDir = mkdtempSync(path.join(tmpdir(), 'aionui-feedback-bridge-'));
     try {
@@ -148,8 +279,12 @@ describe('feedback logs', () => {
         return path.join(logsDir, 'userData');
       });
 
+      initFeedbackBridgeWithWindow(allowedWindow as never);
       const handler = handlers.get('feedback:collect-logs')!;
-      const result = (await handler({})) as { filename: string; data: number[] } | null;
+      const result = (await handler({ sender: allowedWindow.webContents })) as {
+        filename: string;
+        data: number[];
+      } | null;
 
       expect(result).not.toBeNull();
       const content = gunzipSync(Buffer.from(result!.data)).toString('utf8');
@@ -218,5 +353,505 @@ describe('feedback logs', () => {
     } finally {
       rmSync(logsDir, { recursive: true, force: true });
     }
+  });
+
+  it('rejects real symlinked log files and dated directories', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-symlink-logs-'));
+    const outsideDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-symlink-targets-'));
+    try {
+      const linkedFileTarget = path.join(outsideDir, 'outside.log');
+      writeFileSync(linkedFileTarget, 'linked-file-secret\n');
+      if (process.platform !== 'win32') {
+        symlinkSync(linkedFileTarget, path.join(logsDir, '2026-07-14.log'), 'file');
+      }
+
+      const linkedYearTarget = path.join(outsideDir, '2026');
+      const linkedDayTarget = path.join(linkedYearTarget, '07', '14');
+      mkdirSync(linkedDayTarget, { recursive: true });
+      writeFileSync(path.join(linkedDayTarget, '2026-07-14.aioncore.log'), 'linked-directory-secret\n');
+      symlinkSync(linkedYearTarget, path.join(logsDir, '2026'), process.platform === 'win32' ? 'junction' : 'dir');
+
+      expect(collectFeedbackLogAttachment(logsDir)).toBeNull();
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+      rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('redacts secrets before compressing recent logs', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-redaction-'));
+    try {
+      writeFileSync(
+        path.join(logsDir, '2026-07-14.log'),
+        'provider=openai api_key=log-secret Authorization: Bearer bearer-secret status=401\n'
+      );
+
+      const attachment = collectFeedbackLogAttachment(logsDir);
+      const content = gunzipSync(attachment!.data).toString('utf8');
+
+      expect(content).toContain('provider=openai');
+      expect(content).toContain('status=401');
+      expect(content).not.toContain('log-secret');
+      expect(content).not.toContain('bearer-secret');
+      expect(content).toContain('[REDACTED]');
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('drops a partial first tail line before redacting a multibyte secret', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-partial-tail-'));
+    try {
+      const secret = 'secret-\u79d8\u5bc6-value';
+      const firstLine = `Authorization: Bearer ${secret}\n`;
+      const retainedLine = 'recent-safe-log-line\n';
+      const tailOffset = Buffer.byteLength('Authorization: Bearer secret-\u79d8', 'utf8') + 1;
+      const source = `${firstLine}${retainedLine}`;
+      const maxFileBytes = Buffer.byteLength(source, 'utf8') - tailOffset;
+      writeFileSync(path.join(logsDir, '2026-07-14.log'), source);
+
+      const attachment = collectFeedbackLogAttachment(logsDir, { maxFileBytes });
+      const content = gunzipSync(attachment!.data).toString('utf8');
+
+      expect(content).toContain('recent-safe-log-line');
+      expect(content).not.toContain('secret-');
+      expect(content).not.toContain('\u79d8\u5bc6');
+      expect(content).not.toContain('-value');
+      expect(content).not.toContain('\uFFFD');
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves only a numeric status after redacting authorization lines', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-authorization-status-'));
+    try {
+      writeFileSync(
+        path.join(logsDir, '2026-07-14.log'),
+        'Authorization: Bearer secret status=401 upstream_body=customer-token\n'
+      );
+
+      const attachment = collectFeedbackLogAttachment(logsDir);
+      const content = gunzipSync(attachment!.data).toString('utf8');
+
+      expect(content).toContain('status=401');
+      expect(content).not.toContain('secret');
+      expect(content).not.toContain('customer-token');
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('orders headers deterministically across dates and log roots', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-header-order-'));
+    try {
+      const alphaLogsDir = path.join(logsDir, 'alpha');
+      const betaLogsDir = path.join(logsDir, 'beta');
+      mkdirSync(alphaLogsDir);
+      mkdirSync(betaLogsDir);
+      writeFileSync(path.join(alphaLogsDir, '2026-07-14.aioncore.log'), 'alpha latest\n');
+      writeFileSync(path.join(betaLogsDir, '2026-07-14.log'), 'beta latest\n');
+      writeFileSync(path.join(alphaLogsDir, '2026-07-13.log'), 'alpha previous\n');
+      writeFileSync(path.join(betaLogsDir, '2026-07-13.aionrs.log'), 'beta previous\n');
+
+      const attachment = collectFeedbackLogAttachment([betaLogsDir, alphaLogsDir]);
+      const content = gunzipSync(attachment!.data).toString('utf8');
+      const headers = [...content.matchAll(/^=== (.+) ===$/gmu)].map((match) => match[1]);
+
+      expect(headers).toEqual(['2026-07-14.aioncore.log', '2026-07-14.log', '2026-07-13.log', '2026-07-13.aionrs.log']);
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('bounds the aggregate attachment with retained content and a byte-safe marker', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-aggregate-'));
+    const limits = { maxAggregateBytes: 120, maxCandidateFiles: 2, maxFileBytes: 64 };
+    try {
+      writeFileSync(path.join(logsDir, '2026-07-14.aioncore.log'), 'first retained content\n');
+      writeFileSync(path.join(logsDir, '2026-07-14.log'), '\u{1F4A5}'.repeat(16));
+
+      const attachment = collectFeedbackLogAttachment(logsDir, limits);
+      const content = gunzipSync(attachment!.data);
+      const text = content.toString('utf8');
+
+      expect(content.byteLength).toBe(limits.maxAggregateBytes);
+      expect(text).toContain('first retained content');
+      expect(text).toContain('[TRUNCATED: aggregate feedback log limit]');
+      expect(text).not.toContain('\uFFFD');
+      expect([...text.matchAll(/^=== (.+) ===$/gmu)].map((match) => match[1])).toEqual(['2026-07-14.aioncore.log']);
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('limits default collection to twelve deterministic candidates', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-default-candidates-'));
+    try {
+      const roots = Array.from({ length: 13 }, (_, index) => {
+        const root = path.join(logsDir, `root-${String(index).padStart(2, '0')}`);
+        mkdirSync(root);
+        writeFileSync(path.join(root, '2026-07-14.log'), `default-candidate-${String(index).padStart(2, '0')}\n`);
+        return root;
+      });
+
+      const attachment = collectFeedbackLogAttachment(roots.toReversed());
+      const content = gunzipSync(attachment!.data).toString('utf8');
+
+      expect([...content.matchAll(/default-candidate-(\d+)/gmu)].map((match) => match[1])).toEqual(
+        Array.from({ length: 12 }, (_, index) => String(index).padStart(2, '0'))
+      );
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the default one MiB bounded tail read through the collector', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-default-file-limit-'));
+    const defaultFileBytes = 1024 * 1024;
+    try {
+      const leadingRecord = 'discarded-record\n';
+      const retainedRecord = 'default-per-file-retained\n';
+      const tail = createSizedAsciiLog(retainedRecord, defaultFileBytes);
+      const logPath = path.join(logsDir, '2026-07-14.log');
+      writeFileSync(logPath, `${leadingRecord}${tail}`);
+      vi.clearAllMocks();
+
+      const attachment = collectFeedbackLogAttachment(logsDir);
+      const content = gunzipSync(attachment!.data).toString('utf8');
+      const tailRead = fs.readSync.mock.calls.find(
+        ([, buffer, offset, length, position]) =>
+          buffer.length === defaultFileBytes &&
+          offset === 0 &&
+          length === defaultFileBytes &&
+          position === Buffer.byteLength(leadingRecord, 'utf8')
+      );
+
+      expect(tailRead).toBeDefined();
+      expect(content).toContain('[TRUNCATED: recent tail retained]');
+      expect(content).toContain('default-per-file-retained');
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the default four MiB aggregate limit with retained content and safe output', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-default-aggregate-'));
+    const defaultFileBytes = 1024 * 1024;
+    const defaultAggregateBytes = 4 * 1024 * 1024;
+    try {
+      const primaryLogsDir = path.join(logsDir, 'a-primary');
+      const extraLogsDir = path.join(logsDir, 'b-extra');
+      mkdirSync(primaryLogsDir);
+      mkdirSync(extraLogsDir);
+      const firstContent = 'default aggregate retained \u{1F4A5}\n';
+      const fullFirstLog = createSizedAsciiLog(firstContent, defaultFileBytes);
+      const fullLog = createSizedAsciiLog('', defaultFileBytes);
+      writeFileSync(path.join(primaryLogsDir, '2026-07-14.aioncore.log'), fullFirstLog);
+      writeFileSync(path.join(primaryLogsDir, '2026-07-14.aionrs.log'), fullLog);
+      writeFileSync(path.join(primaryLogsDir, '2026-07-14.log'), fullLog);
+      writeFileSync(path.join(extraLogsDir, '2026-07-14.log'), createSizedAsciiLog('', defaultFileBytes));
+
+      const attachment = collectFeedbackLogAttachment([primaryLogsDir, extraLogsDir]);
+      const content = gunzipSync(attachment!.data);
+      const text = content.toString('utf8');
+
+      expect(content.byteLength).toBe(defaultAggregateBytes);
+      expect(text).toContain('default aggregate retained \u{1F4A5}');
+      expect(text).toContain('[TRUNCATED: aggregate feedback log limit]');
+      expect(text).not.toContain('\uFFFD');
+      expect([...text.matchAll(/^=== (.+) ===$/gmu)].map((match) => match[1])).toEqual([
+        '2026-07-14.aioncore.log',
+        '2026-07-14.aionrs.log',
+        '2026-07-14.log',
+        '2026-07-14.log',
+      ]);
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ['LF', '\n'],
+    ['CRLF', '\r\n'],
+    ['CR', '\r'],
+  ])('retains a complete first tail record after a %s boundary', (_name, lineBreak) => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-tail-boundary-'));
+    try {
+      const tail = `complete-first-record${lineBreak}complete-second-record${lineBreak}`;
+      writeFileSync(path.join(logsDir, '2026-07-14.log'), `discarded-record${lineBreak}${tail}`);
+
+      const attachment = collectFeedbackLogAttachment(logsDir, { maxFileBytes: Buffer.byteLength(tail, 'utf8') });
+      const content = gunzipSync(attachment!.data).toString('utf8');
+
+      expect(content).toContain('complete-first-record');
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('reads oversized logs through the collector with a bounded descriptor offset', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-bounded-read-'));
+    try {
+      const logPath = path.join(logsDir, '2026-07-14.log');
+      writeFileSync(logPath, 'x'.repeat(96));
+      vi.clearAllMocks();
+
+      collectFeedbackLogAttachment(logsDir, { maxFileBytes: 32 });
+
+      const expectedOpenFlags =
+        typeof fs.constants.O_NOFOLLOW === 'number'
+          ? fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW
+          : fs.constants.O_RDONLY;
+      expect(fs.openSync).toHaveBeenCalledWith(logPath, expectedOpenFlags);
+      expect(fs.fstatSync).toHaveBeenCalledOnce();
+      expect(fs.readSync).toHaveBeenCalledWith(expect.any(Number), expect.any(Buffer), 0, 32, 64);
+      const tailRead = fs.readSync.mock.calls.find(([, buffer, offset, length, position]) => {
+        return buffer.length === 32 && offset === 0 && length === 32 && position === 64;
+      });
+      expect(tailRead?.[1]).toHaveLength(32);
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a selected log when its opened descriptor identity has changed', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-swapped-log-'));
+    try {
+      const logPath = path.join(logsDir, '2026-07-14.log');
+      writeFileSync(logPath, 'must not be collected\n');
+      const selectedStat = fs.lstatSync(logPath);
+      const swappedStat = Object.create(
+        Object.getPrototypeOf(selectedStat),
+        Object.getOwnPropertyDescriptors(selectedStat)
+      ) as fs.Stats;
+      Object.defineProperty(swappedStat, 'ino', { configurable: true, value: selectedStat.ino + 1 });
+      vi.clearAllMocks();
+      vi.mocked(fs.fstatSync).mockReturnValueOnce(swappedStat);
+
+      expect(collectFeedbackLogAttachment(logsDir)).toBeNull();
+
+      expect(fs.closeSync).toHaveBeenCalledOnce();
+      expect(fs.readSync).not.toHaveBeenCalled();
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+
+  it('closes a log descriptor when bounded metadata lookup throws', () => {
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'forge-feedback-close-descriptor-'));
+    try {
+      writeFileSync(path.join(logsDir, '2026-07-14.log'), 'log content\n');
+      vi.clearAllMocks();
+      vi.mocked(fs.fstatSync).mockImplementationOnce(() => {
+        throw new Error('fstat failed');
+      });
+
+      expect(() => collectFeedbackLogAttachment(logsDir)).toThrow('fstat failed');
+
+      expect(fs.openSync).toHaveBeenCalledOnce();
+      expect(fs.closeSync).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('feedbackBridge — renderer-log', () => {
+  it('drops renderer logs from a foreign sender without echoing payload values', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: foreignSender },
+      JSON.stringify({ level: 'error', message: 'secret-message' })
+    );
+
+    expect(warning).toHaveBeenCalledWith('[feedbackBridge] Rejected renderer log: unauthorized sender');
+    expect(JSON.stringify(warning.mock.calls)).not.toContain('secret-message');
+  });
+
+  it('drops malformed renderer log JSON without echoing payload values', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.({ sender: allowedWindow.webContents }, '{secret-message');
+
+    expect(warning).toHaveBeenCalledWith('[feedbackBridge] Rejected renderer log: invalid payload');
+    expect(JSON.stringify(warning.mock.calls)).not.toContain('secret-message');
+  });
+
+  it('redacts and bounds an authorized renderer log before writing it', () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({
+        level: 'error',
+        message: 'x'.repeat(5_000),
+        details: { api_key: 'renderer-secret', status: 401 },
+      })
+    );
+
+    const serializedCalls = JSON.stringify(errorLog.mock.calls);
+    expect(serializedCalls).not.toContain('renderer-secret');
+    expect(serializedCalls).toContain('[REDACTED]');
+    expect(serializedCalls).toContain('[TRUNCATED]');
+  });
+
+  it('accepts an authorized renderer message at exactly 4,096 UTF-8 bytes', () => {
+    const infoLog = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const message = 'x'.repeat(4_096);
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({ level: 'info', message })
+    );
+
+    const loggedMessage = infoLog.mock.calls[0]?.[0];
+    expect(loggedMessage).toBe(`[FeedbackReport:renderer] ${message}`);
+    expect(Buffer.byteLength(String(loggedMessage).slice('[FeedbackReport:renderer] '.length), 'utf8')).toBe(4_096);
+  });
+
+  it('fits a multibyte renderer message and truncation marker within 4,096 UTF-8 bytes', () => {
+    const infoLog = vi.spyOn(console, 'info').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({ level: 'info', message: '\u{1F4A5}'.repeat(2_048) })
+    );
+
+    const loggedMessage = String(infoLog.mock.calls[0]?.[0]).slice('[FeedbackReport:renderer] '.length);
+    expect(Buffer.byteLength(loggedMessage, 'utf8')).toBeLessThanOrEqual(4_096);
+    expect(loggedMessage.endsWith(DIAGNOSTIC_TRUNCATION_MARKER)).toBe(true);
+    expect(loggedMessage).not.toContain('\uFFFD');
+  });
+
+  it('accepts a renderer log envelope at exactly 64 KiB', () => {
+    const infoLog = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const basePayload = JSON.stringify({ level: 'info', message: 'envelope boundary', padding: '' });
+    const payload = JSON.stringify({
+      level: 'info',
+      message: 'envelope boundary',
+      padding: 'x'.repeat(64 * 1024 - Buffer.byteLength(basePayload, 'utf8')),
+    });
+    expect(Buffer.byteLength(payload, 'utf8')).toBe(64 * 1024);
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.({ sender: allowedWindow.webContents }, payload);
+
+    expect(infoLog).toHaveBeenCalledWith('[FeedbackReport:renderer] envelope boundary');
+  });
+
+  it('drops a renderer log larger than 64 KiB before parsing', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({ level: 'info', message: 'x'.repeat(65_536) })
+    );
+
+    expect(warning).toHaveBeenCalledWith('[feedbackBridge] Rejected renderer log: invalid payload');
+  });
+
+  it('measures a multibyte renderer log envelope in UTF-8 bytes', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({ level: 'info', message: '💥'.repeat(16_385) })
+    );
+
+    expect(warning).toHaveBeenCalledWith('[feedbackBridge] Rejected renderer log: invalid payload');
+  });
+
+  it('bounds details whose serialized value exceeds 32 KiB', () => {
+    const infoLog = vi.spyOn(console, 'info').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({ level: 'info', message: 'feedback message', details: 'x'.repeat(32 * 1024 + 1) })
+    );
+
+    expect(infoLog).toHaveBeenCalledWith('[FeedbackReport:renderer] feedback message', DIAGNOSTIC_TRUNCATION_MARKER);
+  });
+
+  it('accepts details whose serialized value is exactly 32 KiB', () => {
+    const infoLog = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const details = 'x'.repeat(32 * 1024 - 2);
+    expect(Buffer.byteLength(JSON.stringify(details), 'utf8')).toBe(32 * 1024);
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({ level: 'info', message: 'feedback message', details })
+    );
+
+    expect(infoLog).toHaveBeenCalledWith('[FeedbackReport:renderer] feedback message', details);
+  });
+
+  it('drops a valid JSON primitive renderer log payload', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.({ sender: allowedWindow.webContents }, 'true');
+
+    expect(warning).toHaveBeenCalledWith('[feedbackBridge] Rejected renderer log: invalid payload');
+  });
+
+  it('drops a valid JSON array renderer log payload', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.({ sender: allowedWindow.webContents }, '[]');
+
+    expect(warning).toHaveBeenCalledWith('[feedbackBridge] Rejected renderer log: invalid payload');
+  });
+
+  it('normalizes an unknown renderer log level to info', () => {
+    const infoLog = vi.spyOn(console, 'info').mockImplementation(() => {});
+    initFeedbackBridgeWithWindow(allowedWindow as never);
+
+    eventHandlers.get('feedback:renderer-log')?.(
+      { sender: allowedWindow.webContents },
+      JSON.stringify({ level: 'debug', message: 'feedback message' })
+    );
+
+    expect(infoLog).toHaveBeenCalledWith('[FeedbackReport:renderer] feedback message');
+  });
+});
+
+describe('preload feedback wire contract', () => {
+  it('exposes an object-shaped logFeedbackEvent that sends serialized payloads', async () => {
+    await import('@/preload/main');
+    const api = exposedMainWorld.get('electronAPI') as ExposedElectronApi;
+
+    expect(typeof api).toBe('object');
+    expect(typeof api.logFeedbackEvent).toBe('function');
+
+    const payload = { level: 'warn' as const, message: 'feedback message', details: { status: 401 } };
+    api.logFeedbackEvent(payload);
+
+    expect(ipcRenderer.send).toHaveBeenCalledWith('feedback:renderer-log', JSON.stringify(payload));
+  });
+
+  it('uses the serialized safe fallback when feedback payload serialization fails', async () => {
+    await import('@/preload/main');
+    const api = exposedMainWorld.get('electronAPI') as ExposedElectronApi;
+    const details: { circular?: unknown } = {};
+    details.circular = details;
+
+    api.logFeedbackEvent({ level: 'error', message: 'feedback message', details });
+
+    expect(ipcRenderer.send).toHaveBeenCalledWith(
+      'feedback:renderer-log',
+      JSON.stringify({ level: 'error', message: 'feedback diagnostic serialization failed' })
+    );
   });
 });

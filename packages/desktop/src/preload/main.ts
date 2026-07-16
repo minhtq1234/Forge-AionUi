@@ -46,8 +46,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Feedback: capture a screenshot of the current window
   captureFeedbackScreenshot: () => ipcRenderer.invoke('feedback:capture-screenshot'),
   // Feedback: forward diagnostics logs to the main process console
-  logFeedbackEvent: (payload: { details?: unknown; level: 'info' | 'warn' | 'error'; message: string }) =>
-    ipcRenderer.send('feedback:renderer-log', payload),
+  logFeedbackEvent: (payload: { details?: unknown; level: 'info' | 'warn' | 'error'; message: string }) => {
+    try {
+      ipcRenderer.send('feedback:renderer-log', JSON.stringify(payload));
+    } catch {
+      ipcRenderer.send(
+        'feedback:renderer-log',
+        JSON.stringify({ level: 'error', message: 'feedback diagnostic serialization failed' })
+      );
+    }
+  },
   recoverCorruptedDatabase: () => ipcRenderer.invoke('backend:recover-corrupted-database'),
 });
 
