@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   listProjectsProvider: vi.fn(),
   createProjectProvider: vi.fn(),
   getProjectProvider: vi.fn(),
+  proposeStoryboardProvider: vi.fn(),
   updateProjectProvider: vi.fn(),
   deleteProjectProvider: vi.fn(),
   updateSceneProvider: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock('@/common', () => ({
       listProjects: { provider: mocks.listProjectsProvider },
       createProject: { provider: mocks.createProjectProvider },
       getProject: { provider: mocks.getProjectProvider },
+      proposeStoryboard: { provider: mocks.proposeStoryboardProvider },
       updateProject: { provider: mocks.updateProjectProvider },
       deleteProject: { provider: mocks.deleteProjectProvider },
       updateScene: { provider: mocks.updateSceneProvider },
@@ -43,6 +45,7 @@ import {
   initCreativeStudioBridge,
   type CreativeStudioBridgeDependencies,
 } from '@process/bridge/creativeStudioBridge';
+import { CreativeStudioServiceError } from '@process/services/creative-studio/creativeStudioService';
 
 const project: StudioProject = {
   schemaVersion: 1,
@@ -74,6 +77,7 @@ describe('initCreativeStudioBridge', () => {
         listProjects: vi.fn(async () => []),
         createProject: vi.fn(async () => project),
         getProject: vi.fn(async () => project),
+        proposeStoryboard: vi.fn(async () => project),
         updateProject: vi.fn(async () => project),
         deleteProject: vi.fn(async () => true),
         updateScene: vi.fn(async () => project),
@@ -89,6 +93,7 @@ describe('initCreativeStudioBridge', () => {
     expect(mocks.listProjectsProvider).toHaveBeenCalledOnce();
     expect(mocks.createProjectProvider).toHaveBeenCalledOnce();
     expect(mocks.getProjectProvider).toHaveBeenCalledOnce();
+    expect(mocks.proposeStoryboardProvider).toHaveBeenCalledOnce();
     expect(mocks.updateProjectProvider).toHaveBeenCalledOnce();
     expect(mocks.deleteProjectProvider).toHaveBeenCalledOnce();
     expect(mocks.updateSceneProvider).toHaveBeenCalledOnce();
@@ -104,6 +109,7 @@ describe('initCreativeStudioBridge', () => {
         },
         createProject: vi.fn(),
         getProject: vi.fn(),
+        proposeStoryboard: vi.fn(),
         updateProject: vi.fn(),
         deleteProject: vi.fn(),
         updateScene: vi.fn(),
@@ -126,6 +132,7 @@ describe('initCreativeStudioBridge', () => {
         listProjects: vi.fn(async () => []),
         createProject: vi.fn(),
         getProject: vi.fn(),
+        proposeStoryboard: vi.fn(),
         updateProject: async () => {
           throw new CreativeStudioStoreError('stale_project', 'raw compare-and-set failure');
         },
@@ -160,6 +167,39 @@ describe('initCreativeStudioBridge', () => {
     expect(service.updateScene).toHaveBeenCalledWith(input);
   });
 
+  it.each([
+    ['planning_unavailable', 'creativeStudio.errors.planningUnavailable'],
+    ['storyboard_exists', 'creativeStudio.errors.storyboardExists'],
+    ['busy', 'creativeStudio.errors.busy'],
+    ['provider_error', 'creativeStudio.errors.provider'],
+    ['stale_project', 'creativeStudio.errors.staleProject'],
+  ] as const)('returns a redacted %s planning envelope', async (code, messageKey) => {
+    dependencies = {
+      getService: () => ({
+        listProjects: vi.fn(async () => []),
+        createProject: vi.fn(),
+        getProject: vi.fn(),
+        proposeStoryboard: async () => {
+          throw code === 'stale_project'
+            ? new CreativeStudioStoreError(code, 'raw compare-and-set failure')
+            : new CreativeStudioServiceError(code);
+        },
+        updateProject: vi.fn(),
+        deleteProject: vi.fn(),
+        updateScene: vi.fn(),
+        reorderScenes: vi.fn(),
+        selectAsset: vi.fn(),
+      }),
+    };
+    initCreativeStudioBridge(dependencies);
+    const handler = mocks.proposeStoryboardProvider.mock.calls[0]?.[0] as ProviderHandler;
+
+    await expect(handler({ projectId: 'project_1', expectedRevision: 1, replaceExisting: false })).resolves.toEqual({
+      ok: false,
+      error: { code, messageKey },
+    });
+  });
+
   it('delegates every registered provider once instead of bypassing the typed service boundary', async () => {
     const service = dependencies.getService();
     initCreativeStudioBridge({ getService: () => service });
@@ -176,6 +216,7 @@ describe('initCreativeStudioBridge', () => {
         { name: 'Launch film', brief: '', aspectRatio: '16:9', targetDurationSeconds: 12, resolution: '1080p' },
       ],
       [mocks.getProjectProvider, { projectId: 'project_1' }],
+      [mocks.proposeStoryboardProvider, { projectId: 'project_1', expectedRevision: 1, replaceExisting: false }],
       [mocks.updateProjectProvider, { projectId: 'project_1', expectedRevision: 1, name: 'Changed' }],
       [mocks.deleteProjectProvider, { projectId: 'project_1', expectedRevision: 1 }],
       [mocks.updateSceneProvider, sceneInput],
@@ -196,6 +237,7 @@ describe('initCreativeStudioBridge', () => {
     expect(service.listProjects).toHaveBeenCalledOnce();
     expect(service.createProject).toHaveBeenCalledOnce();
     expect(service.getProject).toHaveBeenCalledOnce();
+    expect(service.proposeStoryboard).toHaveBeenCalledOnce();
     expect(service.updateProject).toHaveBeenCalledOnce();
     expect(service.deleteProject).toHaveBeenCalledOnce();
     expect(service.updateScene).toHaveBeenCalledOnce();

@@ -95,6 +95,7 @@ const VALID_PAYLOADS = {
     resolution: '1080p',
   },
   'creative-studio.get-project': { projectId: 'project_1' },
+  'creative-studio.propose-storyboard': { projectId: 'project_1', expectedRevision: 1, replaceExisting: false },
   'creative-studio.update-project': { projectId: 'project_1', expectedRevision: 1, name: 'Changed launch film' },
   'creative-studio.delete-project': { projectId: 'project_1', expectedRevision: 1 },
   'creative-studio.update-scene': {
@@ -430,6 +431,42 @@ const INVALID_PAYLOADS = [
     { ...VALID_PAYLOADS['creative-studio.create-project'], targetDurationSeconds: Number.POSITIVE_INFINITY },
   ],
   ['creative-studio.get-project', 'project id traversal', { projectId: '../project_1' }],
+  [
+    'creative-studio.propose-storyboard',
+    'project id traversal',
+    { projectId: '../project_1', expectedRevision: 1, replaceExisting: false },
+  ],
+  [
+    'creative-studio.propose-storyboard',
+    'zero expected revision',
+    { projectId: 'project_1', expectedRevision: 0, replaceExisting: false },
+  ],
+  [
+    'creative-studio.propose-storyboard',
+    'fractional expected revision',
+    { projectId: 'project_1', expectedRevision: 1.5, replaceExisting: false },
+  ],
+  [
+    'creative-studio.propose-storyboard',
+    'infinite expected revision',
+    { projectId: 'project_1', expectedRevision: Number.POSITIVE_INFINITY, replaceExisting: false },
+  ],
+  ['creative-studio.propose-storyboard', 'missing replace option', { projectId: 'project_1', expectedRevision: 1 }],
+  [
+    'creative-studio.propose-storyboard',
+    'renderer supplied provider choice',
+    { projectId: 'project_1', expectedRevision: 1, replaceExisting: false, providerId: 'provider_1' },
+  ],
+  [
+    'creative-studio.propose-storyboard',
+    'renderer supplied model choice',
+    { projectId: 'project_1', expectedRevision: 1, replaceExisting: false, model: 'model_1' },
+  ],
+  [
+    'creative-studio.propose-storyboard',
+    'renderer supplied prompt',
+    { projectId: 'project_1', expectedRevision: 1, replaceExisting: false, prompt: 'override' },
+  ],
   [
     'creative-studio.update-project',
     'missing expected revision',

@@ -61,6 +61,7 @@ import type {
 import type { IProjectKnowledgeListResult } from '../types/project/knowledgeTypes';
 import type {
   CreateStudioProjectInput,
+  ProposeStudioStoryboardInput,
   StudioCommandResult,
   StudioDeleteProjectRequest,
   StudioProject,
@@ -1006,6 +1007,9 @@ export const creativeStudio = {
   ),
   getProject: bridge.buildProvider<StudioCommandResult<StudioProject | null>, StudioProjectRequest>(
     'creative-studio.get-project'
+  ),
+  proposeStoryboard: bridge.buildProvider<StudioCommandResult<StudioProject>, ProposeStudioStoryboardInput>(
+    'creative-studio.propose-storyboard'
   ),
   updateProject: bridge.buildProvider<StudioCommandResult<StudioProject>, StudioUpdateProjectRequest>(
     'creative-studio.update-project'

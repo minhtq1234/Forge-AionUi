@@ -6,6 +6,7 @@
 
 import type {
   CreateStudioProjectInput,
+  ProposeStudioStoryboardInput,
   StudioProject,
   StudioProjectSummary,
   StudioScene,
@@ -15,7 +16,14 @@ import type {
   StudioReorderScenesRequest,
   StudioDeleteProjectRequest,
 } from '@/common/types/project/creativeStudioTypes';
+import type { AppOperationResult } from '@/common/types/appOperations';
+import { runStudioStoryboardDraft } from '@process/services/app-operations';
+import type {
+  StudioStoryboardDraftTaskInput,
+  StudioStoryboardDraftOutput,
+} from '@process/services/app-operations/storyboardDraftTask';
 import { CreativeStudioStoreError, type CreativeStudioStore } from '@process/services/creative-studio/store';
+import { randomUUID } from 'node:crypto';
 
 const SAFE_ID = /^[A-Za-z0-9_-]{1,256}$/;
 const ASPECT_RATIOS = new Set(['16:9', '9:16', '1:1', '4:3', '3:4']);
@@ -27,6 +35,7 @@ export type CreativeStudioService = {
   listProjects(): Promise<StudioProjectSummary[]>;
   createProject(input: CreateStudioProjectInput): Promise<StudioProject>;
   getProject(projectId: string): Promise<StudioProject | null>;
+  proposeStoryboard(input: ProposeStudioStoryboardInput): Promise<StudioProject>;
   updateProject(input: StudioUpdateProjectRequest): Promise<StudioProject>;
   deleteProject(input: StudioDeleteProjectRequest): Promise<boolean>;
   updateScene(input: StudioUpdateSceneRequest): Promise<StudioProject>;
@@ -37,7 +46,22 @@ export type CreativeStudioService = {
 export type CreativeStudioServiceDeps = {
   store: CreativeStudioStore;
   onProjectUpdated: (projectId: string) => void;
+  runStoryboardDraft?: (
+    input: StudioStoryboardDraftTaskInput
+  ) => Promise<AppOperationResult<StudioStoryboardDraftOutput>>;
+  createSceneId?: () => string;
 };
+
+/** A safe, stable service error that can cross only through the bridge error mapper. */
+export class CreativeStudioServiceError extends Error {
+  readonly code: 'storyboard_exists' | 'planning_unavailable' | 'busy' | 'provider_error';
+
+  constructor(code: CreativeStudioServiceError['code']) {
+    super(code);
+    this.name = 'CreativeStudioServiceError';
+    this.code = code;
+  }
+}
 
 const isSafeId = (value: unknown): value is string => typeof value === 'string' && SAFE_ID.test(value);
 
@@ -67,6 +91,19 @@ const assertText: (value: unknown, maximum: number, label: string, required?: bo
 
 const assertExpectedRevision: (value: unknown) => asserts value is number = (value) => {
   if (!isIntegerInRange(value, 1, Number.MAX_SAFE_INTEGER)) throw invalid('Invalid Studio project revision');
+};
+
+const plannerError = (result: AppOperationResult<StudioStoryboardDraftOutput>): CreativeStudioServiceError => {
+  if (result.ok === true) throw new Error('expected_planner_error');
+  switch (result.error.code) {
+    case 'not_configured':
+    case 'model_unavailable':
+      return new CreativeStudioServiceError('planning_unavailable');
+    case 'queue_full':
+      return new CreativeStudioServiceError('busy');
+    default:
+      return new CreativeStudioServiceError('provider_error');
+  }
 };
 
 const assertProjectInput = (input: CreateStudioProjectInput): void => {
@@ -104,6 +141,8 @@ const assertScene = (sceneId: string, scene: StudioScene): void => {
 
 /** Owns bounded Creative Studio project edits and renderer-safe mutation notifications. */
 export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): CreativeStudioService => {
+  const runStoryboardDraft = deps.runStoryboardDraft ?? runStudioStoryboardDraft;
+  const createSceneId = deps.createSceneId ?? randomUUID;
   const notify = <T extends StudioProject>(project: T): T => {
     deps.onProjectUpdated(project.id);
     return project;
@@ -120,6 +159,63 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
     async getProject(projectId: string): Promise<StudioProject | null> {
       assertSafeId(projectId, 'project id');
       return deps.store.getProject(projectId);
+    },
+
+    async proposeStoryboard(input: ProposeStudioStoryboardInput): Promise<StudioProject> {
+      assertSafeId(input.projectId, 'project id');
+      assertExpectedRevision(input.expectedRevision);
+      if (typeof input.replaceExisting !== 'boolean') throw invalid('Invalid storyboard replacement option');
+
+      const project = await deps.store.getProject(input.projectId);
+      if (!project) throw new CreativeStudioStoreError('not_found', 'Studio project not found');
+      if (project.revision !== input.expectedRevision) {
+        throw new CreativeStudioStoreError('stale_project', 'Studio project has changed');
+      }
+      if (project.sceneOrder.length > 0 && !input.replaceExisting) {
+        throw new CreativeStudioServiceError('storyboard_exists');
+      }
+
+      const result = await runStoryboardDraft({
+        projectId: project.id,
+        projectRevision: project.revision,
+        brief: project.brief,
+        aspectRatio: project.aspectRatio,
+        targetDurationSeconds: project.targetDurationSeconds,
+      });
+      if (!result.ok) throw plannerError(result);
+
+      const sceneIds = new Set<string>();
+      const scenes: Record<string, StudioScene> = {};
+      for (const draft of result.output.scenes) {
+        const sceneId = createSceneId();
+        if (!isSafeId(sceneId) || sceneIds.has(sceneId)) {
+          throw new CreativeStudioStoreError('storage_error', 'Unable to allocate Studio scene identity');
+        }
+        sceneIds.add(sceneId);
+        scenes[sceneId] = {
+          id: sceneId,
+          title: draft.title,
+          purpose: draft.purpose,
+          visualPrompt: draft.visualPrompt,
+          narration: draft.narration,
+          onScreenText: draft.onScreenText,
+          mediaKind: draft.mediaKind,
+          durationSeconds: draft.durationSeconds,
+          referenceAssetId: null,
+          selectedAssetId: null,
+          assetIds: [],
+          jobIds: [],
+          reviewState: 'draft',
+        };
+      }
+
+      return notify(
+        await deps.store.updateProject(
+          project.id,
+          (current) => ({ ...current, scenes, sceneOrder: [...sceneIds] }),
+          project.revision
+        )
+      );
     },
 
     async updateProject(input: StudioUpdateProjectRequest): Promise<StudioProject> {

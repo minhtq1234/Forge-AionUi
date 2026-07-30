@@ -194,6 +194,11 @@ export type StudioProjectRequest = {
   projectId: string;
 };
 
+export type ProposeStudioStoryboardInput = StudioProjectRequest & {
+  expectedRevision: number;
+  replaceExisting: boolean;
+};
+
 export type StudioDeleteProjectRequest = StudioProjectRequest & {
   expectedRevision: number;
 };
@@ -253,6 +258,7 @@ export type StudioDesktopApi = {
   listProjects(): Promise<StudioCommandResult<StudioProjectSummary[]>>;
   createProject(input: CreateStudioProjectInput): Promise<StudioCommandResult<StudioProject>>;
   getProject(input: StudioProjectRequest): Promise<StudioCommandResult<StudioProject | null>>;
+  proposeStoryboard(input: ProposeStudioStoryboardInput): Promise<StudioCommandResult<StudioProject>>;
   updateProject(input: StudioUpdateProjectRequest): Promise<StudioCommandResult<StudioProject>>;
   deleteProject(input: StudioDeleteProjectRequest): Promise<StudioCommandResult<boolean>>;
   updateScene(input: StudioUpdateSceneRequest): Promise<StudioCommandResult<StudioProject>>;

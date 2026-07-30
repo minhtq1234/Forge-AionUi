@@ -288,6 +288,13 @@ export const nativeBridgePayloadSchemas = {
   'creative-studio.list-projects': voidPayloadSchema,
   'creative-studio.create-project': studioProjectInputSchema,
   'creative-studio.get-project': studioProjectRequestSchema,
+  'creative-studio.propose-storyboard': z
+    .object({
+      projectId: safeIdSchema,
+      expectedRevision: studioExpectedRevisionSchema,
+      replaceExisting: z.boolean(),
+    })
+    .strict(),
   'creative-studio.update-project': studioUpdateProjectSchema,
   'creative-studio.delete-project': z
     .object({ projectId: safeIdSchema, expectedRevision: studioExpectedRevisionSchema })

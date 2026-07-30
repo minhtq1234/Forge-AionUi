@@ -43,6 +43,47 @@ const makeScene = (id: string, durationSeconds = 4): StudioScene => ({
   reviewState: 'draft',
 });
 
+const storyboardProposal = {
+  projectSummary: 'A concise product launch story.',
+  scenes: [
+    {
+      title: 'Opening',
+      purpose: 'Set the need.',
+      visualPrompt: 'A cinematic morning commute.',
+      narration: 'Every day starts with a choice.',
+      onScreenText: '',
+      mediaKind: 'video' as const,
+      durationSeconds: 4,
+    },
+    {
+      title: 'Product',
+      purpose: 'Show the product.',
+      visualPrompt: 'A premium reusable bottle in a studio.',
+      narration: '',
+      onScreenText: 'Built to last.',
+      mediaKind: 'image' as const,
+      durationSeconds: 4,
+    },
+    {
+      title: 'Payoff',
+      purpose: 'Close the story.',
+      visualPrompt: 'Friends share a hilltop sunset.',
+      narration: 'Carry better habits forward.',
+      onScreenText: 'Refill your future.',
+      mediaKind: 'video' as const,
+      durationSeconds: 4,
+    },
+  ],
+};
+
+type StoryboardService = CreativeStudioService & {
+  proposeStoryboard(input: {
+    projectId: string;
+    expectedRevision: number;
+    replaceExisting: boolean;
+  }): Promise<StudioProject>;
+};
+
 describe('CreativeStudioService', () => {
   let rootDir = '';
   let service: CreativeStudioService;
@@ -227,5 +268,193 @@ describe('CreativeStudioService', () => {
     ).rejects.toMatchObject({ code: 'stale_project' } satisfies Partial<CreativeStudioStoreError>);
 
     expect(onProjectUpdated).not.toHaveBeenCalled();
+  });
+
+  it('maps unavailable planner outcomes without calling a renderer-selected provider', async () => {
+    const runner = vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'not_configured' as const, retryable: false },
+      operation: { task_id: 'studio.storyboard-draft', prompt_version: 'studio.storyboard-draft.v1' },
+    }));
+    const project = await service.createProject(makeInput());
+    let sceneIndex = 0;
+    const storyboardService = createCreativeStudioService({
+      store: createCreativeStudioStore({ rootDir }),
+      onProjectUpdated,
+      runStoryboardDraft: runner,
+      createSceneId: () => `scene_${++sceneIndex}`,
+    } as unknown as Parameters<typeof createCreativeStudioService>[0]) as StoryboardService;
+
+    await expect(
+      storyboardService.proposeStoryboard({
+        projectId: project.id,
+        expectedRevision: project.revision,
+        replaceExisting: false,
+      })
+    ).rejects.toMatchObject({ code: 'planning_unavailable' });
+    expect(runner).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: project.id, projectRevision: project.revision, brief: project.brief })
+    );
+    expect(runner.mock.calls[0]?.[0]).not.toHaveProperty('providerId');
+    expect(runner.mock.calls[0]?.[0]).not.toHaveProperty('model');
+    expect(runner.mock.calls[0]?.[0]).not.toHaveProperty('prompt');
+  });
+
+  it.each([
+    ['model_unavailable', 'planning_unavailable'],
+    ['queue_full', 'busy'],
+    ['provider_auth_failed', 'provider_error'],
+    ['provider_rate_limited', 'provider_error'],
+    ['provider_timeout', 'provider_error'],
+    ['provider_request_failed', 'provider_error'],
+    ['canceled', 'provider_error'],
+    ['invalid_output', 'provider_error'],
+  ] as const)('maps broker %s outcomes to the redacted Studio %s result', async (brokerCode, studioCode) => {
+    const runner = vi.fn(async () => ({
+      ok: false as const,
+      error: { code: brokerCode, retryable: false },
+      operation: { task_id: 'studio.storyboard-draft', prompt_version: 'studio.storyboard-draft.v1' },
+    }));
+    const project = await service.createProject(makeInput());
+    const storyboardService = createCreativeStudioService({
+      store: createCreativeStudioStore({ rootDir }),
+      onProjectUpdated,
+      runStoryboardDraft: runner,
+    } as unknown as Parameters<typeof createCreativeStudioService>[0]) as StoryboardService;
+
+    await expect(
+      storyboardService.proposeStoryboard({
+        projectId: project.id,
+        expectedRevision: project.revision,
+        replaceExisting: false,
+      })
+    ).rejects.toMatchObject({ code: studioCode });
+  });
+
+  it('refuses to replace an existing storyboard before invoking the planner', async () => {
+    const runner = vi.fn();
+    const project = await service.createProject(makeInput());
+    const withScene = await service.updateScene({
+      projectId: project.id,
+      expectedRevision: project.revision,
+      sceneId: 'scene_existing',
+      scene: makeScene('scene_existing'),
+    });
+    const storyboardService = createCreativeStudioService({
+      store: createCreativeStudioStore({ rootDir }),
+      onProjectUpdated,
+      runStoryboardDraft: runner,
+      createSceneId: () => 'scene_1',
+    } as unknown as Parameters<typeof createCreativeStudioService>[0]) as StoryboardService;
+
+    await expect(
+      storyboardService.proposeStoryboard({
+        projectId: withScene.id,
+        expectedRevision: withScene.revision,
+        replaceExisting: false,
+      })
+    ).rejects.toMatchObject({ code: 'storyboard_exists' });
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it('replaces an existing storyboard only after a complete replacement proposal validates', async () => {
+    const runner = vi.fn(async () => ({
+      ok: true as const,
+      output: storyboardProposal,
+      operation: { task_id: 'studio.storyboard-draft', prompt_version: 'studio.storyboard-draft.v1' },
+    }));
+    const project = await service.createProject(makeInput());
+    const withScene = await service.updateScene({
+      projectId: project.id,
+      expectedRevision: project.revision,
+      sceneId: 'scene_existing',
+      scene: makeScene('scene_existing'),
+    });
+    let sceneIndex = 0;
+    const storyboardService = createCreativeStudioService({
+      store: createCreativeStudioStore({ rootDir }),
+      onProjectUpdated,
+      runStoryboardDraft: runner,
+      createSceneId: () => `scene_${++sceneIndex}`,
+    } as unknown as Parameters<typeof createCreativeStudioService>[0]) as StoryboardService;
+
+    const drafted = await storyboardService.proposeStoryboard({
+      projectId: withScene.id,
+      expectedRevision: withScene.revision,
+      replaceExisting: true,
+    });
+
+    expect(drafted.sceneOrder).toEqual(['scene_1', 'scene_2', 'scene_3']);
+    expect(drafted.scenes).not.toHaveProperty('scene_existing');
+  });
+
+  it('hydrates canonical draft scenes and emits exactly one update after a successful proposal', async () => {
+    const runner = vi.fn(async () => ({
+      ok: true as const,
+      output: storyboardProposal,
+      operation: { task_id: 'studio.storyboard-draft', prompt_version: 'studio.storyboard-draft.v1' },
+    }));
+    const project = await service.createProject(makeInput());
+    onProjectUpdated.mockClear();
+    let sceneIndex = 0;
+    const storyboardService = createCreativeStudioService({
+      store: createCreativeStudioStore({ rootDir }),
+      onProjectUpdated,
+      runStoryboardDraft: runner,
+      createSceneId: () => `scene_${++sceneIndex}`,
+    } as unknown as Parameters<typeof createCreativeStudioService>[0]) as StoryboardService;
+
+    const drafted = await storyboardService.proposeStoryboard({
+      projectId: project.id,
+      expectedRevision: project.revision,
+      replaceExisting: false,
+    });
+
+    expect(drafted.sceneOrder).toEqual(['scene_1', 'scene_2', 'scene_3']);
+    expect(drafted.scenes.scene_1).toMatchObject({
+      assetIds: [],
+      jobIds: [],
+      referenceAssetId: null,
+      selectedAssetId: null,
+    });
+    expect(onProjectUpdated).toHaveBeenCalledOnce();
+  });
+
+  it('discards a late proposal when a concurrent project mutation changes the captured revision', async () => {
+    let release!: (result: unknown) => void;
+    const runner = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        })
+    );
+    const project = await service.createProject(makeInput());
+    let sceneIndex = 0;
+    const storyboardService = createCreativeStudioService({
+      store: createCreativeStudioStore({ rootDir }),
+      onProjectUpdated,
+      runStoryboardDraft: runner,
+      createSceneId: () => `scene_${++sceneIndex}`,
+    } as unknown as Parameters<typeof createCreativeStudioService>[0]) as StoryboardService;
+    const proposed = storyboardService.proposeStoryboard({
+      projectId: project.id,
+      expectedRevision: project.revision,
+      replaceExisting: false,
+    });
+
+    await vi.waitFor(() => expect(runner).toHaveBeenCalledOnce());
+    const edited = await service.updateProject({
+      projectId: project.id,
+      expectedRevision: project.revision,
+      name: 'Edited while planning',
+    });
+    release({
+      ok: true,
+      output: storyboardProposal,
+      operation: { task_id: 'studio.storyboard-draft', prompt_version: 'studio.storyboard-draft.v1' },
+    });
+
+    await expect(proposed).rejects.toMatchObject({ code: 'stale_project' });
+    await expect(service.getProject(project.id)).resolves.toMatchObject({ name: edited.name, scenes: {} });
   });
 });

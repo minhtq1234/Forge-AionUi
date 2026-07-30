@@ -8,6 +8,7 @@ import { ipcBridge } from '@/common';
 import type { StudioCommandErrorCode, StudioCommandResult } from '@/common/types/project/creativeStudioTypes';
 import {
   createCreativeStudioService,
+  CreativeStudioServiceError,
   type CreativeStudioService,
   type CreativeStudioServiceDeps,
 } from '@process/services/creative-studio/creativeStudioService';
@@ -28,7 +29,10 @@ const errorMessageKeys: Record<StudioCommandErrorCode, string> = {
 };
 
 const toCommandError = (error: unknown): StudioCommandResult<never> => {
-  const code: StudioCommandErrorCode = error instanceof CreativeStudioStoreError ? error.code : 'storage_error';
+  const code: StudioCommandErrorCode =
+    error instanceof CreativeStudioStoreError || error instanceof CreativeStudioServiceError
+      ? error.code
+      : 'storage_error';
   return { ok: false, error: { code, messageKey: errorMessageKeys[code] } };
 };
 
@@ -69,6 +73,9 @@ export function initCreativeStudioBridge(dependencies: CreativeStudioBridgeDepen
   );
   ipcBridge.creativeStudio.getProject.provider((input) =>
     command(() => dependencies.getService().getProject(input.projectId))
+  );
+  ipcBridge.creativeStudio.proposeStoryboard.provider((input) =>
+    command(() => dependencies.getService().proposeStoryboard(input))
   );
   ipcBridge.creativeStudio.updateProject.provider((input) =>
     command(() => dependencies.getService().updateProject(input))
