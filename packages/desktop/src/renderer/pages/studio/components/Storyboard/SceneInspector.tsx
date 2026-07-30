@@ -1,0 +1,214 @@
+/**
+ * @license
+ * Copyright 2025 AionUi (aionui.com)
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { Button, Input, InputNumber, Select, Tabs } from '@arco-design/web-react';
+import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import type { StudioEditableScene, StudioMediaKind, StudioScene } from '@/common/types/project/creativeStudioTypes';
+
+import styles from './Storyboard.module.css';
+
+type ActionResult = void | Promise<unknown>;
+
+export type SceneInspectorProps = {
+  selectedScene: StudioScene | null;
+  sceneDraft: StudioEditableScene | null;
+  mutationPending: boolean;
+  errorMessageKey?: string | null;
+  statusMessageKey?: string | null;
+  conflict: boolean;
+  onUpdateSceneDraft: (patch: Partial<StudioEditableScene>) => void;
+  onFlushSceneDraft: () => ActionResult;
+  onRetryConflict: () => ActionResult;
+  onDiscardConflict: () => ActionResult;
+};
+
+/** Controlled scene fields. Draft ownership and persistence stay in useStoryboardEditor. */
+export const SceneInspector: React.FC<SceneInspectorProps> = ({
+  selectedScene,
+  sceneDraft,
+  mutationPending,
+  errorMessageKey = null,
+  statusMessageKey = null,
+  conflict,
+  onUpdateSceneDraft,
+  onFlushSceneDraft,
+  onRetryConflict,
+  onDiscardConflict,
+}) => {
+  const { t } = useTranslation();
+  const [durationInvalid, setDurationInvalid] = useState(false);
+
+  useEffect(() => {
+    setDurationInvalid(false);
+  }, [sceneDraft?.durationSeconds, selectedScene?.id]);
+
+  const flushDraft = () => {
+    void onFlushSceneDraft();
+  };
+
+  const updateDuration = (value: number, reason?: string) => {
+    if (reason === 'outOfRange' || !Number.isInteger(value) || value < 1 || value > 60) {
+      setDurationInvalid(true);
+      return;
+    }
+    setDurationInvalid(false);
+    onUpdateSceneDraft({ durationSeconds: value });
+  };
+
+  const titleId = selectedScene ? `studio-scene-title-${selectedScene.id}` : undefined;
+  const purposeId = selectedScene ? `studio-scene-purpose-${selectedScene.id}` : undefined;
+  const promptId = selectedScene ? `studio-scene-prompt-${selectedScene.id}` : undefined;
+  const mediaId = selectedScene ? `studio-scene-media-${selectedScene.id}` : undefined;
+  const durationId = selectedScene ? `studio-scene-duration-${selectedScene.id}` : undefined;
+  const narrationId = selectedScene ? `studio-scene-narration-${selectedScene.id}` : undefined;
+  const onScreenTextId = selectedScene ? `studio-scene-on-screen-text-${selectedScene.id}` : undefined;
+
+  return (
+    <section aria-label={t('conversation.creativeStudio.inspector.title')} className={styles.inspector}>
+      <header className={styles.inspectorHeader}>
+        <h2>{t('conversation.creativeStudio.inspector.title')}</h2>
+      </header>
+
+      <div className={styles.inspectorBody}>
+        {errorMessageKey && (
+          <div role='alert' className={`${styles.feedback} ${styles.error}`}>
+            {t(errorMessageKey)}
+          </div>
+        )}
+        {statusMessageKey && (
+          <div role='status' className={`${styles.feedback} ${styles.status}`}>
+            {t(statusMessageKey)}
+          </div>
+        )}
+
+        {!selectedScene || !sceneDraft ? (
+          <p className={styles.emptyInspector}>{t('conversation.creativeStudio.storyboard.noScenes')}</p>
+        ) : (
+          <>
+            <section role='region' aria-label={t('conversation.creativeStudio.inspector.sectionsLabel')}>
+              <Tabs defaultActiveTab='direction' destroyOnHide>
+                <Tabs.TabPane key='direction' title={t('conversation.creativeStudio.inspector.directionTab')}>
+                  <div className={styles.form}>
+                    <div className={styles.field}>
+                      <label htmlFor={titleId}>{t('conversation.creativeStudio.inspector.titleLabel')}</label>
+                      <Input
+                        id={titleId}
+                        value={sceneDraft.title}
+                        onChange={(title) => onUpdateSceneDraft({ title })}
+                        onBlur={flushDraft}
+                      />
+                    </div>
+
+                    <div className={styles.field}>
+                      <label htmlFor={purposeId}>{t('conversation.creativeStudio.inspector.purposeLabel')}</label>
+                      <Input.TextArea
+                        id={purposeId}
+                        value={sceneDraft.purpose}
+                        onChange={(purpose) => onUpdateSceneDraft({ purpose })}
+                        onBlur={flushDraft}
+                        rows={2}
+                      />
+                    </div>
+
+                    <div className={styles.field}>
+                      <label htmlFor={promptId}>{t('conversation.creativeStudio.inspector.visualPromptLabel')}</label>
+                      <Input.TextArea
+                        id={promptId}
+                        value={sceneDraft.visualPrompt}
+                        onChange={(visualPrompt) => onUpdateSceneDraft({ visualPrompt })}
+                        onBlur={flushDraft}
+                        rows={4}
+                      />
+                    </div>
+
+                    <div className={styles.field}>
+                      <label htmlFor={mediaId}>{t('conversation.creativeStudio.inspector.mediaKindLabel')}</label>
+                      <Select
+                        id={mediaId}
+                        aria-label={t('conversation.creativeStudio.inspector.mediaKindLabel')}
+                        value={sceneDraft.mediaKind}
+                        onChange={(mediaKind) =>
+                          onUpdateSceneDraft({
+                            mediaKind: mediaKind as StudioMediaKind,
+                          })
+                        }
+                        onBlur={flushDraft}
+                      >
+                        <Select.Option value='image'>{t('conversation.creativeStudio.scene.image')}</Select.Option>
+                        <Select.Option value='video'>{t('conversation.creativeStudio.scene.video')}</Select.Option>
+                      </Select>
+                    </div>
+
+                    <div className={styles.field}>
+                      <label htmlFor={durationId}>{t('conversation.creativeStudio.inspector.durationLabel')}</label>
+                      <InputNumber
+                        id={durationId}
+                        aria-label={t('conversation.creativeStudio.inspector.durationLabel')}
+                        aria-valuemin={1}
+                        aria-valuemax={60}
+                        value={sceneDraft.durationSeconds}
+                        step={1}
+                        error={durationInvalid}
+                        onChange={updateDuration}
+                        onBlur={flushDraft}
+                      />
+                      {durationInvalid && (
+                        <div role='alert' className={`${styles.feedback} ${styles.error}`}>
+                          {t('conversation.creativeStudio.inspector.invalidDuration')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </Tabs.TabPane>
+
+                <Tabs.TabPane key='script' title={t('conversation.creativeStudio.inspector.scriptTab')}>
+                  <div className={styles.form}>
+                    <div className={styles.field}>
+                      <label htmlFor={narrationId}>{t('conversation.creativeStudio.inspector.narrationLabel')}</label>
+                      <Input.TextArea
+                        id={narrationId}
+                        value={sceneDraft.narration}
+                        onChange={(narration) => onUpdateSceneDraft({ narration })}
+                        onBlur={flushDraft}
+                        rows={4}
+                      />
+                    </div>
+
+                    <div className={styles.field}>
+                      <label htmlFor={onScreenTextId}>
+                        {t('conversation.creativeStudio.inspector.onScreenTextLabel')}
+                      </label>
+                      <Input.TextArea
+                        id={onScreenTextId}
+                        value={sceneDraft.onScreenText}
+                        onChange={(onScreenText) => onUpdateSceneDraft({ onScreenText })}
+                        onBlur={flushDraft}
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                </Tabs.TabPane>
+              </Tabs>
+            </section>
+
+            {conflict && (
+              <div className={styles.conflictActions}>
+                <Button type='primary' loading={mutationPending} onClick={() => void onRetryConflict()}>
+                  {t('conversation.creativeStudio.storyboard.retry')}
+                </Button>
+                <Button disabled={mutationPending} onClick={() => void onDiscardConflict()}>
+                  {t('conversation.creativeStudio.storyboard.discard')}
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  );
+};

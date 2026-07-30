@@ -5,3 +5,7 @@
  */
 
 export { StudioLibrary } from './Library';
+export { StagePreview } from './Preview';
+export { SceneCard, SceneInspector, StoryboardDraftModal, StoryboardPanel } from './Storyboard';
+export { StudioHeader } from './StudioHeader';
+export { StudioNavigationLock } from './StudioNavigationLock';
