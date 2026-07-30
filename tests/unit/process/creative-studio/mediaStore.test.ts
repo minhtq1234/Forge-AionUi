@@ -73,6 +73,37 @@ const addImageScene = async (store: CreativeStudioStore): Promise<void> => {
   );
 };
 
+const addActiveImageJob = async (store: CreativeStudioStore): Promise<void> => {
+  await addImageScene(store);
+  await store.updateProject('project_1', (project) => {
+    const next = structuredClone(project);
+    next.jobs.job_1 = {
+      id: 'job_1',
+      projectId: project.id,
+      sceneId: 'scene_1',
+      status: 'running',
+      provider: {
+        providerId: 'provider_1',
+        adapterId: 'weprompt-image-v1',
+        model: 'image-model',
+      },
+      idempotencyKey: 'key_1',
+      providerJobId: null,
+      outputAssetIds: [],
+      error: null,
+      retryOfJobId: null,
+      retryReason: null,
+      duplicateChargeAcknowledged: false,
+      duplicateChargeAcknowledgedAt: null,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+    };
+    next.scenes.scene_1.jobIds.push('job_1');
+    next.scenes.scene_1.reviewState = 'generating';
+    return next;
+  });
+};
+
 afterEach(async () => {
   await Promise.all(created.splice(0).map((directory) => fs.rm(directory, { recursive: true, force: true })));
 });
@@ -377,6 +408,93 @@ describe('createStudioMediaStore', () => {
     expect(asset.sha256).toBe(createHash('sha256').update(png).digest('hex'));
     expect(JSON.stringify(await store.getProject('project_1'))).not.toContain('http');
     await expect(fs.access(path.join(rootDir, 'project_1', 'assets', 'asset_2.png'))).resolves.toBeUndefined();
+  });
+
+  it('rejects a job output whose media kind does not match its scene before manifest attachment', async () => {
+    const { rootDir, store } = await makeStore();
+    await addActiveImageJob(store);
+    const media = createStudioMediaStore({ store, createId: () => 'asset_wrong_kind' });
+
+    await expect(
+      media.persistProviderOutputForJob({
+        projectId: 'project_1',
+        sceneId: 'scene_1',
+        jobId: 'job_1',
+        mediaKind: 'video',
+        declaredMimeType: 'video/mp4',
+        body: Readable.from([mp4]),
+      })
+    ).rejects.toMatchObject<Partial<CreativeStudioMediaError>>({ code: 'invalid_media' });
+
+    expect((await store.getProject('project_1'))?.assets).toEqual({});
+    await expect(fs.access(path.join(rootDir, 'project_1', 'assets', 'asset_wrong_kind.mp4'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('atomically attaches a staged job output and marks only that job succeeded', async () => {
+    const { store } = await makeStore();
+    await addActiveImageJob(store);
+    const media = createStudioMediaStore({ store, createId: () => 'asset_job_1' });
+
+    const asset = await media.persistProviderOutputForJob({
+      projectId: 'project_1',
+      sceneId: 'scene_1',
+      jobId: 'job_1',
+      mediaKind: 'image',
+      declaredMimeType: 'image/png',
+      body: Readable.from([png]),
+    });
+
+    const project = await store.getProject('project_1');
+    expect(project?.jobs.job_1).toMatchObject({
+      status: 'succeeded',
+      outputAssetIds: [asset.id],
+      error: null,
+    });
+    expect(project?.scenes.scene_1).toMatchObject({
+      assetIds: [asset.id],
+      selectedAssetId: asset.id,
+      reviewState: 'complete',
+    });
+    expect(project?.routing.image).toEqual(project?.jobs.job_1.provider);
+  });
+
+  it('unlinks a staged output when cancellation wins the final job-state compare-and-set', async () => {
+    const { rootDir, store } = await makeStore();
+    await addActiveImageJob(store);
+    let intercepted = false;
+    const cancellingStore: CreativeStudioStore = {
+      ...store,
+      async updateProject(projectId, update, expectedRevision) {
+        if (!intercepted && expectedRevision === undefined) {
+          intercepted = true;
+          await store.updateProject(projectId, (project) => {
+            const next = structuredClone(project);
+            next.jobs.job_1.status = 'cancelled';
+            return next;
+          });
+        }
+        return store.updateProject(projectId, update, expectedRevision);
+      },
+    };
+    const media = createStudioMediaStore({ store: cancellingStore, createId: () => 'asset_cancelled' });
+
+    await expect(
+      media.persistProviderOutputForJob({
+        projectId: 'project_1',
+        sceneId: 'scene_1',
+        jobId: 'job_1',
+        mediaKind: 'image',
+        declaredMimeType: 'image/png',
+        body: Readable.from([png]),
+      })
+    ).rejects.toMatchObject<Partial<CreativeStudioMediaError>>({ code: 'job_inactive' });
+
+    expect((await store.getProject('project_1'))?.assets).toEqual({});
+    await expect(fs.access(path.join(rootDir, 'project_1', 'assets', 'asset_cancelled.png'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 
   it('accepts a declared provider output at exact disk capacity without charging the part twice', async () => {

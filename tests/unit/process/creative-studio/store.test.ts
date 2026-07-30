@@ -29,6 +29,8 @@ import type {
   StudioProject,
   StudioProjectSummary,
   StudioProviderRef,
+  StudioRendererJob,
+  StudioRendererProject,
   StudioRouteCatalog,
   StudioRouteSuggestion,
 } from '@/common/types/project/creativeStudioTypes';
@@ -89,11 +91,51 @@ const addSucceededJob = (project: StudioProject): StudioProject => {
     providerJobId: null,
     outputAssetIds: [],
     error: null,
+    retryOfJobId: null,
+    retryReason: null,
+    duplicateChargeAcknowledged: false,
+    duplicateChargeAcknowledgedAt: null,
     createdAt: next.createdAt,
     updatedAt: next.updatedAt,
   };
   next.scenes.scene_1.assetIds = ['asset_1'];
   next.scenes.scene_1.jobIds = ['job_1'];
+  return next;
+};
+
+const makeJob = (
+  project: StudioProject,
+  id: string,
+  sceneId: string,
+  overrides: Partial<StudioJob> = {}
+): StudioJob => ({
+  id,
+  projectId: project.id,
+  sceneId,
+  status: 'failed',
+  provider: { providerId: 'provider_1', adapterId: 'weprompt-image-v1', model: 'model_1' },
+  idempotencyKey: `key_${id}`,
+  providerJobId: null,
+  outputAssetIds: [],
+  error: { code: 'provider_unavailable', messageKey: 'conversation.creativeStudio.jobs.errors.providerUnavailable' },
+  retryOfJobId: null,
+  retryReason: null,
+  duplicateChargeAcknowledged: false,
+  duplicateChargeAcknowledgedAt: null,
+  createdAt: project.createdAt,
+  updatedAt: project.updatedAt,
+  ...overrides,
+});
+
+const addRetryGraph = (project: StudioProject): StudioProject => {
+  let next = addScene(project, 'scene_1');
+  next = addScene(next, 'scene_2');
+  next.jobs.job_1 = makeJob(next, 'job_1', 'scene_1');
+  next.jobs.job_2 = makeJob(next, 'job_2', 'scene_1', {
+    retryOfJobId: 'job_1',
+    retryReason: 'provider_failure',
+  });
+  next.scenes.scene_1.jobIds = ['job_1', 'job_2'];
   return next;
 };
 
@@ -210,6 +252,104 @@ describe('creative studio project store', () => {
       ).rejects.toMatchObject({ code: 'invalid_payload' });
     });
 
+    it('rejects scene-owned assets and jobs that are absent from the owning scene indexes', async () => {
+      const project = await store.createProject(makeInput());
+
+      await expect(
+        store.updateProject(project.id, (current) => {
+          const next = addScene(current, 'scene_1');
+          next.assets.asset_orphan = {
+            id: 'asset_orphan',
+            projectId: next.id,
+            sceneId: 'scene_1',
+            mediaKind: 'image',
+            mimeType: 'image/png',
+            managedAsset: { collection: 'assets', fileName: 'asset_orphan.png' },
+            byteSize: 1,
+            sha256: 'a'.repeat(64),
+            createdAt: next.createdAt,
+          };
+          return next;
+        })
+      ).rejects.toMatchObject({ code: 'invalid_payload' });
+
+      await expect(
+        store.updateProject(project.id, (current) => {
+          const next = addScene(current, 'scene_1');
+          next.jobs.job_orphan = makeJob(next, 'job_orphan', 'scene_1');
+          return next;
+        })
+      ).rejects.toMatchObject({ code: 'invalid_payload' });
+    });
+
+    it('rejects unknown durable job fields instead of retaining provider response data', async () => {
+      const project = await store.createProject(makeInput());
+
+      await expect(
+        store.updateProject(project.id, (current) => {
+          const next = addScene(current, 'scene_1');
+          const job = makeJob(next, 'job_1', 'scene_1') as StudioJob & {
+            providerPayload?: { requestId: string };
+          };
+          job.providerPayload = { requestId: 'provider-secret' };
+          next.jobs.job_1 = job;
+          next.scenes.scene_1.jobIds = ['job_1'];
+          return next;
+        })
+      ).rejects.toMatchObject({ code: 'invalid_payload' });
+    });
+
+    it('rejects unknown durable scene and asset fields instead of retaining provider metadata', async () => {
+      const project = await store.createProject(makeInput());
+
+      await expect(
+        store.updateProject(project.id, (current) => {
+          const next = addScene(current, 'scene_1');
+          const scene = next.scenes.scene_1 as (typeof next.scenes)['scene_1'] & {
+            providerJobId?: string;
+          };
+          scene.providerJobId = 'remote-secret';
+          return next;
+        })
+      ).rejects.toMatchObject({ code: 'invalid_payload' });
+
+      await expect(
+        store.updateProject(project.id, (current) => {
+          const next = addScene(current, 'scene_1');
+          const asset: StudioAsset & { idempotencyKey?: string } = {
+            id: 'asset_1',
+            projectId: next.id,
+            sceneId: 'scene_1',
+            mediaKind: 'image',
+            mimeType: 'image/png',
+            managedAsset: { collection: 'assets', fileName: 'asset_1.png' },
+            byteSize: 1,
+            sha256: 'a'.repeat(64),
+            createdAt: next.createdAt,
+            idempotencyKey: 'provider-secret',
+          };
+          next.assets.asset_1 = asset;
+          next.scenes.scene_1.assetIds = ['asset_1'];
+          return next;
+        })
+      ).rejects.toMatchObject({ code: 'invalid_payload' });
+    });
+
+    it('rejects URL-shaped remote job identities instead of persisting token-bearing routes', async () => {
+      const project = await store.createProject(makeInput());
+
+      await expect(
+        store.updateProject(project.id, (current) => {
+          const next = addScene(current, 'scene_1');
+          next.jobs.job_1 = makeJob(next, 'job_1', 'scene_1', {
+            providerJobId: 'https://provider.example/jobs/1?token=secret',
+          });
+          next.scenes.scene_1.jobIds = ['job_1'];
+          return next;
+        })
+      ).rejects.toMatchObject({ code: 'invalid_payload' });
+    });
+
     it('rejects traversal IDs instead of creating project-controlled paths outside the store root', async () => {
       await expect(store.createProject({ ...makeInput(), id: '../outside' })).rejects.toMatchObject({
         code: 'invalid_payload',
@@ -251,6 +391,31 @@ describe('creative studio project store', () => {
 
     await expect(store.listProjects()).rejects.toMatchObject({ code: 'storage_error' });
     await expect(store.getProject('project_broken')).rejects.toMatchObject({ code: 'storage_error' });
+  });
+
+  it('defaults Task 6 retry metadata when reading a valid pre-Task 6 schema-v1 job', async () => {
+    const project = await store.createProject(makeInput());
+    const withJob = await store.updateProject(project.id, (current) => addSucceededJob(current));
+    const manifestFile = path.join(rootDir, withJob.id, 'project.json');
+    const legacy = JSON.parse(readFileSync(manifestFile, 'utf8')) as {
+      jobs: Record<string, Record<string, unknown>>;
+    };
+    delete legacy.jobs.job_1.retryOfJobId;
+    delete legacy.jobs.job_1.retryReason;
+    delete legacy.jobs.job_1.duplicateChargeAcknowledged;
+    delete legacy.jobs.job_1.duplicateChargeAcknowledgedAt;
+    writeFileSync(manifestFile, JSON.stringify(legacy));
+
+    await expect(store.getProject(withJob.id)).resolves.toMatchObject({
+      jobs: {
+        job_1: {
+          retryOfJobId: null,
+          retryReason: null,
+          duplicateChargeAcknowledged: false,
+          duplicateChargeAcknowledgedAt: null,
+        },
+      },
+    });
   });
 
   it('atomically replaces manifests instead of leaving a partial JSON document after repeated writes', async () => {
@@ -307,6 +472,114 @@ describe('creative studio project store', () => {
     expect(corrected.jobs.job_1.error).toEqual({ code: 'timeout', messageKey: 'creativeStudio.errors.timeout' });
   });
 
+  it.each([
+    [
+      'a missing predecessor',
+      (project: StudioProject) => {
+        project.jobs.job_2.retryOfJobId = 'job_missing';
+      },
+    ],
+    [
+      'itself',
+      (project: StudioProject) => {
+        project.jobs.job_2.retryOfJobId = 'job_2';
+      },
+    ],
+    [
+      'a job owned by another scene',
+      (project: StudioProject) => {
+        project.jobs.job_other = makeJob(project, 'job_other', 'scene_2');
+        project.scenes.scene_2.jobIds = ['job_other'];
+        project.jobs.job_2.retryOfJobId = 'job_other';
+      },
+    ],
+    [
+      'a later job',
+      (project: StudioProject) => {
+        project.scenes.scene_1.jobIds = ['job_2', 'job_1'];
+      },
+    ],
+  ])('rejects retry lineage that references %s', async (_reason, mutate) => {
+    const project = await store.createProject(makeInput());
+
+    await expect(
+      store.updateProject(project.id, (current) => {
+        const next = addRetryGraph(current);
+        mutate(next);
+        return next;
+      })
+    ).rejects.toMatchObject({ code: 'invalid_payload' });
+  });
+
+  it('rejects retry cycles even when every referenced job exists', async () => {
+    const project = await store.createProject(makeInput());
+
+    await expect(
+      store.updateProject(project.id, (current) => {
+        const next = addRetryGraph(current);
+        next.jobs.job_1.retryOfJobId = 'job_2';
+        next.jobs.job_1.retryReason = 'provider_failure';
+        return next;
+      })
+    ).rejects.toMatchObject({ code: 'invalid_payload' });
+  });
+
+  it('accepts duplicate-charge acknowledgement only for an actual submission-unknown predecessor', async () => {
+    const project = await store.createProject(makeInput());
+
+    await expect(
+      store.updateProject(project.id, (current) => {
+        const next = addRetryGraph(current);
+        next.jobs.job_2.retryReason = 'submission_unknown';
+        next.jobs.job_2.duplicateChargeAcknowledged = true;
+        next.jobs.job_2.duplicateChargeAcknowledgedAt = '2026-07-30T00:00:00.000Z';
+        return next;
+      })
+    ).rejects.toMatchObject({ code: 'invalid_payload' });
+  });
+
+  it.each(['needs_attention', 'failed'] as const)(
+    'accepts acknowledged submission-unknown lineage when the predecessor is %s',
+    async (predecessorStatus) => {
+      const project = await store.createProject(makeInput());
+
+      await expect(
+        store.updateProject(project.id, (current) => {
+          const next = addRetryGraph(current);
+          next.jobs.job_1.status = predecessorStatus;
+          next.jobs.job_1.error = {
+            code: 'submission_unknown',
+            messageKey: 'conversation.creativeStudio.jobs.errors.submissionUnknown',
+          };
+          next.jobs.job_2.retryReason = 'submission_unknown';
+          next.jobs.job_2.duplicateChargeAcknowledged = true;
+          next.jobs.job_2.duplicateChargeAcknowledgedAt = '2026-07-30T00:00:00.000Z';
+          return next;
+        })
+      ).resolves.toMatchObject({
+        jobs: {
+          job_2: {
+            retryOfJobId: 'job_1',
+            retryReason: 'submission_unknown',
+            duplicateChargeAcknowledged: true,
+          },
+        },
+      });
+    }
+  );
+
+  it('requires a confirmed failed predecessor for provider-failure retry lineage', async () => {
+    const project = await store.createProject(makeInput());
+
+    await expect(
+      store.updateProject(project.id, (current) => {
+        const next = addRetryGraph(current);
+        next.jobs.job_1.status = 'needs_attention';
+        return next;
+      })
+    ).rejects.toMatchObject({ code: 'invalid_payload' });
+  });
+
   it('serializes concurrent index rebuilds instead of dropping a different-project summary', async () => {
     const [first, second] = await Promise.all([
       store.createProject(makeInput({ name: 'First' })),
@@ -325,6 +598,36 @@ describe('creative studio project store', () => {
     expect(await store.deleteProject(project.id, project.revision)).toBe(true);
     expect(await store.getProject(project.id)).toBeNull();
     expect(await store.listProjects()).toEqual([]);
+  });
+
+  it('refuses deletion inside the project queue while generation work is active', async () => {
+    const project = await store.createProject(makeInput());
+    const active = await store.updateProject(project.id, (current) => {
+      const next = addSucceededJob(current);
+      next.jobs.job_1.status = 'running';
+      next.jobs.job_1.outputAssetIds = [];
+      return next;
+    });
+
+    await expect(store.deleteProject(active.id, project.revision)).rejects.toMatchObject({ code: 'busy' });
+    await expect(store.getProject(active.id)).resolves.toMatchObject({ id: active.id });
+  });
+
+  it('refuses deletion while a possibly charged attempt still needs attention', async () => {
+    const project = await store.createProject(makeInput());
+    const paused = await store.updateProject(project.id, (current) => {
+      const next = addSucceededJob(current);
+      next.jobs.job_1.status = 'needs_attention';
+      next.jobs.job_1.outputAssetIds = [];
+      next.jobs.job_1.error = {
+        code: 'submission_unknown',
+        messageKey: 'creativeStudio.errors.submissionUnknown',
+      };
+      return next;
+    });
+
+    await expect(store.deleteProject(paused.id, paused.revision)).rejects.toMatchObject({ code: 'busy' });
+    await expect(store.getProject(paused.id)).resolves.toMatchObject({ id: paused.id });
   });
 
   it('refuses a traversing deletion ID instead of removing a sibling directory', async () => {
@@ -488,13 +791,15 @@ describe('creative studio renderer DTO contract', () => {
       | 'signedUrl'
       | 'url'
       | 'bytes'
-      | 'base64';
+      | 'base64'
+      | 'providerJobId'
+      | 'idempotencyKey';
     type KeysOfUnion<Value> = Value extends unknown ? keyof Value : never;
     type RendererDto =
-      | StudioProject
+      | StudioRendererProject
       | StudioProjectSummary
       | StudioAsset
-      | StudioJob
+      | StudioRendererJob
       | StudioProviderRef
       | StudioRouteCatalog
       | StudioConnectionBinding
@@ -511,7 +816,7 @@ describe('creative studio renderer DTO contract', () => {
   it('keeps rejected commands typed instead of throwing unstructured renderer errors', () => {
     const result: StudioCommandResult<never> = {
       ok: false,
-      error: { code: 'invalid_payload', messageKey: 'creativeStudio.errors.invalidPayload' },
+      error: { code: 'invalid_payload', messageKey: 'conversation.creativeStudio.errors.invalidPayload' },
     };
 
     expect(result.error.code).toBe('invalid_payload');

@@ -247,6 +247,43 @@ describe('createStudioProviderResolver', () => {
     expect(catalog.suggestions.image.reason).toBe('sole_compatible');
   });
 
+  it('routes and recovers an explicitly validated image model absent from chat model discovery', async () => {
+    const resolver = createStudioProviderResolver({
+      listProviders: async () => [provider({ models: [] })],
+      getClientSettings: async () => ({}),
+      getPlanningReadiness: async () => ({ setting: { mode: 'auto' }, health: 'ready' }),
+      listConnections: async () => [
+        {
+          schemaVersion: 1,
+          id: 'binding_manual_image',
+          providerId: 'provider_1',
+          adapterId: 'weprompt-image-v1',
+          model: 'gemini-2.5-flash-image',
+          capabilities: { mediaKinds: ['image'], supportsFirstFrame: true },
+          validatedAt: '2026-07-30T00:00:00.000Z',
+        },
+      ],
+    });
+
+    await expect(resolver.listRoutes()).resolves.toMatchObject({
+      automatic: [
+        expect.objectContaining({
+          adapterId: 'weprompt-image-v1',
+          model: 'gemini-2.5-flash-image',
+          kind: 'image',
+        }),
+      ],
+    });
+    await expect(
+      resolver.isGenerationRouteAvailable({
+        providerId: 'provider_1',
+        adapterId: 'weprompt-image-v1',
+        model: 'gemini-2.5-flash-image',
+        kind: 'image',
+      })
+    ).resolves.toBe(true);
+  });
+
   it('refreshes every catalog dependency, filters unsafe candidates, and versions only durable availability state', async () => {
     let providers = [provider({ model_health: { 'gemini-2.5-flash-image': { status: 'healthy', last_check: 1 } } })];
     let connections = [
@@ -661,5 +698,41 @@ describe('createStudioProviderResolver', () => {
     });
 
     expect((await resolver.listRoutes()).automatic).toEqual([]);
+  });
+
+  it('checks a durable generation route without depending on planning or client settings', async () => {
+    const getClientSettings = vi.fn(async () => {
+      throw new Error('settings unavailable');
+    });
+    const getPlanningReadiness = vi.fn(async () => {
+      throw new Error('planning unavailable');
+    });
+    const resolver = createStudioProviderResolver({
+      listProviders: async () => [provider({ models: ['media-model'], platform: 'custom' })],
+      getClientSettings,
+      getPlanningReadiness,
+      listConnections: async () => [
+        {
+          schemaVersion: 1,
+          id: 'binding_recovery',
+          providerId: 'provider_1',
+          adapterId: 'weprompt-media-gateway-v1',
+          model: 'media-model',
+          capabilities: gatewayCapabilities(),
+          validatedAt: '2026-07-30T00:00:00.000Z',
+        },
+      ],
+    });
+
+    await expect(
+      resolver.isGenerationRouteAvailable({
+        providerId: 'provider_1',
+        adapterId: 'weprompt-media-gateway-v1',
+        model: 'media-model',
+        kind: 'video',
+      })
+    ).resolves.toBe(true);
+    expect(getClientSettings).not.toHaveBeenCalled();
+    expect(getPlanningReadiness).not.toHaveBeenCalled();
   });
 });

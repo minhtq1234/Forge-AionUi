@@ -16,6 +16,7 @@ import type {
   StudioProviderRef,
   StudioScene,
 } from '@/common/types/project/creativeStudioTypes';
+import { isValidProviderJobId } from '@process/services/creative-studio/adapters/types';
 
 const SAFE_ID = /^[A-Za-z0-9_-]+$/;
 const ASPECT_RATIOS = new Set(['16:9', '9:16', '1:1', '4:3', '3:4']);
@@ -32,6 +33,8 @@ const JOB_STATUSES = new Set([
   'failed',
   'cancelled',
 ]);
+const NONTERMINAL_JOB_STATUSES = new Set(['queued_local', 'submitting', 'queued_remote', 'running', 'needs_attention']);
+const JOB_RETRY_REASONS = new Set(['provider_failure', 'submission_unknown']);
 const ADAPTER_IDS = new Set(['weprompt-image-v1', 'byteplus-seedance-v1', 'weprompt-media-gateway-v1']);
 const JOB_ERROR_CODES = new Set([
   'invalid_request',
@@ -45,6 +48,56 @@ const JOB_ERROR_CODES = new Set([
   'download_failed',
   'unsupported',
   'unknown',
+]);
+const PROVIDER_REF_KEYS = new Set(['providerId', 'adapterId', 'model']);
+const JOB_ERROR_KEYS = new Set(['code', 'messageKey']);
+const SCENE_KEYS = new Set([
+  'id',
+  'title',
+  'purpose',
+  'visualPrompt',
+  'narration',
+  'onScreenText',
+  'mediaKind',
+  'durationSeconds',
+  'referenceAssetId',
+  'selectedAssetId',
+  'assetIds',
+  'jobIds',
+  'reviewState',
+]);
+const ASSET_KEYS = new Set([
+  'id',
+  'projectId',
+  'sceneId',
+  'mediaKind',
+  'mimeType',
+  'managedAsset',
+  'byteSize',
+  'sha256',
+  'width',
+  'height',
+  'durationSeconds',
+  'createdAt',
+]);
+const MANAGED_ASSET_KEYS = new Set(['collection', 'fileName']);
+const JOB_KEYS = new Set([
+  'id',
+  'projectId',
+  'sceneId',
+  'status',
+  'provider',
+  'idempotencyKey',
+  'providerJobId',
+  'outputAssetIds',
+  'error',
+  'progress',
+  'retryOfJobId',
+  'retryReason',
+  'duplicateChargeAcknowledged',
+  'duplicateChargeAcknowledgedAt',
+  'createdAt',
+  'updatedAt',
 ]);
 const ASSET_COLLECTIONS = new Set(['assets', 'imports', 'thumbnails']);
 const CONNECTION_BINDING_KEYS = new Set([
@@ -98,7 +151,7 @@ const FORBIDDEN_RENDERER_FIELDS = new Set([
 
 let temporaryFileCounter = 0;
 
-type StoreErrorCode = 'invalid_payload' | 'not_found' | 'stale_project' | 'storage_error';
+type StoreErrorCode = 'invalid_payload' | 'not_found' | 'stale_project' | 'busy' | 'storage_error';
 
 export class CreativeStudioStoreError extends Error {
   readonly code: StoreErrorCode;
@@ -197,6 +250,8 @@ const asArrayOfSafeIds = (value: unknown): value is string[] => Array.isArray(va
 
 const validateProviderRef = (value: unknown): value is StudioProviderRef =>
   isRecord(value) &&
+  Object.keys(value).length === PROVIDER_REF_KEYS.size &&
+  Object.keys(value).every((key) => PROVIDER_REF_KEYS.has(key)) &&
   isSafeId(value.providerId) &&
   isString(value.adapterId) &&
   ADAPTER_IDS.has(value.adapterId) &&
@@ -272,6 +327,8 @@ const validateConnectionBinding = (value: unknown): value is StudioConnectionBin
 const validateScene = (sceneId: string, value: unknown): value is StudioScene => {
   if (!isRecord(value)) return false;
   return (
+    Object.keys(value).length === SCENE_KEYS.size &&
+    Object.keys(value).every((key) => SCENE_KEYS.has(key)) &&
     value.id === sceneId &&
     isSafeId(sceneId) &&
     isNonEmptyString(value.title) &&
@@ -301,6 +358,9 @@ const validateAsset = (
 ): value is StudioAsset => {
   if (!isRecord(value) || !isRecord(value.managedAsset)) return false;
   return (
+    Object.keys(value).every((key) => ASSET_KEYS.has(key)) &&
+    Object.keys(value.managedAsset).length === MANAGED_ASSET_KEYS.size &&
+    Object.keys(value.managedAsset).every((key) => MANAGED_ASSET_KEYS.has(key)) &&
     value.id === assetId &&
     isSafeId(assetId) &&
     value.projectId === projectId &&
@@ -326,10 +386,13 @@ const validateJob = (jobId: string, projectId: string, sceneIds: Set<string>, va
   const errorIsValid =
     value.error === null ||
     (isRecord(value.error) &&
+      Object.keys(value.error).length === JOB_ERROR_KEYS.size &&
+      Object.keys(value.error).every((key) => JOB_ERROR_KEYS.has(key)) &&
       isString(value.error.code) &&
       JOB_ERROR_CODES.has(value.error.code) &&
       isNonEmptyString(value.error.messageKey));
   return (
+    Object.keys(value).every((key) => JOB_KEYS.has(key)) &&
     value.id === jobId &&
     isSafeId(jobId) &&
     value.projectId === projectId &&
@@ -339,13 +402,75 @@ const validateJob = (jobId: string, projectId: string, sceneIds: Set<string>, va
     JOB_STATUSES.has(value.status) &&
     validateProviderRef(value.provider) &&
     isSafeId(value.idempotencyKey) &&
-    (value.providerJobId === null || isNonEmptyString(value.providerJobId)) &&
+    (value.providerJobId === null || (isString(value.providerJobId) && isValidProviderJobId(value.providerJobId))) &&
     asArrayOfSafeIds(value.outputAssetIds) &&
     new Set(value.outputAssetIds).size === value.outputAssetIds.length &&
     errorIsValid &&
+    (value.progress === undefined ||
+      (typeof value.progress === 'number' &&
+        Number.isFinite(value.progress) &&
+        value.progress >= 0 &&
+        value.progress <= 100)) &&
+    (value.retryOfJobId === null || isSafeId(value.retryOfJobId)) &&
+    (value.retryReason === null || (isString(value.retryReason) && JOB_RETRY_REASONS.has(value.retryReason))) &&
+    typeof value.duplicateChargeAcknowledged === 'boolean' &&
+    (value.duplicateChargeAcknowledgedAt === null || isCanonicalIsoTimestamp(value.duplicateChargeAcknowledgedAt)) &&
+    ((value.retryOfJobId === null && value.retryReason === null) ||
+      (value.retryOfJobId !== null && value.retryReason !== null)) &&
+    (value.duplicateChargeAcknowledged
+      ? value.retryReason === 'submission_unknown' && value.duplicateChargeAcknowledgedAt !== null
+      : value.duplicateChargeAcknowledgedAt === null) &&
     isNonEmptyString(value.createdAt) &&
     isNonEmptyString(value.updatedAt)
   );
+};
+
+/** Defaults lineage fields added during Task 6 without weakening schema-v1 validation. */
+const migrateSchemaV1Project = (value: unknown): unknown => {
+  if (!isRecord(value) || value.schemaVersion !== 1 || !isRecord(value.jobs)) return value;
+  let changed = false;
+  const jobs = Object.fromEntries(
+    Object.entries(value.jobs).map(([jobId, candidate]) => {
+      if (!isRecord(candidate)) return [jobId, candidate];
+      const job = { ...candidate };
+      if (!Object.hasOwn(job, 'retryOfJobId')) {
+        job.retryOfJobId = null;
+        changed = true;
+      }
+      if (!Object.hasOwn(job, 'retryReason')) {
+        job.retryReason = null;
+        changed = true;
+      }
+      if (!Object.hasOwn(job, 'duplicateChargeAcknowledged')) {
+        job.duplicateChargeAcknowledged = false;
+        changed = true;
+      }
+      if (!Object.hasOwn(job, 'duplicateChargeAcknowledgedAt')) {
+        job.duplicateChargeAcknowledgedAt = null;
+        changed = true;
+      }
+      return [jobId, job];
+    })
+  );
+  return changed ? { ...value, jobs } : value;
+};
+
+const retryGraphHasCycle = (jobs: Record<string, StudioJob>): boolean => {
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (jobId: string): boolean => {
+    if (visiting.has(jobId)) return true;
+    if (visited.has(jobId)) return false;
+    visiting.add(jobId);
+    const predecessorId = jobs[jobId]?.retryOfJobId;
+    if (predecessorId !== null && predecessorId !== undefined && Object.hasOwn(jobs, predecessorId)) {
+      if (visit(predecessorId)) return true;
+    }
+    visiting.delete(jobId);
+    visited.add(jobId);
+    return false;
+  };
+  return Object.keys(jobs).some(visit);
 };
 
 const validateProject = (value: unknown): value is StudioProject => {
@@ -407,6 +532,38 @@ const validateProject = (value: unknown): value is StudioProject => {
   const typedScenes = scenes as Record<string, StudioScene>;
   const typedAssets = assets as Record<string, StudioAsset>;
   const typedJobs = jobs as Record<string, StudioJob>;
+  if (retryGraphHasCycle(typedJobs)) return false;
+  const assetsHaveReverseLinks = Object.values(typedAssets).every(
+    (asset) => asset.sceneId === null || typedScenes[asset.sceneId]?.assetIds.includes(asset.id)
+  );
+  const jobsHaveReverseLinks = Object.values(typedJobs).every((job) =>
+    typedScenes[job.sceneId]?.jobIds.includes(job.id)
+  );
+  const retryLineageIsValid = Object.values(typedJobs).every((job) => {
+    if (job.retryOfJobId === null) return true;
+    const predecessor = typedJobs[job.retryOfJobId];
+    const owningScene = typedScenes[job.sceneId];
+    if (predecessor === undefined || owningScene === undefined || predecessor.sceneId !== job.sceneId) return false;
+    const predecessorIndex = owningScene.jobIds.indexOf(predecessor.id);
+    const retryIndex = owningScene.jobIds.indexOf(job.id);
+    if (predecessorIndex < 0 || retryIndex < 0 || predecessorIndex >= retryIndex) return false;
+    if (job.retryReason === 'submission_unknown') {
+      return (
+        (predecessor.status === 'needs_attention' || predecessor.status === 'failed') &&
+        predecessor.error?.code === 'submission_unknown' &&
+        job.duplicateChargeAcknowledged &&
+        job.duplicateChargeAcknowledgedAt !== null
+      );
+    }
+    return (
+      job.retryReason === 'provider_failure' &&
+      predecessor.status === 'failed' &&
+      predecessor.error?.code !== 'submission_unknown' &&
+      predecessor.error?.code !== 'download_failed' &&
+      !job.duplicateChargeAcknowledged
+    );
+  });
+  if (!assetsHaveReverseLinks || !jobsHaveReverseLinks || !retryLineageIsValid) return false;
   return sceneIds.every((sceneId) => {
     const scene = typedScenes[sceneId];
     const linkedAssetsAreValid = scene.assetIds.every(
@@ -647,7 +804,8 @@ export const createCreativeStudioStore = (deps: CreativeStudioStoreDeps): Creati
       const file = await projectFile(root, projectId, false);
       if (file === null) return null;
       const raw = JSON.parse(await fs.readFile(file, 'utf8')) as unknown;
-      if (validateProject(raw) && raw.id === projectId) return raw;
+      const migrated = migrateSchemaV1Project(raw);
+      if (validateProject(migrated) && migrated.id === projectId) return migrated;
       throw new CreativeStudioStoreError('storage_error', 'Malformed Studio project manifest');
     } catch (error) {
       if (error instanceof CreativeStudioStoreError) throw error;
@@ -800,6 +958,9 @@ export const createCreativeStudioStore = (deps: CreativeStudioStoreDeps): Creati
         await summariesFile(root);
         const current = await readProject(root, projectId);
         if (current === null) return false;
+        if (Object.values(current.jobs).some((job) => NONTERMINAL_JOB_STATUSES.has(job.status))) {
+          throw new CreativeStudioStoreError('busy', 'Studio project has active generation jobs');
+        }
         if (current.revision !== expectedRevision) {
           throw new CreativeStudioStoreError('stale_project', 'Studio project has changed');
         }

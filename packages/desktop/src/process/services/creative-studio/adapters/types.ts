@@ -59,7 +59,7 @@ export type ProviderOutput = {
   /** Distinguishes a generated video's optional last-frame poster from primary output. */
   role: 'primary' | 'poster';
   source: { kind: 'url'; url: string } | { kind: 'file'; path: string };
-  mimeType?: string;
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp' | 'video/mp4' | 'video/webm';
   byteSize?: number;
   width?: number;
   height?: number;
@@ -107,18 +107,12 @@ export type ProviderFetch = (
   init: { method: string; headers: Record<string, string>; body?: string; signal: AbortSignal }
 ) => Promise<ProviderHttpResponse>;
 
-/** Bounds opaque remote IDs before they are retained or interpolated into provider routes. */
+/**
+ * Bounds remote IDs to URL-unreserved opaque tokens before they are retained or
+ * interpolated into provider routes. URL, path, query, and fragment syntax is rejected.
+ */
 export const isValidProviderJobId = (value: string): boolean =>
-  value.length > 0 &&
-  value.length <= 512 &&
-  value !== '.' &&
-  value !== '..' &&
-  !Array.from(value).some((character) => {
-    const codePoint = character.codePointAt(0)!;
-    return (
-      codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f) || (codePoint >= 0xd800 && codePoint <= 0xdfff)
-    );
-  });
+  value.length <= 512 && /^[A-Za-z0-9][A-Za-z0-9._~-]*$/.test(value);
 
 export class ProviderDeadlineError extends Error {
   constructor() {

@@ -80,6 +80,10 @@ export type CreativeStudioProtocolInstaller = {
   handle(scheme: string, handler: (request: Request) => Promise<Response>): void;
 };
 
+export type CreativeStudioProtocolInstallation = {
+  dispose(): Promise<void>;
+};
+
 export type CreativeStudioAssetResolver = {
   resolveAsset(
     projectId: string,
@@ -99,16 +103,45 @@ const protocolHeaders = (mimeType: string, byteSize: number): Headers =>
     'X-Content-Type-Options': 'nosniff',
   });
 
-/** Installs only after managed Studio storage is initialized. */
+const serviceUnavailableResponse = (): Response => new Response(null, { status: 503 });
+
+const destroyReadable = (stream: Readable): Promise<void> => {
+  if (stream.closed) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      stream.off('close', finish);
+      stream.off('end', finish);
+      stream.off('error', finish);
+      resolve();
+    };
+    stream.once('close', finish);
+    stream.once('end', finish);
+    stream.once('error', finish);
+    stream.destroy();
+    if (stream.closed) finish();
+  });
+};
+
+/** Installs only after managed Studio storage is initialized and owns every active response lease. */
 export const installCreativeStudioProtocol = (
   installer: CreativeStudioProtocolInstaller,
   resolver: CreativeStudioAssetResolver
-): void => {
-  installer.handle('weprompt-studio', async (request) => {
+): CreativeStudioProtocolInstallation => {
+  const activeHandlers = new Set<Promise<Response>>();
+  const activeStreams = new Set<Readable>();
+  let disposed = false;
+  let disposePromise: Promise<void> | null = null;
+
+  const serve = async (request: Request): Promise<Response> => {
+    if (disposed) return serviceUnavailableResponse();
     const assetAddress = parseCreativeStudioAssetUrl(request.url);
     if (!assetAddress || (request.method !== 'GET' && request.method !== 'HEAD'))
       return new Response(null, { status: 404 });
     const resolved = await resolver.resolveAsset(assetAddress.projectId, assetAddress.assetId);
+    if (disposed) return serviceUnavailableResponse();
     if (!resolved) return new Response(null, { status: 404 });
     if (resolved.asset.byteSize === 0) {
       if (request.headers.has('range')) {
@@ -128,10 +161,41 @@ export const installCreativeStudioProtocol = (
     const length = range.end - range.start + 1;
     const headers = protocolHeaders(resolved.asset.mimeType, length);
     if (partial) headers.set('Content-Range', `bytes ${range.start}-${range.end}/${resolved.asset.byteSize}`);
-    const body =
-      request.method === 'HEAD'
-        ? null
-        : (Readable.toWeb(await resolved.openVerifiedStream(range.start, range.end)) as ReadableStream<Uint8Array>);
+    let body: ReadableStream<Uint8Array> | null = null;
+    if (request.method !== 'HEAD') {
+      const stream = await resolved.openVerifiedStream(range.start, range.end);
+      if (disposed) {
+        await destroyReadable(stream);
+        return serviceUnavailableResponse();
+      }
+      activeStreams.add(stream);
+      const release = (): void => {
+        activeStreams.delete(stream);
+      };
+      stream.once('close', release);
+      stream.once('end', release);
+      stream.once('error', release);
+      body = Readable.toWeb(stream) as ReadableStream<Uint8Array>;
+    }
     return new Response(body, { status: partial ? 206 : 200, headers });
+  };
+
+  installer.handle('weprompt-studio', (request) => {
+    if (disposed) return Promise.resolve(serviceUnavailableResponse());
+    const operation = serve(request).finally(() => activeHandlers.delete(operation));
+    activeHandlers.add(operation);
+    return operation;
   });
+
+  return {
+    dispose(): Promise<void> {
+      disposePromise ??= (async () => {
+        disposed = true;
+        const closingStreams = [...activeStreams].map(destroyReadable);
+        await Promise.allSettled([...activeHandlers, ...closingStreams]);
+        activeStreams.clear();
+      })();
+      return disposePromise;
+    },
+  };
 };

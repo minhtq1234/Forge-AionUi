@@ -56,7 +56,7 @@ const MIME_SIGNATURES = [
 ] as const;
 
 export class CreativeStudioMediaError extends Error {
-  readonly code: 'invalid_media' | 'storage_error' | 'stale_project' | 'not_found';
+  readonly code: 'invalid_media' | 'storage_error' | 'stale_project' | 'not_found' | 'job_inactive';
 
   constructor(code: CreativeStudioMediaError['code']) {
     super(code);
@@ -97,6 +97,14 @@ export type PersistProviderOutputUrlInput = Omit<PersistProviderOutputInput, 'bo
   downloader: Omit<RemoteMediaDownloadDeps, 'write' | 'maxBytes'>;
 };
 
+export type PersistProviderJobOutputInput = Omit<PersistProviderOutputInput, 'expectedRevision'> & {
+  jobId: string;
+};
+
+export type PersistProviderJobOutputUrlInput = Omit<PersistProviderOutputUrlInput, 'expectedRevision'> & {
+  jobId: string;
+};
+
 export type InternalStudioExportResult = {
   folderName: string;
   exported: Array<{ assetId: string; fileName: string }>;
@@ -107,6 +115,8 @@ export type StudioMediaStore = {
   importReferenceFromPath(input: InternalImportReferenceInput): Promise<StudioAsset>;
   persistProviderOutput(input: PersistProviderOutputInput): Promise<StudioAsset>;
   persistProviderOutputFromUrl(input: PersistProviderOutputUrlInput): Promise<StudioAsset>;
+  persistProviderOutputForJob(input: PersistProviderJobOutputInput): Promise<StudioAsset>;
+  persistProviderOutputFromUrlForJob(input: PersistProviderJobOutputUrlInput): Promise<StudioAsset>;
   resolveAsset(
     projectId: string,
     assetId: string
@@ -671,23 +681,32 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
   };
 
   type ProviderOutputMetadata = Omit<PersistProviderOutputInput, 'body'>;
+  type ProviderJobOutputMetadata = Omit<PersistProviderJobOutputInput, 'body'>;
   type ProviderWritePlan = {
     projectDir: string;
     project: StudioProject;
     capacity: WriteCapacity;
   };
 
-  const validateProviderOutputInput = (input: ProviderOutputMetadata): void => {
+  const validateProviderOutputMetadata = (
+    input: ProviderOutputMetadata | ProviderJobOutputMetadata,
+    requireExpectedRevision: boolean
+  ): void => {
     if (
       !SAFE_ID.test(input.projectId) ||
       !SAFE_ID.test(input.sceneId) ||
-      !Number.isSafeInteger(input.expectedRevision) ||
-      input.expectedRevision < 1 ||
       (input.mediaKind !== 'image' && input.mediaKind !== 'video') ||
       typeof input.declaredMimeType !== 'string'
     ) {
       throw new CreativeStudioMediaError('invalid_media');
     }
+    if (
+      requireExpectedRevision &&
+      (!('expectedRevision' in input) || !Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 1)
+    ) {
+      throw new CreativeStudioMediaError('invalid_media');
+    }
+    if ('jobId' in input && !SAFE_ID.test(input.jobId)) throw new CreativeStudioMediaError('invalid_media');
     if (
       (input.width !== undefined && (!Number.isSafeInteger(input.width) || input.width < 1)) ||
       (input.height !== undefined && (!Number.isSafeInteger(input.height) || input.height < 1)) ||
@@ -705,7 +724,7 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
   };
 
   const prepareProviderWrite = async (input: ProviderOutputMetadata): Promise<ProviderWritePlan> => {
-    validateProviderOutputInput(input);
+    validateProviderOutputMetadata(input, true);
     const [projectDir, project] = await Promise.all([
       deps.store.getVerifiedProjectDirectory(input.projectId),
       deps.store.getProject(input.projectId),
@@ -721,9 +740,45 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
     };
   };
 
+  const prepareProviderJobWrite = async (input: ProviderJobOutputMetadata): Promise<ProviderWritePlan> => {
+    validateProviderOutputMetadata(input, false);
+    const [projectDir, project] = await Promise.all([
+      deps.store.getVerifiedProjectDirectory(input.projectId),
+      deps.store.getProject(input.projectId),
+    ]);
+    const job = project?.jobs[input.jobId];
+    if (project?.scenes[input.sceneId] && project.scenes[input.sceneId].mediaKind !== input.mediaKind) {
+      throw new CreativeStudioMediaError('invalid_media');
+    }
+    const active =
+      job?.status === 'submitting' ||
+      job?.status === 'running' ||
+      (job?.status === 'failed' && job.error?.code === 'download_failed');
+    if (
+      !projectDir ||
+      !project ||
+      !project.scenes[input.sceneId] ||
+      project.scenes[input.sceneId].mediaKind !== input.mediaKind ||
+      !job ||
+      job.sceneId !== input.sceneId ||
+      !active
+    ) {
+      throw new CreativeStudioMediaError(project && job ? 'job_inactive' : 'not_found');
+    }
+    const perAssetMaxBytes = input.mediaKind === 'video' ? limits.videoOutputMaxBytes : limits.imageOutputMaxBytes;
+    return {
+      projectDir,
+      project,
+      capacity: await planWriteCapacity(project, projectDir, perAssetMaxBytes, input.declaredByteSize),
+    };
+  };
+
+  type ProviderStreamInput = PersistProviderOutputInput | PersistProviderJobOutputInput;
+
   const persistProviderOutputWithPlan = async (
-    input: PersistProviderOutputInput,
-    plan: ProviderWritePlan
+    input: ProviderStreamInput,
+    plan: ProviderWritePlan,
+    commit: (asset: StudioAsset) => Promise<void>
   ): Promise<StudioAsset> => {
     const assetId = createId();
     if (!SAFE_ID.test(assetId)) throw new CreativeStudioMediaError('storage_error');
@@ -775,16 +830,7 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
         ...(input.durationSeconds === undefined ? {} : { durationSeconds: input.durationSeconds }),
         createdAt: now(),
       };
-      await deps.store.updateProject(
-        input.projectId,
-        (current) => {
-          const next = structuredClone(current);
-          next.assets[asset.id] = asset;
-          next.scenes[input.sceneId].assetIds.push(asset.id);
-          return next;
-        },
-        input.expectedRevision
-      );
+      await commit(asset);
       return asset;
     } catch (error) {
       if (partPath) await fs.rm(partPath, { force: true }).catch((): undefined => undefined);
@@ -795,19 +841,71 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
     }
   };
 
-  const persistProviderOutput = async (input: PersistProviderOutputInput): Promise<StudioAsset> =>
-    persistProviderOutputWithPlan(input, await prepareProviderWrite(input));
+  const commitProviderAsset = async (input: ProviderOutputMetadata, asset: StudioAsset): Promise<void> => {
+    await deps.store.updateProject(
+      input.projectId,
+      (current) => {
+        const next = structuredClone(current);
+        next.assets[asset.id] = asset;
+        next.scenes[input.sceneId].assetIds.push(asset.id);
+        return next;
+      },
+      input.expectedRevision
+    );
+  };
+
+  const persistProviderOutput = async (input: PersistProviderOutputInput): Promise<StudioAsset> => {
+    const plan = await prepareProviderWrite(input);
+    return persistProviderOutputWithPlan(input, plan, (asset) => commitProviderAsset(input, asset));
+  };
+
+  const commitProviderJobAsset = async (input: ProviderJobOutputMetadata, asset: StudioAsset): Promise<void> => {
+    await deps.store.updateProject(input.projectId, (current) => {
+      const job = current.jobs[input.jobId];
+      const scene = current.scenes[input.sceneId];
+      const active =
+        job?.status === 'submitting' ||
+        job?.status === 'running' ||
+        (job?.status === 'failed' && job.error?.code === 'download_failed');
+      if (!job || !scene || scene.mediaKind !== input.mediaKind || job.sceneId !== input.sceneId || !active) {
+        throw new CreativeStudioMediaError('job_inactive');
+      }
+      const usedBytes = Object.values(current.assets).reduce((total, candidate) => total + candidate.byteSize, 0);
+      if (usedBytes + asset.byteSize > limits.projectMaxBytes) {
+        throw new CreativeStudioMediaError('invalid_media');
+      }
+      current.assets[asset.id] = asset;
+      scene.assetIds.push(asset.id);
+      scene.selectedAssetId = asset.id;
+      scene.reviewState = 'complete';
+      job.status = 'succeeded';
+      job.outputAssetIds = [asset.id];
+      job.error = null;
+      delete job.progress;
+      job.updatedAt = now();
+      current.routing[input.mediaKind] = job.provider;
+      return current;
+    });
+  };
+
+  const persistProviderOutputForJob = async (input: PersistProviderJobOutputInput): Promise<StudioAsset> =>
+    persistProviderOutputWithPlan(input, await prepareProviderJobWrite(input), (asset) =>
+      commitProviderJobAsset(input, asset)
+    );
 
   /** Pipes the single SSRF-safe downloader into the same managed `.part` persistence path without buffering media. */
-  const persistProviderOutputFromUrl = async (input: PersistProviderOutputUrlInput): Promise<StudioAsset> => {
-    const plan = await prepareProviderWrite(input);
+  const persistProviderOutputFromUrlWithPlan = async (
+    input: PersistProviderOutputUrlInput | PersistProviderJobOutputUrlInput,
+    plan: ProviderWritePlan,
+    persistBody: (body: AsyncIterable<Uint8Array>) => Promise<StudioAsset>
+  ): Promise<StudioAsset> => {
     const stream = new PassThrough();
     stream.on('error', (): undefined => undefined);
     const controller = new AbortController();
     const abortFromCaller = (): void => controller.abort();
     input.downloader.signal?.addEventListener('abort', abortFromCaller, { once: true });
     if (input.downloader.signal?.aborted) controller.abort();
-    const persist = persistProviderOutputWithPlan({ ...input, body: stream }, plan);
+    const persist = persistBody(stream);
     const download = (async () => {
       const result = await downloadRemoteMedia(input.url, {
         ...input.downloader,
@@ -860,6 +958,20 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
     } finally {
       input.downloader.signal?.removeEventListener('abort', abortFromCaller);
     }
+  };
+
+  const persistProviderOutputFromUrl = async (input: PersistProviderOutputUrlInput): Promise<StudioAsset> => {
+    const plan = await prepareProviderWrite(input);
+    return persistProviderOutputFromUrlWithPlan(input, plan, (body) =>
+      persistProviderOutputWithPlan({ ...input, body }, plan, (asset) => commitProviderAsset(input, asset))
+    );
+  };
+
+  const persistProviderOutputFromUrlForJob = async (input: PersistProviderJobOutputUrlInput): Promise<StudioAsset> => {
+    const plan = await prepareProviderJobWrite(input);
+    return persistProviderOutputFromUrlWithPlan(input, plan, (body) =>
+      persistProviderOutputWithPlan({ ...input, body }, plan, (asset) => commitProviderJobAsset(input, asset))
+    );
   };
 
   const exportAssetsToDirectory = async (
@@ -944,6 +1056,8 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
     importReferenceFromPath,
     persistProviderOutput,
     persistProviderOutputFromUrl,
+    persistProviderOutputForJob,
+    persistProviderOutputFromUrlForJob,
     resolveAsset,
     resolveProviderInput,
     exportAssetsToDirectory,

@@ -7,6 +7,7 @@
 import type {
   CreateStudioProjectInput,
   ProposeStudioStoryboardInput,
+  StudioEditableScene,
   StudioProject,
   StudioProjectSummary,
   StudioScene,
@@ -24,6 +25,13 @@ import type {
   StudioRouteCatalog,
   StudioSaveConnectionRequest,
   StudioValidateConnectionRequest,
+  StudioJob,
+  StudioRendererJob,
+  StudioRendererProject,
+  StudioJobRequest,
+  StudioRetryDownloadRequest,
+  StudioRetryJobRequest,
+  StudioSubmitScenesRequest,
 } from '@/common/types/project/creativeStudioTypes';
 import type { AppOperationResult } from '@/common/types/appOperations';
 import { runStudioStoryboardDraft } from '@process/services/app-operations';
@@ -34,6 +42,7 @@ import type {
 import { CreativeStudioStoreError, type CreativeStudioStore } from '@process/services/creative-studio/store';
 import type { StudioProviderResolver } from '@process/services/creative-studio/providerResolver';
 import type { GenerationProviderAdapterRegistry } from '@process/services/creative-studio/adapters';
+import type { StudioJobManager } from '@process/services/creative-studio/jobManager';
 import type { IProvider } from '@/common/config/storage';
 import { randomUUID } from 'node:crypto';
 import { isImagesApiModel } from '@/common/utils/imageModelAllowlist';
@@ -42,18 +51,28 @@ const SAFE_ID = /^[A-Za-z0-9_-]{1,256}$/;
 const ASPECT_RATIOS = new Set(['16:9', '9:16', '1:1', '4:3', '3:4']);
 const RESOLUTIONS = new Set(['720p', '1080p']);
 const MEDIA_KINDS = new Set(['image', 'video']);
-const REVIEW_STATES = new Set(['draft', 'ready', 'generating', 'complete', 'blocked']);
+const NONTERMINAL_JOB_STATUSES: ReadonlySet<StudioJob['status']> = new Set([
+  'queued_local',
+  'submitting',
+  'queued_remote',
+  'running',
+  'needs_attention',
+]);
 
 export type CreativeStudioService = {
   listProjects(): Promise<StudioProjectSummary[]>;
-  createProject(input: CreateStudioProjectInput): Promise<StudioProject>;
-  getProject(projectId: string): Promise<StudioProject | null>;
-  proposeStoryboard(input: ProposeStudioStoryboardInput): Promise<StudioProject>;
-  updateProject(input: StudioUpdateProjectRequest): Promise<StudioProject>;
+  createProject(input: CreateStudioProjectInput): Promise<StudioRendererProject>;
+  getProject(projectId: string): Promise<StudioRendererProject | null>;
+  proposeStoryboard(input: ProposeStudioStoryboardInput): Promise<StudioRendererProject>;
+  updateProject(input: StudioUpdateProjectRequest): Promise<StudioRendererProject>;
   deleteProject(input: StudioDeleteProjectRequest): Promise<boolean>;
-  updateScene(input: StudioUpdateSceneRequest): Promise<StudioProject>;
-  reorderScenes(input: StudioReorderScenesRequest): Promise<StudioProject>;
-  selectAsset(input: StudioSelectAssetRequest): Promise<StudioProject>;
+  updateScene(input: StudioUpdateSceneRequest): Promise<StudioRendererProject>;
+  reorderScenes(input: StudioReorderScenesRequest): Promise<StudioRendererProject>;
+  selectAsset(input: StudioSelectAssetRequest): Promise<StudioRendererProject>;
+  submitScenes(input: StudioSubmitScenesRequest): Promise<StudioRendererJob[]>;
+  cancelJob(input: StudioJobRequest): Promise<StudioRendererJob>;
+  retryJob(input: StudioRetryJobRequest): Promise<StudioRendererJob>;
+  retryDownload(input: StudioRetryDownloadRequest): Promise<StudioRendererJob>;
   importReferenceFromPath(input: {
     projectId: string;
     sceneId?: string;
@@ -85,6 +104,7 @@ export type CreativeStudioServiceDeps = {
   validateConnection?: (input: StudioValidateConnectionRequest) => Promise<StudioConnectionBinding>;
   listProviders?: () => Promise<IProvider[]>;
   adapterRegistry?: GenerationProviderAdapterRegistry;
+  jobManager?: StudioJobManager;
   mediaStore?: {
     importReferenceFromPath(input: {
       projectId: string;
@@ -234,8 +254,46 @@ const assertProjectInput = (input: CreateStudioProjectInput): void => {
   if (!RESOLUTIONS.has(input.resolution)) throw invalid('Invalid Studio resolution');
 };
 
-const assertScene = (sceneId: string, scene: StudioScene): void => {
-  if (scene.id !== sceneId) throw invalid('Studio scene id does not match its request');
+const assertJobRequest = (input: StudioJobRequest): void => {
+  assertSafeId(input.projectId, 'project id');
+  assertSafeId(input.jobId, 'job id');
+  assertExpectedRevision(input.expectedRevision);
+};
+
+const assertSubmitScenesInput = (input: StudioSubmitScenesRequest): void => {
+  assertSafeId(input.projectId, 'project id');
+  assertExpectedRevision(input.expectedRevision);
+  assertText(input.catalogVersion, 64, 'route catalog version', true);
+  if (
+    !Array.isArray(input.sceneIds) ||
+    input.sceneIds.length < 1 ||
+    input.sceneIds.length > 24 ||
+    input.sceneIds.some((sceneId) => !isSafeId(sceneId)) ||
+    new Set(input.sceneIds).size !== input.sceneIds.length ||
+    !Array.isArray(input.routes) ||
+    input.routes.length !== input.sceneIds.length
+  ) {
+    throw invalid('Invalid Studio generation scene selection');
+  }
+  const selectedSceneIds = new Set(input.sceneIds);
+  const routedSceneIds = new Set<string>();
+  for (const route of input.routes) {
+    if (
+      !isSafeId(route.sceneId) ||
+      !selectedSceneIds.has(route.sceneId) ||
+      routedSceneIds.has(route.sceneId) ||
+      !isSafeId(route.providerId) ||
+      !['weprompt-image-v1', 'byteplus-seedance-v1', 'weprompt-media-gateway-v1'].includes(route.adapterId) ||
+      !MEDIA_KINDS.has(route.kind)
+    ) {
+      throw invalid('Invalid Studio generation route');
+    }
+    assertText(route.model, 256, 'route model', true);
+    routedSceneIds.add(route.sceneId);
+  }
+};
+
+const assertScene = (scene: StudioEditableScene): void => {
   assertText(scene.title, 256, 'scene title', true);
   assertText(scene.purpose, 256, 'scene purpose');
   assertText(scene.visualPrompt, 8 * 1024, 'scene visual prompt');
@@ -244,44 +302,104 @@ const assertScene = (sceneId: string, scene: StudioScene): void => {
   if (!MEDIA_KINDS.has(scene.mediaKind)) throw invalid('Invalid Studio scene media kind');
   if (!isIntegerInRange(scene.durationSeconds, 1, 60)) throw invalid('Invalid Studio scene duration');
   if (scene.referenceAssetId !== null) assertSafeId(scene.referenceAssetId, 'reference asset id');
-  if (scene.selectedAssetId !== null) assertSafeId(scene.selectedAssetId, 'selected asset id');
-  if (
-    !Array.isArray(scene.assetIds) ||
-    !Array.isArray(scene.jobIds) ||
-    scene.assetIds.some((assetId) => !isSafeId(assetId)) ||
-    scene.jobIds.some((jobId) => !isSafeId(jobId)) ||
-    new Set(scene.assetIds).size !== scene.assetIds.length ||
-    new Set(scene.jobIds).size !== scene.jobIds.length ||
-    !REVIEW_STATES.has(scene.reviewState)
-  ) {
-    throw invalid('Invalid Studio scene references');
-  }
 };
+
+const toRendererJob = (job: StudioJob): StudioRendererJob => ({
+  id: job.id,
+  projectId: job.projectId,
+  sceneId: job.sceneId,
+  status: job.status,
+  provider: { ...job.provider },
+  outputAssetIds: [...job.outputAssetIds],
+  error: job.error === null ? null : { ...job.error },
+  ...(job.progress === undefined ? {} : { progress: job.progress }),
+  retryOfJobId: job.retryOfJobId,
+  retryReason: job.retryReason,
+  duplicateChargeAcknowledged: job.duplicateChargeAcknowledged,
+  duplicateChargeAcknowledgedAt: job.duplicateChargeAcknowledgedAt,
+  createdAt: job.createdAt,
+  updatedAt: job.updatedAt,
+});
+
+const toRendererScene = (scene: StudioScene): StudioScene => ({
+  id: scene.id,
+  title: scene.title,
+  purpose: scene.purpose,
+  visualPrompt: scene.visualPrompt,
+  narration: scene.narration,
+  onScreenText: scene.onScreenText,
+  mediaKind: scene.mediaKind,
+  durationSeconds: scene.durationSeconds,
+  referenceAssetId: scene.referenceAssetId,
+  selectedAssetId: scene.selectedAssetId,
+  assetIds: [...scene.assetIds],
+  jobIds: [...scene.jobIds],
+  reviewState: scene.reviewState,
+});
+
+const toRendererAsset = (asset: StudioAsset): StudioAsset => ({
+  id: asset.id,
+  projectId: asset.projectId,
+  sceneId: asset.sceneId,
+  mediaKind: asset.mediaKind,
+  mimeType: asset.mimeType,
+  managedAsset: { ...asset.managedAsset },
+  byteSize: asset.byteSize,
+  sha256: asset.sha256,
+  ...(asset.width === undefined ? {} : { width: asset.width }),
+  ...(asset.height === undefined ? {} : { height: asset.height }),
+  ...(asset.durationSeconds === undefined ? {} : { durationSeconds: asset.durationSeconds }),
+  createdAt: asset.createdAt,
+});
+
+const toRendererProject = (project: StudioProject): StudioRendererProject => ({
+  schemaVersion: project.schemaVersion,
+  revision: project.revision,
+  id: project.id,
+  name: project.name,
+  brief: project.brief,
+  ...(project.forgeProjectId === undefined ? {} : { forgeProjectId: project.forgeProjectId }),
+  aspectRatio: project.aspectRatio,
+  targetDurationSeconds: project.targetDurationSeconds,
+  resolution: project.resolution,
+  sceneOrder: [...project.sceneOrder],
+  scenes: Object.fromEntries(
+    Object.entries(project.scenes).map(([sceneId, scene]) => [sceneId, toRendererScene(scene)])
+  ),
+  assets: Object.fromEntries(
+    Object.entries(project.assets).map(([assetId, asset]) => [assetId, toRendererAsset(asset)])
+  ),
+  jobs: Object.fromEntries(Object.entries(project.jobs).map(([jobId, job]) => [jobId, toRendererJob(job)])),
+  routing: structuredClone(project.routing),
+  createdAt: project.createdAt,
+  updatedAt: project.updatedAt,
+});
 
 /** Owns bounded Creative Studio project edits and renderer-safe mutation notifications. */
 export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): CreativeStudioService => {
   const runStoryboardDraft = deps.runStoryboardDraft ?? runStudioStoryboardDraft;
   const createSceneId = deps.createSceneId ?? randomUUID;
   const createConnectionId = deps.createConnectionId ?? randomUUID;
-  const notify = <T extends StudioProject>(project: T): T => {
+  const notify = (project: StudioProject): StudioRendererProject => {
     deps.onProjectUpdated(project.id);
-    return project;
+    return toRendererProject(project);
   };
 
   return {
     listProjects: () => deps.store.listProjects(),
 
-    async createProject(input: CreateStudioProjectInput): Promise<StudioProject> {
+    async createProject(input: CreateStudioProjectInput): Promise<StudioRendererProject> {
       assertProjectInput(input);
       return notify(await deps.store.createProject(input));
     },
 
-    async getProject(projectId: string): Promise<StudioProject | null> {
+    async getProject(projectId: string): Promise<StudioRendererProject | null> {
       assertSafeId(projectId, 'project id');
-      return deps.store.getProject(projectId);
+      const project = await deps.store.getProject(projectId);
+      return project === null ? null : toRendererProject(project);
     },
 
-    async proposeStoryboard(input: ProposeStudioStoryboardInput): Promise<StudioProject> {
+    async proposeStoryboard(input: ProposeStudioStoryboardInput): Promise<StudioRendererProject> {
       assertSafeId(input.projectId, 'project id');
       assertExpectedRevision(input.expectedRevision);
       if (typeof input.replaceExisting !== 'boolean') throw invalid('Invalid storyboard replacement option');
@@ -338,7 +456,7 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
       );
     },
 
-    async updateProject(input: StudioUpdateProjectRequest): Promise<StudioProject> {
+    async updateProject(input: StudioUpdateProjectRequest): Promise<StudioRendererProject> {
       assertSafeId(input.projectId, 'project id');
       assertExpectedRevision(input.expectedRevision);
       if (
@@ -373,11 +491,11 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
       return deleted;
     },
 
-    async updateScene(input: StudioUpdateSceneRequest): Promise<StudioProject> {
+    async updateScene(input: StudioUpdateSceneRequest): Promise<StudioRendererProject> {
       assertSafeId(input.projectId, 'project id');
       assertSafeId(input.sceneId, 'scene id');
       assertExpectedRevision(input.expectedRevision);
-      if (input.scene !== null) assertScene(input.sceneId, input.scene);
+      if (input.scene !== null) assertScene(input.scene);
       return notify(
         await deps.store.updateProject(
           input.projectId,
@@ -397,7 +515,55 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
             if (!Object.hasOwn(next.scenes, input.sceneId) && next.sceneOrder.length >= 24) {
               throw invalid('Studio project has too many scenes');
             }
-            next.scenes[input.sceneId] = input.scene;
+            if (input.scene.referenceAssetId !== null) {
+              const reference = next.assets[input.scene.referenceAssetId];
+              if (
+                reference === undefined ||
+                reference.projectId !== next.id ||
+                reference.sceneId !== input.sceneId ||
+                reference.mediaKind !== 'image'
+              ) {
+                throw invalid('Studio reference asset does not belong to its scene');
+              }
+            }
+            const current = next.scenes[input.sceneId];
+            if (current === undefined) {
+              next.scenes[input.sceneId] = {
+                id: input.sceneId,
+                ...input.scene,
+                selectedAssetId: null,
+                assetIds: [],
+                jobIds: [],
+                reviewState: input.scene.visualPrompt.trim().length > 0 ? 'ready' : 'draft',
+              };
+            } else {
+              const mediaKindChanged = current.mediaKind !== input.scene.mediaKind;
+              if (
+                mediaKindChanged &&
+                current.jobIds.some((jobId) => {
+                  const job = next.jobs[jobId];
+                  return job !== undefined && NONTERMINAL_JOB_STATUSES.has(job.status);
+                })
+              ) {
+                throw new CreativeStudioServiceError('busy');
+              }
+              const selectedAsset = current.selectedAssetId === null ? undefined : next.assets[current.selectedAssetId];
+              const selectedAssetId =
+                mediaKindChanged && selectedAsset?.mediaKind !== input.scene.mediaKind ? null : current.selectedAssetId;
+              next.scenes[input.sceneId] = {
+                ...current,
+                ...input.scene,
+                id: current.id,
+                selectedAssetId,
+                assetIds: [...current.assetIds],
+                jobIds: [...current.jobIds],
+                reviewState: mediaKindChanged
+                  ? input.scene.visualPrompt.trim().length > 0
+                    ? 'ready'
+                    : 'draft'
+                  : current.reviewState,
+              };
+            }
             if (!next.sceneOrder.includes(input.sceneId)) next.sceneOrder.push(input.sceneId);
             return next;
           },
@@ -406,7 +572,7 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
       );
     },
 
-    async reorderScenes(input: StudioReorderScenesRequest): Promise<StudioProject> {
+    async reorderScenes(input: StudioReorderScenesRequest): Promise<StudioRendererProject> {
       assertSafeId(input.projectId, 'project id');
       assertExpectedRevision(input.expectedRevision);
       if (
@@ -435,7 +601,7 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
       );
     },
 
-    async selectAsset(input: StudioSelectAssetRequest): Promise<StudioProject> {
+    async selectAsset(input: StudioSelectAssetRequest): Promise<StudioRendererProject> {
       assertSafeId(input.projectId, 'project id');
       assertSafeId(input.sceneId, 'scene id');
       assertSafeId(input.assetId, 'asset id');
@@ -450,7 +616,8 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
               scene === undefined ||
               asset === undefined ||
               asset.projectId !== project.id ||
-              asset.sceneId !== scene.id
+              asset.sceneId !== scene.id ||
+              asset.mediaKind !== scene.mediaKind
             ) {
               throw invalid('Studio asset does not belong to its selected scene');
             }
@@ -465,6 +632,36 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
           input.expectedRevision
         )
       );
+    },
+
+    async submitScenes(input: StudioSubmitScenesRequest): Promise<StudioRendererJob[]> {
+      assertSubmitScenesInput(input);
+      if (!deps.jobManager) throw new CreativeStudioServiceError('provider_error');
+      return (await deps.jobManager.submitScenes(input)).map(toRendererJob);
+    },
+
+    async cancelJob(input: StudioJobRequest): Promise<StudioRendererJob> {
+      assertJobRequest(input);
+      if (!deps.jobManager) throw new CreativeStudioServiceError('provider_error');
+      return toRendererJob(await deps.jobManager.cancelJob(input));
+    },
+
+    async retryJob(input: StudioRetryJobRequest): Promise<StudioRendererJob> {
+      assertJobRequest(input);
+      if (
+        input.acknowledgePossibleDuplicateCharge !== undefined &&
+        typeof input.acknowledgePossibleDuplicateCharge !== 'boolean'
+      ) {
+        throw invalid('Invalid Studio duplicate-charge acknowledgement');
+      }
+      if (!deps.jobManager) throw new CreativeStudioServiceError('provider_error');
+      return toRendererJob(await deps.jobManager.retryJob(input));
+    },
+
+    async retryDownload(input: StudioRetryDownloadRequest): Promise<StudioRendererJob> {
+      assertJobRequest(input);
+      if (!deps.jobManager) throw new CreativeStudioServiceError('provider_error');
+      return toRendererJob(await deps.jobManager.retryDownload(input));
     },
 
     async importReferenceFromPath(input): Promise<StudioAsset> {

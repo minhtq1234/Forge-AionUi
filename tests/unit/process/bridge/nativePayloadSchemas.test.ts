@@ -103,7 +103,6 @@ const VALID_PAYLOADS = {
     expectedRevision: 1,
     sceneId: 'scene_1',
     scene: {
-      id: 'scene_1',
       title: 'Opening',
       purpose: 'Introduce the product',
       visualPrompt: 'A cinematic product reveal',
@@ -112,10 +111,6 @@ const VALID_PAYLOADS = {
       mediaKind: 'video',
       durationSeconds: 4,
       referenceAssetId: null,
-      selectedAssetId: null,
-      assetIds: [],
-      jobIds: [],
-      reviewState: 'draft',
     },
   },
   'creative-studio.reorder-scenes': { projectId: 'project_1', expectedRevision: 1, sceneOrder: ['scene_1'] },
@@ -131,6 +126,29 @@ const VALID_PAYLOADS = {
     expectedRevision: 1,
   },
   'creative-studio.choose-and-export-assets': { projectId: 'project_1', includeReferences: true },
+  'creative-studio.submit-scenes': {
+    projectId: 'project_1',
+    expectedRevision: 1,
+    sceneIds: ['scene_1'],
+    catalogVersion: '0123456789abcdef',
+    routes: [
+      {
+        sceneId: 'scene_1',
+        providerId: 'provider_1',
+        adapterId: 'weprompt-media-gateway-v1',
+        model: 'open-sora',
+        kind: 'video',
+      },
+    ],
+  },
+  'creative-studio.cancel-job': { projectId: 'project_1', jobId: 'job_1', expectedRevision: 1 },
+  'creative-studio.retry-job': {
+    projectId: 'project_1',
+    jobId: 'job_1',
+    expectedRevision: 1,
+    acknowledgePossibleDuplicateCharge: true,
+  },
+  'creative-studio.retry-download': { projectId: 'project_1', jobId: 'job_1', expectedRevision: 1 },
   'creative-studio.list-connection-candidates': undefined,
   'creative-studio.list-connections': undefined,
   'creative-studio.validate-connection': {
@@ -571,6 +589,27 @@ const INVALID_PAYLOADS = [
     'scene id traversal',
     { ...VALID_PAYLOADS['creative-studio.update-scene'], sceneId: '../scene_1' },
   ],
+  ...(['id', 'selectedAssetId', 'assetIds', 'jobIds', 'reviewState'] as const).map(
+    (field) =>
+      [
+        'creative-studio.update-scene',
+        `renderer supplied operational scene field ${field}`,
+        {
+          ...VALID_PAYLOADS['creative-studio.update-scene'],
+          scene: {
+            ...VALID_PAYLOADS['creative-studio.update-scene'].scene,
+            [field]:
+              field === 'id'
+                ? 'scene_1'
+                : field === 'selectedAssetId'
+                  ? null
+                  : field === 'reviewState'
+                    ? 'complete'
+                    : [],
+          },
+        },
+      ] as const
+  ),
   [
     'creative-studio.reorder-scenes',
     'duplicate scene ids',
@@ -599,6 +638,64 @@ const INVALID_PAYLOADS = [
     'creative-studio.select-asset',
     'asset id traversal',
     { projectId: 'project_1', expectedRevision: 1, sceneId: 'scene_1', assetId: '../../asset_1' },
+  ],
+  [
+    'creative-studio.submit-scenes',
+    'missing catalog version',
+    {
+      ...VALID_PAYLOADS['creative-studio.submit-scenes'],
+      catalogVersion: undefined,
+    },
+  ],
+  [
+    'creative-studio.submit-scenes',
+    'duplicate scene ids',
+    {
+      ...VALID_PAYLOADS['creative-studio.submit-scenes'],
+      sceneIds: ['scene_1', 'scene_1'],
+    },
+  ],
+  [
+    'creative-studio.submit-scenes',
+    'route set does not match selected scenes',
+    {
+      ...VALID_PAYLOADS['creative-studio.submit-scenes'],
+      routes: [
+        {
+          ...VALID_PAYLOADS['creative-studio.submit-scenes'].routes[0],
+          sceneId: 'scene_2',
+        },
+      ],
+    },
+  ],
+  [
+    'creative-studio.submit-scenes',
+    'renderer supplied provider URL',
+    {
+      ...VALID_PAYLOADS['creative-studio.submit-scenes'],
+      routes: [
+        {
+          ...VALID_PAYLOADS['creative-studio.submit-scenes'].routes[0],
+          baseUrl: 'https://signed.invalid/output',
+        },
+      ],
+    },
+  ],
+  ['creative-studio.cancel-job', 'missing expected revision', { projectId: 'project_1', jobId: 'job_1' }],
+  [
+    'creative-studio.retry-job',
+    'non-boolean duplicate charge acknowledgement',
+    {
+      projectId: 'project_1',
+      jobId: 'job_1',
+      expectedRevision: 1,
+      acknowledgePossibleDuplicateCharge: 'yes',
+    },
+  ],
+  [
+    'creative-studio.retry-download',
+    'non-positive expected revision',
+    { projectId: 'project_1', jobId: 'job_1', expectedRevision: 0 },
   ],
   ['app-operations.cancel', 'omitted operation identifier', {}],
   ['office-artifact.get-state', 'omitted workspace', { filePath: '/tmp/work/report.docx' }],

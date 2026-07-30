@@ -186,9 +186,48 @@ const studioConnectionSchema = z
     model: z.string().trim().min(1).max(256),
   })
   .strict();
+const studioSceneRouteSnapshotSchema = z
+  .object({
+    sceneId: safeIdSchema,
+    providerId: safeIdSchema,
+    adapterId: studioProviderAdapterSchema,
+    model: z.string().trim().min(1).max(256),
+    kind: z.enum(['image', 'video']),
+  })
+  .strict();
+const studioSubmitScenesSchema = z
+  .object({
+    projectId: safeIdSchema,
+    expectedRevision: studioExpectedRevisionSchema,
+    sceneIds: z
+      .array(safeIdSchema)
+      .min(1)
+      .max(24)
+      .refine((ids) => new Set(ids).size === ids.length),
+    catalogVersion: z.string().regex(/^[a-f0-9]{16}$/),
+    routes: z.array(studioSceneRouteSnapshotSchema).min(1).max(24),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    const routeSceneIds = input.routes.map((route) => route.sceneId);
+    const selectedSceneIds = new Set(input.sceneIds);
+    if (
+      new Set(routeSceneIds).size !== routeSceneIds.length ||
+      routeSceneIds.length !== input.sceneIds.length ||
+      routeSceneIds.some((sceneId) => !selectedSceneIds.has(sceneId))
+    ) {
+      context.addIssue({ code: 'custom', message: 'routes must exactly match sceneIds', path: ['routes'] });
+    }
+  });
+const studioJobRequestSchema = z
+  .object({
+    projectId: safeIdSchema,
+    jobId: safeIdSchema,
+    expectedRevision: studioExpectedRevisionSchema,
+  })
+  .strict();
 const studioSceneSchema = z
   .object({
-    id: safeIdSchema,
     title: z.string().trim().min(1).max(256),
     purpose: z.string().max(256),
     visualPrompt: z.string().max(8 * 1024),
@@ -197,16 +236,6 @@ const studioSceneSchema = z
     mediaKind: z.enum(['image', 'video']),
     durationSeconds: z.number().finite().int().min(1).max(60),
     referenceAssetId: safeIdSchema.nullable(),
-    selectedAssetId: safeIdSchema.nullable(),
-    assetIds: z
-      .array(safeIdSchema)
-      .max(256)
-      .refine((ids) => new Set(ids).size === ids.length),
-    jobIds: z
-      .array(safeIdSchema)
-      .max(256)
-      .refine((ids) => new Set(ids).size === ids.length),
-    reviewState: z.enum(['draft', 'ready', 'generating', 'complete', 'blocked']),
   })
   .strict();
 const studioUpdateProjectSchema = z
@@ -344,6 +373,12 @@ export const nativeBridgePayloadSchemas = {
   'creative-studio.choose-and-export-assets': z
     .object({ projectId: safeIdSchema, includeReferences: z.boolean() })
     .strict(),
+  'creative-studio.submit-scenes': studioSubmitScenesSchema,
+  'creative-studio.cancel-job': studioJobRequestSchema,
+  'creative-studio.retry-job': studioJobRequestSchema
+    .extend({ acknowledgePossibleDuplicateCharge: z.boolean().optional() })
+    .strict(),
+  'creative-studio.retry-download': studioJobRequestSchema,
   'creative-studio.list-connection-candidates': voidPayloadSchema,
   'creative-studio.list-connections': voidPayloadSchema,
   'creative-studio.validate-connection': studioConnectionSchema,

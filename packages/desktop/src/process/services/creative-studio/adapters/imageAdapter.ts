@@ -6,6 +6,7 @@
 
 import type { IProvider, TProviderWithModel } from '@/common/config/storage';
 import { promises as dns } from 'node:dns';
+import path from 'node:path';
 import {
   executeImageGeneration,
   type HostedImageDownloader,
@@ -87,6 +88,14 @@ const validRequest = (request: StudioGenerationRequest, provider: TProviderWithM
   };
 };
 
+const generatedImageMimeType = (imagePath: string): 'image/jpeg' | 'image/png' | 'image/webp' | null => {
+  const extension = path.extname(imagePath).toLowerCase();
+  if (extension === '.png') return 'image/png';
+  if (extension === '.jpg' || extension === '.jpeg') return 'image/jpeg';
+  if (extension === '.webp') return 'image/webp';
+  return null;
+};
+
 /** Wraps the existing image engine without exposing its local output path outside the main process. */
 export const createImageGenerationAdapter = (deps: ImageGenerationAdapterDeps): GenerationProviderAdapter => {
   const generate = deps.executeImageGeneration ?? executeImageGeneration;
@@ -128,9 +137,11 @@ export const createImageGenerationAdapter = (deps: ImageGenerationAdapterDeps): 
       if (!result.success || !result.imagePath) {
         throw new ImageGenerationAdapterError(result.error === 'no_output' ? 'no_output' : 'unknown');
       }
+      const mimeType = generatedImageMimeType(result.imagePath);
+      if (!mimeType) throw new ImageGenerationAdapterError('no_output');
       return {
         kind: 'complete',
-        outputs: [{ mediaKind: 'image', role: 'primary', source: { kind: 'file', path: result.imagePath } }],
+        outputs: [{ mediaKind: 'image', role: 'primary', source: { kind: 'file', path: result.imagePath }, mimeType }],
       };
     },
   };

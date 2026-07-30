@@ -164,20 +164,26 @@ const isGatewayOutputUrl = (value: string): boolean => {
   }
 };
 
+const isGatewayVideoMimeType = (value: unknown): value is 'video/mp4' | 'video/webm' =>
+  value === 'video/mp4' || value === 'video/webm';
+
 const outputsFrom = (value: unknown): ProviderOutput[] | null => {
   const root = record(value);
   const candidates = root?.outputs ?? root?.output;
   const list = Array.isArray(candidates) ? candidates : candidates === undefined ? [] : [candidates];
   const outputs = list.flatMap((candidate) => {
-    if (typeof candidate === 'string' && isGatewayOutputUrl(candidate)) {
-      return [
-        { mediaKind: 'video' as const, role: 'primary' as const, source: { kind: 'url' as const, url: candidate } },
-      ];
-    }
     const item = record(candidate);
     const url = item?.url;
-    return typeof url === 'string' && isGatewayOutputUrl(url)
-      ? [{ mediaKind: 'video' as const, role: 'primary' as const, source: { kind: 'url' as const, url } }]
+    const mimeType = item?.mime_type;
+    return typeof url === 'string' && isGatewayOutputUrl(url) && isGatewayVideoMimeType(mimeType)
+      ? [
+          {
+            mediaKind: 'video' as const,
+            role: 'primary' as const,
+            source: { kind: 'url' as const, url },
+            mimeType,
+          },
+        ]
       : [];
   });
   return outputs.length > 0 ? outputs : null;

@@ -8,7 +8,8 @@ capabilities, and validation time.
 
 Adapters, credentials, provider responses, remote job IDs, temporary output
 URLs, and resolved local inputs stay in the main process. The renderer receives
-only sanitized route and job DTOs.
+only sanitized route and job DTOs; job DTOs omit both the remote job ID and
+submission idempotency key.
 
 ## BytePlus ModelArk Seedance
 
@@ -198,7 +199,8 @@ A gateway may complete synchronously:
   "status": "succeeded",
   "outputs": [
     {
-      "url": "https://temporary.example/video.mp4"
+      "url": "https://temporary.example/video.mp4",
+      "mime_type": "video/mp4"
     }
   ]
 }
@@ -229,7 +231,8 @@ Or it may acknowledge a remote task:
   "status": "succeeded",
   "outputs": [
     {
-      "url": "https://temporary.example/video.mp4"
+      "url": "https://temporary.example/video.mp4",
+      "mime_type": "video/mp4"
     }
   ]
 }
@@ -243,8 +246,14 @@ Or it may acknowledge a remote task:
 ```
 
 Canonical statuses are `queued`, `running`, `succeeded`, `failed`,
-`cancelled`, and `expired`. Progress is optional, finite, and from 0 through 100. A succeeded response must contain at least one usable output URL. Job IDs
-must be 1–512 characters with no control characters.
+`cancelled`, and `expired`. Progress is optional, finite, and from 0 through 100. A succeeded response must contain at least one usable output object with a
+`url` and an explicit `mime_type` of `video/mp4` or `video/webm`; WePrompt does
+not infer a media type from a temporary URL. Job IDs
+must be 1–512 ASCII URL-unreserved characters, start with an alphanumeric
+character, and contain only letters, numbers, `.`, `_`, `~`, or `-` after that.
+URLs, path separators, query or fragment syntax, whitespace, percent-encoded
+segments, and token-bearing query strings are rejected before persistence or
+polling.
 
 Output URLs must be HTTP or HTTPS, contain no embedded credentials, and be at
 most 16 KiB. Public output URLs must use HTTPS. Plain HTTP is usable only at

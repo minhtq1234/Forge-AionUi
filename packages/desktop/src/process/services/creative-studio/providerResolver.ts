@@ -36,6 +36,7 @@ export type StudioProviderResolverDeps = {
 export type StudioProviderResolver = {
   listConnectionCandidates(): Promise<StudioConnectionCandidate[]>;
   listRoutes(input?: { routing?: StudioRoutingPreferences }): Promise<StudioRouteCatalog>;
+  isGenerationRouteAvailable(route: StudioProviderRef & { kind: StudioMediaKind }): Promise<boolean>;
 };
 
 const imageAdapter: StudioProviderAdapterId = 'weprompt-image-v1';
@@ -243,9 +244,11 @@ export const createStudioProviderResolver = (deps: StudioProviderResolverDeps): 
       if (binding.adapterId === 'byteplus-seedance-v1' && !isSupportedBytePlusSeedanceProvider(provider, binding.model))
         continue;
       const constraints =
-        binding.adapterId === 'byteplus-seedance-v1'
-          ? seedanceConstraints(binding.model)
-          : bindingConstraints(binding.capabilities);
+        binding.adapterId === imageAdapter
+          ? imageConstraints(binding.model)
+          : binding.adapterId === 'byteplus-seedance-v1'
+            ? seedanceConstraints(binding.model)
+            : bindingConstraints(binding.capabilities);
       if (!constraints) continue;
       routes.push({
         providerId: binding.providerId,
@@ -327,5 +330,37 @@ export const createStudioProviderResolver = (deps: StudioProviderResolverDeps): 
     };
   };
 
-  return { listConnectionCandidates, listRoutes };
+  const isGenerationRouteAvailable = async (route: StudioProviderRef & { kind: StudioMediaKind }): Promise<boolean> => {
+    const [providers, connections] = await Promise.all([deps.listProviders(), deps.listConnections()]);
+    const provider = providers.find((candidate) => candidate.id === route.providerId);
+    if (!provider || !isSafeProviderId(provider.id) || !isSafeModel(route.model) || !available(provider, route.model)) {
+      return false;
+    }
+    const binding = connections.find(
+      (candidate) =>
+        candidate.providerId === route.providerId &&
+        candidate.adapterId === route.adapterId &&
+        candidate.model === route.model
+    );
+    if (route.adapterId === imageAdapter) {
+      return (
+        route.kind === 'image' &&
+        isImageGenSupported(provider, route.model) &&
+        (provider.models.includes(route.model) || (binding !== undefined && bindingMediaKind(binding) === 'image'))
+      );
+    }
+    if (!binding || bindingMediaKind(binding) !== route.kind) return false;
+    if (binding.adapterId === 'weprompt-media-gateway-v1') {
+      return (
+        binding.capabilities.audioModes?.includes('none') === true && bindingConstraints(binding.capabilities) !== null
+      );
+    }
+    return (
+      binding.adapterId === 'byteplus-seedance-v1' &&
+      isSupportedBytePlusSeedanceProvider(provider, binding.model) &&
+      seedanceConstraints(binding.model) !== null
+    );
+  };
+
+  return { listConnectionCandidates, listRoutes, isGenerationRouteAvailable };
 };

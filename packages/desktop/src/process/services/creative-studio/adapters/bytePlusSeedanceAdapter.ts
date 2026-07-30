@@ -175,6 +175,14 @@ const isBytePlusOutputUrl = (value: string): boolean => {
   }
 };
 
+const imageMimeTypeFromUrl = (value: string): 'image/jpeg' | 'image/png' | 'image/webp' | null => {
+  const pathname = new URL(value).pathname.toLowerCase();
+  if (pathname.endsWith('.png')) return 'image/png';
+  if (pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')) return 'image/jpeg';
+  if (pathname.endsWith('.webp')) return 'image/webp';
+  return null;
+};
+
 const outputUrls = (value: unknown): ProviderOutput[] | null => {
   const task = taskRecord(value);
   const content = task && record(task.content);
@@ -184,14 +192,19 @@ const outputUrls = (value: unknown): ProviderOutput[] | null => {
       mediaKind: 'video',
       role: 'primary',
       source: { kind: 'url', url: content.video_url },
+      mimeType: 'video/mp4',
     },
   ];
   if (typeof content?.last_frame_url === 'string' && isBytePlusOutputUrl(content.last_frame_url)) {
-    documented.push({
-      mediaKind: 'image',
-      role: 'poster',
-      source: { kind: 'url', url: content.last_frame_url },
-    });
+    const mimeType = imageMimeTypeFromUrl(content.last_frame_url);
+    if (mimeType) {
+      documented.push({
+        mediaKind: 'image',
+        role: 'poster',
+        source: { kind: 'url', url: content.last_frame_url },
+        mimeType,
+      });
+    }
   }
   return documented;
 };

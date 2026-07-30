@@ -77,7 +77,14 @@ describe('Creative Studio provider adapters', () => {
 
     expect(result).toEqual({
       kind: 'complete',
-      outputs: [{ mediaKind: 'image', role: 'primary', source: { kind: 'file', path: '/private/studio/image.png' } }],
+      outputs: [
+        {
+          mediaKind: 'image',
+          role: 'primary',
+          source: { kind: 'file', path: '/private/studio/image.png' },
+          mimeType: 'image/png',
+        },
+      ],
     });
     expect(executeImageGeneration).toHaveBeenCalledWith(
       { prompt: request.prompt, image_uris: ['data:image/png;base64,QUJD'] },
@@ -87,6 +94,21 @@ describe('Creative Studio provider adapters', () => {
       expect.any(AbortSignal),
       { hostedImageDownloader: expect.any(Function) }
     );
+  });
+
+  it('rejects an image-engine path whose extension cannot provide a declared managed MIME type', async () => {
+    const adapter = createImageGenerationAdapter({
+      executeImageGeneration: async () => ({
+        success: true,
+        text: 'saved',
+        imagePath: '/private/studio/image.gif',
+      }),
+      workspaceDir: '/private/studio',
+    });
+
+    await expect(
+      adapter.submit({ ...request, mediaKind: 'image' }, imageProvider(), new AbortController().signal)
+    ).rejects.toMatchObject({ code: 'no_output' });
   });
 
   it('rejects first-frame input for images-API models before calling the image engine', async () => {
@@ -248,11 +270,28 @@ describe('Creative Studio provider adapters', () => {
     ]);
   });
 
-  it('bounds remote job IDs including path segments, malformed Unicode, C0, DEL, and C1 controls', () => {
-    expect(isValidProviderJobId('remote-job_1')).toBe(true);
+  it('accepts only bounded URL-unreserved opaque remote job IDs', () => {
+    expect(['remote-job_1', '01K4ZP.task~2'].map(isValidProviderJobId)).toEqual([true, true]);
     expect(
-      ['', '.', '..', '\ud800', 'x'.repeat(513), 'bad\u0000id', 'bad\u007fid', 'bad\u0085id'].map(isValidProviderJobId)
-    ).toEqual([false, false, false, false, false, false, false, false]);
+      [
+        '',
+        '.',
+        '..',
+        '\ud800',
+        'x'.repeat(513),
+        'bad\u0000id',
+        'bad\u007fid',
+        'bad\u0085id',
+        'https://provider.example/jobs/1',
+        'job?id=1',
+        'job&token=secret',
+        'job#fragment',
+        'job/path',
+        String.raw`job\path`,
+        'job%2Fpath',
+        'job with spaces',
+      ].map(isValidProviderJobId)
+    ).toEqual(Array.from({ length: 16 }, () => false));
   });
 
   it('rejects unsafe job path segments before either remote adapter can make a request', async () => {
@@ -413,7 +452,14 @@ describe('Creative Studio provider adapters', () => {
     });
     await expect(succeeded.poll?.('remote_1', provider(), new AbortController().signal)).resolves.toEqual({
       status: 'succeeded',
-      outputs: [{ mediaKind: 'video', role: 'primary', source: { kind: 'url', url: 'https://cdn.example/video.mp4' } }],
+      outputs: [
+        {
+          mediaKind: 'video',
+          role: 'primary',
+          source: { kind: 'url', url: 'https://cdn.example/video.mp4' },
+          mimeType: 'video/mp4',
+        },
+      ],
     });
 
     const timeout = createBytePlusSeedanceAdapter({
@@ -444,8 +490,18 @@ describe('Creative Studio provider adapters', () => {
     await expect(adapter.poll?.('remote_1', provider(), new AbortController().signal)).resolves.toEqual({
       status: 'succeeded',
       outputs: [
-        { mediaKind: 'video', role: 'primary', source: { kind: 'url', url: 'https://cdn.example/video.mp4' } },
-        { mediaKind: 'image', role: 'poster', source: { kind: 'url', url: 'https://cdn.example/poster.png' } },
+        {
+          mediaKind: 'video',
+          role: 'primary',
+          source: { kind: 'url', url: 'https://cdn.example/video.mp4' },
+          mimeType: 'video/mp4',
+        },
+        {
+          mediaKind: 'image',
+          role: 'poster',
+          source: { kind: 'url', url: 'https://cdn.example/poster.png' },
+          mimeType: 'image/png',
+        },
       ],
     });
   });
@@ -569,7 +625,10 @@ describe('Creative Studio provider adapters', () => {
         })
       )
       .mockResolvedValueOnce(
-        response(200, { status: 'succeeded', outputs: [{ url: 'https://cdn.example/video.mp4' }] })
+        response(200, {
+          status: 'succeeded',
+          outputs: [{ url: 'https://cdn.example/video.mp4', mime_type: 'video/mp4' }],
+        })
       );
     const adapter = createMediaGatewayAdapter({ fetch });
     const gateway = provider({ base_url: 'https://gateway.example', use_model: 'open-sora' });
@@ -593,7 +652,14 @@ describe('Creative Studio provider adapters', () => {
       adapter.submit({ ...request, firstFrame: firstFrame() }, gateway, new AbortController().signal)
     ).resolves.toEqual({
       kind: 'complete',
-      outputs: [{ mediaKind: 'video', role: 'primary', source: { kind: 'url', url: 'https://cdn.example/video.mp4' } }],
+      outputs: [
+        {
+          mediaKind: 'video',
+          role: 'primary',
+          source: { kind: 'url', url: 'https://cdn.example/video.mp4' },
+          mimeType: 'video/mp4',
+        },
+      ],
     });
     expect(JSON.parse(String(fetch.mock.calls[1]?.[1]?.body))).toMatchObject({
       audio_mode: 'none',
@@ -626,6 +692,20 @@ describe('Creative Studio provider adapters', () => {
     await expect(
       missingStatus.submit(request, provider({ base_url: 'https://gateway.example' }), new AbortController().signal)
     ).rejects.toMatchObject({ code: 'invalid_response' });
+  });
+
+  it('rejects a succeeded gateway output without an explicit supported MIME type', async () => {
+    const adapter = createMediaGatewayAdapter({
+      fetch: async () => response(200, { status: 'succeeded', outputs: [{ url: 'https://cdn.example/video.mp4' }] }),
+    });
+
+    await expect(
+      adapter.submit(
+        request,
+        provider({ base_url: 'https://gateway.example', use_model: 'open-sora' }),
+        new AbortController().signal
+      )
+    ).rejects.toMatchObject({ code: 'no_output' });
   });
 
   it('rejects gateway audio modes that do not explicitly advertise video support', async () => {
@@ -707,7 +787,10 @@ describe('Creative Studio provider adapters', () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(
-        response(200, { status: 'succeeded', outputs: [{ url: 'https://cdn.example/final.mp4' }] })
+        response(200, {
+          status: 'succeeded',
+          outputs: [{ url: 'https://cdn.example/final.mp4', mime_type: 'video/mp4' }],
+        })
       )
       .mockResolvedValueOnce(response(204, undefined, true));
     const adapter = createMediaGatewayAdapter({ fetch });
@@ -715,7 +798,14 @@ describe('Creative Studio provider adapters', () => {
 
     await expect(adapter.poll?.('gateway_1', gateway, new AbortController().signal)).resolves.toEqual({
       status: 'succeeded',
-      outputs: [{ mediaKind: 'video', role: 'primary', source: { kind: 'url', url: 'https://cdn.example/final.mp4' } }],
+      outputs: [
+        {
+          mediaKind: 'video',
+          role: 'primary',
+          source: { kind: 'url', url: 'https://cdn.example/final.mp4' },
+          mimeType: 'video/mp4',
+        },
+      ],
     });
     await expect(adapter.cancel?.('gateway_1', gateway, new AbortController().signal)).resolves.toEqual({
       kind: 'cancelled',
@@ -741,7 +831,10 @@ describe('Creative Studio provider adapters', () => {
     });
 
     const synchronous = createMediaGatewayAdapter({
-      fetch: async () => response(200, { outputs: [{ url: 'http://gateway.internal:8080/output/video.mp4' }] }),
+      fetch: async () =>
+        response(200, {
+          outputs: [{ url: 'http://gateway.internal:8080/output/video.mp4', mime_type: 'video/mp4' }],
+        }),
     });
     await expect(synchronous.submit(request, gateway, new AbortController().signal)).resolves.toEqual({
       kind: 'complete',
@@ -750,6 +843,7 @@ describe('Creative Studio provider adapters', () => {
           mediaKind: 'video',
           role: 'primary',
           source: { kind: 'url', url: 'http://gateway.internal:8080/output/video.mp4' },
+          mimeType: 'video/mp4',
         },
       ],
     });

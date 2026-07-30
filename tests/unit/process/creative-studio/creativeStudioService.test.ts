@@ -10,7 +10,14 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CreateStudioProjectInput, StudioProject, StudioScene } from '@/common/types/project/creativeStudioTypes';
+import type {
+  CreateStudioProjectInput,
+  StudioAsset,
+  StudioEditableScene,
+  StudioJob,
+  StudioRendererProject,
+  StudioScene,
+} from '@/common/types/project/creativeStudioTypes';
 import type { IProvider } from '@/common/config/storage';
 import type { GenerationProviderAdapter } from '@process/services/creative-studio/adapters';
 import type { CreativeStudioStoreError } from '@process/services/creative-studio/store';
@@ -29,8 +36,7 @@ const makeInput = (overrides: Partial<CreateStudioProjectInput> = {}): CreateStu
   ...overrides,
 });
 
-const makeScene = (id: string, durationSeconds = 4): StudioScene => ({
-  id,
+const makeScene = (id: string, durationSeconds = 4): StudioEditableScene => ({
   title: `Scene ${id}`,
   purpose: 'Introduce the product',
   visualPrompt: 'A cinematic studio product reveal',
@@ -39,10 +45,6 @@ const makeScene = (id: string, durationSeconds = 4): StudioScene => ({
   mediaKind: 'video',
   durationSeconds,
   referenceAssetId: null,
-  selectedAssetId: null,
-  assetIds: [],
-  jobIds: [],
-  reviewState: 'draft',
 });
 
 const storyboardProposal = {
@@ -83,7 +85,7 @@ type StoryboardService = CreativeStudioService & {
     projectId: string;
     expectedRevision: number;
     replaceExisting: boolean;
-  }): Promise<StudioProject>;
+  }): Promise<StudioRendererProject>;
 };
 
 describe('CreativeStudioService', () => {
@@ -112,6 +114,96 @@ describe('CreativeStudioService', () => {
     await expect(
       service.updateProject({ projectId: 'missing_project', expectedRevision: 1, name: 'Changed' })
     ).rejects.toMatchObject({ code: 'not_found' } satisfies Partial<CreativeStudioStoreError>);
+  });
+
+  it('validates and delegates every durable generation mutation to the runtime-owned job manager', async () => {
+    const job: StudioJob = {
+      id: 'job_1',
+      projectId: 'project_1',
+      sceneId: 'scene_1',
+      status: 'failed',
+      provider: { providerId: 'provider_1', adapterId: 'weprompt-media-gateway-v1', model: 'open-sora' },
+      idempotencyKey: 'key_1',
+      providerJobId: null,
+      outputAssetIds: [],
+      error: {
+        code: 'provider_unavailable',
+        messageKey: 'conversation.creativeStudio.jobs.errors.providerUnavailable',
+      },
+      retryOfJobId: null,
+      retryReason: null,
+      duplicateChargeAcknowledged: false,
+      duplicateChargeAcknowledgedAt: null,
+      createdAt: '2026-07-30T00:00:00.000Z',
+      updatedAt: '2026-07-30T00:00:00.000Z',
+    };
+    const submitScenes = vi.fn(async () => []);
+    const cancelJob = vi.fn(async () => job);
+    const retryJob = vi.fn(async () => job);
+    const retryDownload = vi.fn(async () => job);
+    const generationService = createCreativeStudioService({
+      store: createCreativeStudioStore({ rootDir }),
+      onProjectUpdated,
+      jobManager: {
+        submitScenes,
+        cancelJob,
+        retryJob,
+        retryDownload,
+        resumePendingJobs: vi.fn(),
+        dispose: vi.fn(),
+      },
+    } as unknown as Parameters<typeof createCreativeStudioService>[0]);
+    const submitInput = {
+      projectId: 'project_1',
+      expectedRevision: 1,
+      sceneIds: ['scene_1'],
+      catalogVersion: '0123456789abcdef',
+      routes: [
+        {
+          sceneId: 'scene_1',
+          providerId: 'provider_1',
+          adapterId: 'weprompt-media-gateway-v1' as const,
+          model: 'open-sora',
+          kind: 'video' as const,
+        },
+      ],
+    };
+    const jobInput = { projectId: 'project_1', jobId: 'job_1', expectedRevision: 2 };
+    const retryInput = { ...jobInput, acknowledgePossibleDuplicateCharge: true };
+
+    await generationService.submitScenes(submitInput);
+    await generationService.cancelJob(jobInput);
+    await generationService.retryJob(retryInput);
+    await generationService.retryDownload(jobInput);
+
+    expect(submitScenes).toHaveBeenCalledWith(submitInput);
+    expect(cancelJob).toHaveBeenCalledWith(jobInput);
+    expect(retryJob).toHaveBeenCalledWith(retryInput);
+    expect(retryDownload).toHaveBeenCalledWith(jobInput);
+  });
+
+  it('rejects invalid job identities and revisions before invoking the job manager', async () => {
+    const cancelJob = vi.fn();
+    const generationService = createCreativeStudioService({
+      store: createCreativeStudioStore({ rootDir }),
+      onProjectUpdated,
+      jobManager: {
+        submitScenes: vi.fn(),
+        cancelJob,
+        retryJob: vi.fn(),
+        retryDownload: vi.fn(),
+        resumePendingJobs: vi.fn(),
+        dispose: vi.fn(),
+      },
+    } as unknown as Parameters<typeof createCreativeStudioService>[0]);
+
+    await expect(
+      generationService.cancelJob({ projectId: '../project', jobId: 'job_1', expectedRevision: 1 })
+    ).rejects.toMatchObject({ code: 'invalid_payload' });
+    await expect(
+      generationService.cancelJob({ projectId: 'project_1', jobId: 'job_1', expectedRevision: 0 })
+    ).rejects.toMatchObject({ code: 'invalid_payload' });
+    expect(cancelJob).not.toHaveBeenCalled();
   });
 
   it('saves a validation-derived connection without treating it as a successful project route', async () => {
@@ -280,6 +372,7 @@ describe('CreativeStudioService', () => {
         listRoutes: async () => {
           throw new Error('settings backend unavailable');
         },
+        isGenerationRouteAvailable: async () => false,
       },
     });
 
@@ -301,7 +394,11 @@ describe('CreativeStudioService', () => {
     const routed = createCreativeStudioService({
       store: createCreativeStudioStore({ rootDir }),
       onProjectUpdated,
-      providerResolver: { listConnectionCandidates: async () => [], listRoutes },
+      providerResolver: {
+        listConnectionCandidates: async () => [],
+        listRoutes,
+        isGenerationRouteAvailable: async () => false,
+      },
     });
     const project = await routed.createProject(makeInput());
 
@@ -363,6 +460,322 @@ describe('CreativeStudioService', () => {
 
     expect(updated.sceneOrder).toEqual(['scene_1']);
     expect(updated.scenes.scene_1?.visualPrompt).toBe('A cinematic studio product reveal');
+    expect(updated.scenes.scene_1).toMatchObject({
+      id: 'scene_1',
+      selectedAssetId: null,
+      assetIds: [],
+      jobIds: [],
+      reviewState: 'ready',
+    });
+  });
+
+  it('keeps a newly created scene draft when it has no usable visual prompt', async () => {
+    const project = await service.createProject(makeInput());
+
+    const updated = await service.updateScene({
+      projectId: project.id,
+      expectedRevision: project.revision,
+      sceneId: 'scene_1',
+      scene: { ...makeScene('scene_1'), visualPrompt: '   ' },
+    });
+
+    expect(updated.scenes.scene_1.reviewState).toBe('draft');
+  });
+
+  it('preserves main-owned scene history while applying renderer-editable fields', async () => {
+    const project = await service.createProject(makeInput());
+    const withScene = await service.updateScene({
+      projectId: project.id,
+      expectedRevision: project.revision,
+      sceneId: 'scene_1',
+      scene: makeScene('scene_1'),
+    });
+    const canonicalStore = createCreativeStudioStore({ rootDir });
+    const withHistory = await canonicalStore.updateProject(
+      withScene.id,
+      (current) => {
+        const next = structuredClone(current);
+        next.assets.asset_1 = {
+          id: 'asset_1',
+          projectId: next.id,
+          sceneId: 'scene_1',
+          mediaKind: 'video',
+          mimeType: 'video/mp4',
+          managedAsset: { collection: 'assets', fileName: 'asset_1.mp4' },
+          byteSize: 1,
+          sha256: '1'.repeat(64),
+          durationSeconds: 4,
+          createdAt: next.createdAt,
+        };
+        next.jobs.job_1 = {
+          id: 'job_1',
+          projectId: next.id,
+          sceneId: 'scene_1',
+          status: 'succeeded',
+          provider: { providerId: 'provider_1', adapterId: 'weprompt-media-gateway-v1', model: 'model_1' },
+          idempotencyKey: 'key_1',
+          providerJobId: 'remote_1',
+          outputAssetIds: ['asset_1'],
+          error: null,
+          retryOfJobId: null,
+          retryReason: null,
+          duplicateChargeAcknowledged: false,
+          duplicateChargeAcknowledgedAt: null,
+          createdAt: next.createdAt,
+          updatedAt: next.updatedAt,
+        };
+        next.scenes.scene_1.assetIds = ['asset_1'];
+        next.scenes.scene_1.jobIds = ['job_1'];
+        next.scenes.scene_1.selectedAssetId = 'asset_1';
+        next.scenes.scene_1.reviewState = 'complete';
+        return next;
+      },
+      withScene.revision
+    );
+
+    const updated = await service.updateScene({
+      projectId: withHistory.id,
+      expectedRevision: withHistory.revision,
+      sceneId: 'scene_1',
+      scene: { ...makeScene('scene_1'), title: 'Edited title' },
+    });
+
+    expect(updated.scenes.scene_1).toMatchObject({
+      id: 'scene_1',
+      title: 'Edited title',
+      assetIds: ['asset_1'],
+      jobIds: ['job_1'],
+      selectedAssetId: 'asset_1',
+      reviewState: 'complete',
+    });
+  });
+
+  it('blocks media-kind changes while a scene has any nonterminal job', async () => {
+    const project = await service.createProject(makeInput());
+    const withScene = await service.updateScene({
+      projectId: project.id,
+      expectedRevision: project.revision,
+      sceneId: 'scene_1',
+      scene: makeScene('scene_1'),
+    });
+    const canonicalStore = createCreativeStudioStore({ rootDir });
+    const withPendingJob = await canonicalStore.updateProject(
+      withScene.id,
+      (current) => {
+        const next = structuredClone(current);
+        next.jobs.job_1 = {
+          id: 'job_1',
+          projectId: next.id,
+          sceneId: 'scene_1',
+          status: 'needs_attention',
+          provider: { providerId: 'provider_1', adapterId: 'weprompt-media-gateway-v1', model: 'model_1' },
+          idempotencyKey: 'key_1',
+          providerJobId: null,
+          outputAssetIds: [],
+          error: {
+            code: 'submission_unknown',
+            messageKey: 'conversation.creativeStudio.jobs.errors.submissionUnknown',
+          },
+          retryOfJobId: null,
+          retryReason: null,
+          duplicateChargeAcknowledged: false,
+          duplicateChargeAcknowledgedAt: null,
+          createdAt: next.createdAt,
+          updatedAt: next.updatedAt,
+        };
+        next.scenes.scene_1.jobIds = ['job_1'];
+        next.scenes.scene_1.reviewState = 'blocked';
+        return next;
+      },
+      withScene.revision
+    );
+
+    await expect(
+      service.updateScene({
+        projectId: withPendingJob.id,
+        expectedRevision: withPendingJob.revision,
+        sceneId: 'scene_1',
+        scene: { ...makeScene('scene_1'), mediaKind: 'image' },
+      })
+    ).rejects.toMatchObject({ code: 'busy' });
+  });
+
+  it('validates reference ownership and clears only an incompatible selection on an allowed kind change', async () => {
+    const project = await service.createProject(makeInput());
+    const withScene = await service.updateScene({
+      projectId: project.id,
+      expectedRevision: project.revision,
+      sceneId: 'scene_1',
+      scene: makeScene('scene_1'),
+    });
+    const canonicalStore = createCreativeStudioStore({ rootDir });
+    const withAssets = await canonicalStore.updateProject(
+      withScene.id,
+      (current) => {
+        const next = structuredClone(current);
+        next.assets.asset_video = {
+          id: 'asset_video',
+          projectId: next.id,
+          sceneId: 'scene_1',
+          mediaKind: 'video',
+          mimeType: 'video/mp4',
+          managedAsset: { collection: 'assets', fileName: 'asset_video.mp4' },
+          byteSize: 1,
+          sha256: '2'.repeat(64),
+          durationSeconds: 4,
+          createdAt: next.createdAt,
+        };
+        next.assets.asset_reference = {
+          id: 'asset_reference',
+          projectId: next.id,
+          sceneId: 'scene_1',
+          mediaKind: 'image',
+          mimeType: 'image/png',
+          managedAsset: { collection: 'imports', fileName: 'asset_reference.png' },
+          byteSize: 1,
+          sha256: '3'.repeat(64),
+          createdAt: next.createdAt,
+        };
+        next.scenes.scene_1.assetIds = ['asset_video', 'asset_reference'];
+        next.scenes.scene_1.selectedAssetId = 'asset_video';
+        next.scenes.scene_1.reviewState = 'complete';
+        return next;
+      },
+      withScene.revision
+    );
+
+    const changed = await service.updateScene({
+      projectId: withAssets.id,
+      expectedRevision: withAssets.revision,
+      sceneId: 'scene_1',
+      scene: {
+        ...makeScene('scene_1'),
+        mediaKind: 'image',
+        referenceAssetId: 'asset_reference',
+      },
+    });
+    expect(changed.scenes.scene_1).toMatchObject({
+      selectedAssetId: null,
+      referenceAssetId: 'asset_reference',
+      reviewState: 'ready',
+      assetIds: ['asset_video', 'asset_reference'],
+    });
+
+    await expect(
+      service.updateScene({
+        projectId: changed.id,
+        expectedRevision: changed.revision,
+        sceneId: 'scene_1',
+        scene: { ...makeScene('scene_1'), mediaKind: 'image', referenceAssetId: 'missing_asset' },
+      })
+    ).rejects.toMatchObject({ code: 'invalid_payload' });
+  });
+
+  it('omits provider identities and idempotency keys from every service project and job result', async () => {
+    const internalJob: StudioJob = {
+      id: 'job_1',
+      projectId: 'project_1',
+      sceneId: 'scene_1',
+      status: 'queued_remote',
+      provider: { providerId: 'provider_1', adapterId: 'weprompt-media-gateway-v1', model: 'model_1' },
+      idempotencyKey: 'secret_idempotency_key',
+      providerJobId: 'secret_remote_id',
+      outputAssetIds: [],
+      error: null,
+      retryOfJobId: null,
+      retryReason: null,
+      duplicateChargeAcknowledged: false,
+      duplicateChargeAcknowledgedAt: null,
+      createdAt: '2026-07-30T00:00:00.000Z',
+      updatedAt: '2026-07-30T00:00:00.000Z',
+    };
+    const projectStore = createCreativeStudioStore({ rootDir, createId: () => 'project_1' });
+    const created = await projectStore.createProject(makeInput());
+    await projectStore.updateProject(created.id, (current) => {
+      const next = structuredClone(current);
+      next.scenes.scene_1 = {
+        id: 'scene_1',
+        ...makeScene('scene_1'),
+        selectedAssetId: null,
+        assetIds: [],
+        jobIds: ['job_1'],
+        reviewState: 'generating',
+      };
+      next.sceneOrder = ['scene_1'];
+      next.jobs.job_1 = internalJob;
+      return next;
+    });
+    const submitScenes = vi.fn(async () => [internalJob]);
+    const cancelJob = vi.fn(async () => internalJob);
+    const retryJob = vi.fn(async () => internalJob);
+    const retryDownload = vi.fn(async () => internalJob);
+    const rendererService = createCreativeStudioService({
+      store: projectStore,
+      onProjectUpdated,
+      jobManager: {
+        submitScenes,
+        cancelJob,
+        retryJob,
+        retryDownload,
+        resumePendingJobs: vi.fn(),
+        dispose: vi.fn(),
+      },
+    } as unknown as Parameters<typeof createCreativeStudioService>[0]);
+
+    const forgedProject = (await projectStore.getProject('project_1'))!;
+    (forgedProject.scenes.scene_1 as StudioScene & { providerJobId?: string }).providerJobId = 'scene-provider-secret';
+    forgedProject.assets.asset_1 = {
+      id: 'asset_1',
+      projectId: 'project_1',
+      sceneId: 'scene_1',
+      mediaKind: 'image',
+      mimeType: 'image/png',
+      managedAsset: { collection: 'assets', fileName: 'asset_1.png' },
+      byteSize: 1,
+      sha256: '1'.repeat(64),
+      createdAt: forgedProject.createdAt,
+      idempotencyKey: 'asset-provider-secret',
+    } as StudioAsset & { idempotencyKey: string };
+    forgedProject.scenes.scene_1.assetIds = ['asset_1'];
+    vi.spyOn(projectStore, 'getProject').mockResolvedValueOnce(forgedProject);
+
+    const projectResult = await rendererService.getProject('project_1');
+    const updatedProjectResult = await rendererService.updateProject({
+      projectId: 'project_1',
+      expectedRevision: 2,
+      name: 'Renderer-safe project',
+    });
+    const jobResults = [
+      await rendererService.submitScenes({
+        projectId: 'project_1',
+        expectedRevision: 2,
+        sceneIds: ['scene_1'],
+        catalogVersion: '0123456789abcdef',
+        routes: [
+          {
+            sceneId: 'scene_1',
+            providerId: 'provider_1',
+            adapterId: 'weprompt-media-gateway-v1',
+            model: 'model_1',
+            kind: 'video',
+          },
+        ],
+      }),
+      await rendererService.cancelJob({ projectId: 'project_1', jobId: 'job_1', expectedRevision: 2 }),
+      await rendererService.retryJob({ projectId: 'project_1', jobId: 'job_1', expectedRevision: 2 }),
+      await rendererService.retryDownload({ projectId: 'project_1', jobId: 'job_1', expectedRevision: 2 }),
+    ];
+
+    expect(projectResult?.jobs.job_1).not.toHaveProperty('providerJobId');
+    expect(projectResult?.jobs.job_1).not.toHaveProperty('idempotencyKey');
+    expect(projectResult?.scenes.scene_1).not.toHaveProperty('providerJobId');
+    expect(projectResult?.assets.asset_1).not.toHaveProperty('idempotencyKey');
+    expect(updatedProjectResult.jobs.job_1).not.toHaveProperty('providerJobId');
+    expect(updatedProjectResult.jobs.job_1).not.toHaveProperty('idempotencyKey');
+    for (const result of jobResults.flat()) {
+      expect(result).not.toHaveProperty('providerJobId');
+      expect(result).not.toHaveProperty('idempotencyKey');
+    }
   });
 
   it('rejects a reordered list that is not an exact project scene permutation', async () => {
@@ -431,6 +844,46 @@ describe('CreativeStudioService', () => {
         assetId: 'asset_2',
       })
     ).rejects.toMatchObject({ code: 'invalid_payload' } satisfies Partial<CreativeStudioStoreError>);
+  });
+
+  it('rejects selecting a historical asset whose media kind differs from the scene', async () => {
+    const project = await service.createProject(makeInput());
+    const withScene = await service.updateScene({
+      projectId: project.id,
+      expectedRevision: project.revision,
+      sceneId: 'scene_1',
+      scene: makeScene('scene_1'),
+    });
+    const canonicalStore = createCreativeStudioStore({ rootDir });
+    const withImage = await canonicalStore.updateProject(
+      withScene.id,
+      (current) => {
+        const next = structuredClone(current);
+        next.assets.asset_image = {
+          id: 'asset_image',
+          projectId: next.id,
+          sceneId: 'scene_1',
+          mediaKind: 'image',
+          mimeType: 'image/png',
+          managedAsset: { collection: 'assets', fileName: 'asset_image.png' },
+          byteSize: 1,
+          sha256: '4'.repeat(64),
+          createdAt: next.createdAt,
+        };
+        next.scenes.scene_1.assetIds = ['asset_image'];
+        return next;
+      },
+      withScene.revision
+    );
+
+    await expect(
+      service.selectAsset({
+        projectId: withImage.id,
+        expectedRevision: withImage.revision,
+        sceneId: 'scene_1',
+        assetId: 'asset_image',
+      })
+    ).rejects.toMatchObject({ code: 'invalid_payload' });
   });
 
   it('serializes concurrent expected-revision edits instead of applying a stale scene change', async () => {

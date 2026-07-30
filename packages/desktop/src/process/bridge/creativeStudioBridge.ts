@@ -5,53 +5,50 @@
  */
 
 import { ipcBridge } from '@/common';
-import { httpRequest } from '@/common/adapter/httpBridge';
-import { appOperationsModel } from '@/common/adapter/ipcBridge';
-import type { IProvider } from '@/common/config/storage';
 import type { StudioCommandErrorCode, StudioCommandResult } from '@/common/types/project/creativeStudioTypes';
 import {
-  createCreativeStudioService,
   CreativeStudioServiceError,
   type CreativeStudioService,
-  type CreativeStudioServiceDeps,
 } from '@process/services/creative-studio/creativeStudioService';
-import { CreativeStudioStoreError, createCreativeStudioStore } from '@process/services/creative-studio/store';
-import { createStudioProviderResolver } from '@process/services/creative-studio/providerResolver';
-import { createGenerationProviderAdapterRegistry } from '@process/services/creative-studio/adapters';
-import { getCreativeStudioRootDir } from '@process/utils/initStorage';
-import {
-  createStudioMediaStore,
-  CreativeStudioMediaError,
-  getAvailableStudioDiskBytes,
-} from '@process/services/creative-studio/mediaStore';
+import { CreativeStudioStoreError } from '@process/services/creative-studio/store';
+import { CreativeStudioMediaError } from '@process/services/creative-studio/mediaStore';
+import { getCreativeStudioService } from '@process/services/creative-studio/runtime';
+import { StudioJobManagerError } from '@process/services/creative-studio/jobManager';
 import { BrowserWindow, dialog } from 'electron';
 
 const errorMessageKeys: Record<StudioCommandErrorCode, string> = {
-  invalid_payload: 'creativeStudio.errors.invalidPayload',
-  not_found: 'creativeStudio.errors.projectNotFound',
-  storyboard_exists: 'creativeStudio.errors.storyboardExists',
-  stale_project: 'creativeStudio.errors.staleProject',
-  planning_unavailable: 'creativeStudio.errors.planningUnavailable',
-  invalid_route: 'creativeStudio.errors.invalidRoute',
-  cancellation_refused: 'creativeStudio.errors.cancellationRefused',
-  busy: 'creativeStudio.errors.busy',
-  provider_error: 'creativeStudio.errors.provider',
-  storage_error: 'creativeStudio.errors.storage',
+  invalid_payload: 'conversation.creativeStudio.errors.invalidPayload',
+  not_found: 'conversation.creativeStudio.errors.projectNotFound',
+  storyboard_exists: 'conversation.creativeStudio.errors.storyboardExists',
+  stale_project: 'conversation.creativeStudio.errors.staleProject',
+  planning_unavailable: 'conversation.creativeStudio.errors.planningUnavailable',
+  invalid_route: 'conversation.creativeStudio.errors.invalidRoute',
+  cancellation_refused: 'conversation.creativeStudio.errors.cancellationRefused',
+  duplicate_charge_acknowledgement_required:
+    'conversation.creativeStudio.errors.duplicateChargeAcknowledgementRequired',
+  unsupported: 'conversation.creativeStudio.jobs.errors.unsupported',
+  busy: 'conversation.creativeStudio.errors.busy',
+  provider_error: 'conversation.creativeStudio.errors.provider',
+  storage_error: 'conversation.creativeStudio.errors.storage',
 };
 
 const toCommandError = (error: unknown): StudioCommandResult<never> => {
   const code: StudioCommandErrorCode =
     error instanceof CreativeStudioStoreError || error instanceof CreativeStudioServiceError
       ? error.code
-      : error instanceof CreativeStudioMediaError
-        ? error.code === 'not_found'
-          ? 'not_found'
-          : error.code === 'stale_project'
-            ? 'stale_project'
-            : error.code === 'invalid_media'
-              ? 'invalid_payload'
-              : 'storage_error'
-        : 'storage_error';
+      : error instanceof StudioJobManagerError
+        ? error.code === 'invalid_request'
+          ? 'invalid_payload'
+          : error.code
+        : error instanceof CreativeStudioMediaError
+          ? error.code === 'not_found'
+            ? 'not_found'
+            : error.code === 'stale_project'
+              ? 'stale_project'
+              : error.code === 'invalid_media'
+                ? 'invalid_payload'
+                : 'storage_error'
+          : 'storage_error';
   return { ok: false, error: { code, messageKey: errorMessageKeys[code] } };
 };
 
@@ -61,35 +58,6 @@ const command = async <T>(operation: () => Promise<T>): Promise<StudioCommandRes
   } catch (error) {
     return toCommandError(error);
   }
-};
-
-/** Production dependency wiring. Storage is resolved only when the service is first invoked. */
-export const buildCreativeStudioServiceDeps = (): CreativeStudioServiceDeps => {
-  const store = createCreativeStudioStore({ rootDir: getCreativeStudioRootDir() });
-  return {
-    store,
-    providerResolver: createStudioProviderResolver({
-      listProviders: () => httpRequest<IProvider[]>('GET', '/api/providers'),
-      getClientSettings: async () => (await httpRequest<Record<string, unknown>>('GET', '/api/settings/client')) ?? {},
-      getPlanningReadiness: async () => {
-        return appOperationsModel.get.invoke();
-      },
-      listConnections: () => store.listConnections(),
-    }),
-    listProviders: () => httpRequest<IProvider[]>('GET', '/api/providers'),
-    adapterRegistry: createGenerationProviderAdapterRegistry({
-      image: { workspaceDir: getCreativeStudioRootDir() },
-    }),
-    mediaStore: createStudioMediaStore({ store, getAvailableDiskBytes: getAvailableStudioDiskBytes }),
-    onProjectUpdated: (projectId) => ipcBridge.creativeStudio.projectUpdated.emit({ projectId }),
-  };
-};
-
-let service: CreativeStudioService | null = null;
-
-const getCreativeStudioService = (): CreativeStudioService => {
-  service ??= createCreativeStudioService(buildCreativeStudioServiceDeps());
-  return service;
 };
 
 export type CreativeStudioBridgeDependencies = {
@@ -165,6 +133,14 @@ export function initCreativeStudioBridge(dependencies: CreativeStudioBridgeDepen
       return toCommandError(error);
     }
   });
+  ipcBridge.creativeStudio.submitScenes.provider((input) =>
+    command(() => dependencies.getService().submitScenes(input))
+  );
+  ipcBridge.creativeStudio.cancelJob.provider((input) => command(() => dependencies.getService().cancelJob(input)));
+  ipcBridge.creativeStudio.retryJob.provider((input) => command(() => dependencies.getService().retryJob(input)));
+  ipcBridge.creativeStudio.retryDownload.provider((input) =>
+    command(() => dependencies.getService().retryDownload(input))
+  );
   ipcBridge.creativeStudio.listConnectionCandidates.provider(() =>
     command(() => dependencies.getService().listConnectionCandidates())
   );

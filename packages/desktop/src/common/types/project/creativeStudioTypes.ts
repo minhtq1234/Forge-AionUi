@@ -70,6 +70,8 @@ export type StudioJobError = {
   messageKey: string;
 };
 
+export type StudioJobRetryReason = 'provider_failure' | 'submission_unknown';
+
 export type StudioJob = {
   id: string;
   projectId: string;
@@ -80,9 +82,17 @@ export type StudioJob = {
   providerJobId: string | null;
   outputAssetIds: string[];
   error: StudioJobError | null;
+  progress?: number;
+  retryOfJobId: string | null;
+  retryReason: StudioJobRetryReason | null;
+  duplicateChargeAcknowledged: boolean;
+  duplicateChargeAcknowledgedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
+
+/** Renderer-facing job metadata. Provider task identity and charge idempotency stay in main. */
+export type StudioRendererJob = Omit<StudioJob, 'idempotencyKey' | 'providerJobId'>;
 
 export type StudioSceneReviewState = 'draft' | 'ready' | 'generating' | 'complete' | 'blocked';
 
@@ -101,6 +111,19 @@ export type StudioScene = {
   jobIds: string[];
   reviewState: StudioSceneReviewState;
 };
+
+/** Fields a renderer editor may supply; operational scene state remains main-owned. */
+export type StudioEditableScene = Pick<
+  StudioScene,
+  | 'title'
+  | 'purpose'
+  | 'visualPrompt'
+  | 'narration'
+  | 'onScreenText'
+  | 'mediaKind'
+  | 'durationSeconds'
+  | 'referenceAssetId'
+>;
 
 export type StudioRoutingPreferences = {
   image: StudioProviderRef | null;
@@ -124,6 +147,11 @@ export type StudioProject = {
   routing: StudioRoutingPreferences;
   createdAt: string;
   updatedAt: string;
+};
+
+/** Renderer-facing project metadata with every nested job sanitized. */
+export type StudioRendererProject = Omit<StudioProject, 'jobs'> & {
+  jobs: Record<string, StudioRendererJob>;
 };
 
 export type StudioProjectSummary = {
@@ -269,6 +297,8 @@ export type StudioCommandErrorCode =
   | 'planning_unavailable'
   | 'invalid_route'
   | 'cancellation_refused'
+  | 'duplicate_charge_acknowledgement_required'
+  | 'unsupported'
   | 'busy'
   | 'provider_error'
   | 'storage_error';
@@ -308,7 +338,7 @@ export type StudioUpdateProjectRequest = StudioProjectRequest & {
 export type StudioUpdateSceneRequest = StudioProjectRequest & {
   sceneId: string;
   expectedRevision: number;
-  scene: StudioScene | null;
+  scene: StudioEditableScene | null;
 };
 
 export type StudioReorderScenesRequest = StudioProjectRequest & {
@@ -330,11 +360,28 @@ export type StudioSelectAssetRequest = StudioSelectVariationRequest;
 
 export type StudioJobRequest = StudioProjectRequest & {
   jobId: string;
+  expectedRevision: number;
+};
+
+export type StudioRetryJobRequest = StudioJobRequest & {
+  acknowledgePossibleDuplicateCharge?: boolean;
+};
+
+export type StudioRetryDownloadRequest = StudioJobRequest;
+
+export type StudioSceneRouteSnapshot = {
+  sceneId: string;
+  providerId: string;
+  adapterId: StudioProviderAdapterId;
+  model: string;
+  kind: StudioMediaKind;
 };
 
 export type StudioSubmitScenesRequest = StudioProjectRequest & {
   sceneIds: string[];
   expectedRevision: number;
+  routes: StudioSceneRouteSnapshot[];
+  catalogVersion: string;
 };
 
 export type StudioChooseAndImportReferenceRequest = StudioProjectRequest & {
@@ -369,21 +416,22 @@ export type StudioExportOutcome =
 /** The renderer-facing native API. Inputs and outputs contain IDs and metadata only. */
 export type StudioDesktopApi = {
   listProjects(): Promise<StudioCommandResult<StudioProjectSummary[]>>;
-  createProject(input: CreateStudioProjectInput): Promise<StudioCommandResult<StudioProject>>;
-  getProject(input: StudioProjectRequest): Promise<StudioCommandResult<StudioProject | null>>;
-  proposeStoryboard(input: ProposeStudioStoryboardInput): Promise<StudioCommandResult<StudioProject>>;
-  updateProject(input: StudioUpdateProjectRequest): Promise<StudioCommandResult<StudioProject>>;
+  createProject(input: CreateStudioProjectInput): Promise<StudioCommandResult<StudioRendererProject>>;
+  getProject(input: StudioProjectRequest): Promise<StudioCommandResult<StudioRendererProject | null>>;
+  proposeStoryboard(input: ProposeStudioStoryboardInput): Promise<StudioCommandResult<StudioRendererProject>>;
+  updateProject(input: StudioUpdateProjectRequest): Promise<StudioCommandResult<StudioRendererProject>>;
   deleteProject(input: StudioDeleteProjectRequest): Promise<StudioCommandResult<boolean>>;
-  updateScene(input: StudioUpdateSceneRequest): Promise<StudioCommandResult<StudioProject>>;
-  reorderScenes(input: StudioReorderScenesRequest): Promise<StudioCommandResult<StudioProject>>;
-  selectAsset(input: StudioSelectAssetRequest): Promise<StudioCommandResult<StudioProject>>;
+  updateScene(input: StudioUpdateSceneRequest): Promise<StudioCommandResult<StudioRendererProject>>;
+  reorderScenes(input: StudioReorderScenesRequest): Promise<StudioCommandResult<StudioRendererProject>>;
+  selectAsset(input: StudioSelectAssetRequest): Promise<StudioCommandResult<StudioRendererProject>>;
   chooseAndImportReference(
     input: StudioChooseAndImportReferenceRequest
   ): Promise<StudioCommandResult<StudioImportOutcome>>;
-  selectVariation(input: StudioSelectVariationRequest): Promise<StudioCommandResult<StudioProject>>;
-  submitScenes(input: StudioSubmitScenesRequest): Promise<StudioCommandResult<StudioJob[]>>;
-  cancelJob(input: StudioJobRequest): Promise<StudioCommandResult<StudioJob>>;
-  retryJob(input: StudioJobRequest): Promise<StudioCommandResult<StudioJob>>;
+  selectVariation(input: StudioSelectVariationRequest): Promise<StudioCommandResult<StudioRendererProject>>;
+  submitScenes(input: StudioSubmitScenesRequest): Promise<StudioCommandResult<StudioRendererJob[]>>;
+  cancelJob(input: StudioJobRequest): Promise<StudioCommandResult<StudioRendererJob>>;
+  retryJob(input: StudioRetryJobRequest): Promise<StudioCommandResult<StudioRendererJob>>;
+  retryDownload(input: StudioRetryDownloadRequest): Promise<StudioCommandResult<StudioRendererJob>>;
   chooseAndExportAssets(input: StudioChooseAndExportAssetsRequest): Promise<StudioCommandResult<StudioExportOutcome>>;
   listConnectionCandidates(): Promise<StudioCommandResult<StudioConnectionCandidate[]>>;
   listConnections(): Promise<StudioCommandResult<StudioConnectionBinding[]>>;

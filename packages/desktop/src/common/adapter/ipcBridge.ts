@@ -66,9 +66,9 @@ import type {
   StudioChooseAndExportAssetsRequest,
   StudioChooseAndImportReferenceRequest,
   StudioDeleteProjectRequest,
-  StudioProject,
   StudioProjectRequest,
   StudioProjectSummary,
+  StudioRendererProject,
   StudioImportOutcome,
   StudioExportOutcome,
   StudioConnectionBinding,
@@ -79,7 +79,12 @@ import type {
   StudioSaveConnectionRequest,
   StudioValidateConnectionRequest,
   StudioReorderScenesRequest,
+  StudioRendererJob,
+  StudioJobRequest,
+  StudioRetryDownloadRequest,
+  StudioRetryJobRequest,
   StudioSelectAssetRequest,
+  StudioSubmitScenesRequest,
   StudioUpdateProjectRequest,
   StudioUpdateSceneRequest,
 } from '../types/project/creativeStudioTypes';
@@ -1013,28 +1018,28 @@ export const creativeStudio = {
   listProjects: bridge.buildProvider<StudioCommandResult<StudioProjectSummary[]>, void>(
     'creative-studio.list-projects'
   ),
-  createProject: bridge.buildProvider<StudioCommandResult<StudioProject>, CreateStudioProjectInput>(
+  createProject: bridge.buildProvider<StudioCommandResult<StudioRendererProject>, CreateStudioProjectInput>(
     'creative-studio.create-project'
   ),
-  getProject: bridge.buildProvider<StudioCommandResult<StudioProject | null>, StudioProjectRequest>(
+  getProject: bridge.buildProvider<StudioCommandResult<StudioRendererProject | null>, StudioProjectRequest>(
     'creative-studio.get-project'
   ),
-  proposeStoryboard: bridge.buildProvider<StudioCommandResult<StudioProject>, ProposeStudioStoryboardInput>(
+  proposeStoryboard: bridge.buildProvider<StudioCommandResult<StudioRendererProject>, ProposeStudioStoryboardInput>(
     'creative-studio.propose-storyboard'
   ),
-  updateProject: bridge.buildProvider<StudioCommandResult<StudioProject>, StudioUpdateProjectRequest>(
+  updateProject: bridge.buildProvider<StudioCommandResult<StudioRendererProject>, StudioUpdateProjectRequest>(
     'creative-studio.update-project'
   ),
   deleteProject: bridge.buildProvider<StudioCommandResult<boolean>, StudioDeleteProjectRequest>(
     'creative-studio.delete-project'
   ),
-  updateScene: bridge.buildProvider<StudioCommandResult<StudioProject>, StudioUpdateSceneRequest>(
+  updateScene: bridge.buildProvider<StudioCommandResult<StudioRendererProject>, StudioUpdateSceneRequest>(
     'creative-studio.update-scene'
   ),
-  reorderScenes: bridge.buildProvider<StudioCommandResult<StudioProject>, StudioReorderScenesRequest>(
+  reorderScenes: bridge.buildProvider<StudioCommandResult<StudioRendererProject>, StudioReorderScenesRequest>(
     'creative-studio.reorder-scenes'
   ),
-  selectAsset: bridge.buildProvider<StudioCommandResult<StudioProject>, StudioSelectAssetRequest>(
+  selectAsset: bridge.buildProvider<StudioCommandResult<StudioRendererProject>, StudioSelectAssetRequest>(
     'creative-studio.select-asset'
   ),
   chooseAndImportReference: bridge.buildProvider<
@@ -1045,6 +1050,18 @@ export const creativeStudio = {
     StudioCommandResult<StudioExportOutcome>,
     StudioChooseAndExportAssetsRequest
   >('creative-studio.choose-and-export-assets'),
+  submitScenes: bridge.buildProvider<StudioCommandResult<StudioRendererJob[]>, StudioSubmitScenesRequest>(
+    'creative-studio.submit-scenes'
+  ),
+  cancelJob: bridge.buildProvider<StudioCommandResult<StudioRendererJob>, StudioJobRequest>(
+    'creative-studio.cancel-job'
+  ),
+  retryJob: bridge.buildProvider<StudioCommandResult<StudioRendererJob>, StudioRetryJobRequest>(
+    'creative-studio.retry-job'
+  ),
+  retryDownload: bridge.buildProvider<StudioCommandResult<StudioRendererJob>, StudioRetryDownloadRequest>(
+    'creative-studio.retry-download'
+  ),
   listConnectionCandidates: bridge.buildProvider<StudioCommandResult<StudioConnectionCandidate[]>, void>(
     'creative-studio.list-connection-candidates'
   ),

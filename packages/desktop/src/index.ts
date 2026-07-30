@@ -21,17 +21,17 @@ import { initMainAdapterWithWindow } from './common/adapter/main';
 import { DESKTOP_PET_ENABLED } from './common/config/constants';
 import { ipcBridge } from './common';
 import { initializeProcess } from './process';
-import { createCreativeStudioStore } from './process/services/creative-studio/store';
-import { createStudioMediaStore, getAvailableStudioDiskBytes } from './process/services/creative-studio/mediaStore';
+import { registerCreativeStudioScheme } from './process/services/creative-studio/mediaProtocol';
 import {
-  installCreativeStudioProtocol,
-  registerCreativeStudioScheme,
-} from './process/services/creative-studio/mediaProtocol';
+  disposeCreativeStudioRuntime,
+  getCreativeStudioRuntime,
+  resumeCreativeStudioAfterBackendReady,
+} from './process/services/creative-studio/runtime';
 import { startBackendOrExit } from './process/startup/backendStartup';
 import { assertStartupArchitectureCompatible } from './process/startup/architectureCompatibility';
 import { classifyBackendStartupFailure } from './process/startup/backendStartupFailure';
 import { installQuitCleanup } from './process/startup/quitCleanup';
-import { getCreativeStudioRootDir, ProcessConfig } from './process/utils/initStorage';
+import { ProcessConfig } from './process/utils/initStorage';
 import type { BackendStartupFailureInfo } from './common/types/platform/electron';
 import { registerWindowMaximizeListeners } from '@process/bridge';
 import { BackendLifecycleManager } from '@aionui/web-host';
@@ -362,6 +362,9 @@ function ensureAdminUserOnce(backendPort: number): Promise<void> {
 }
 
 function markBackendReady(backendPort: number, source: string): void {
+  if (!isWebUIMode && !isResetPasswordMode) {
+    resumeCreativeStudioAfterBackendReady(getCreativeStudioRuntime());
+  }
   if (backendStartedOk) return;
   console.log(`[AionUi] ${source} ready (port=${backendPort})`);
   exposeBackendPort(backendPort);
@@ -837,13 +840,9 @@ const handleAppReady = async (): Promise<void> => {
 
   try {
     await initializeProcess();
-    const studioStore = createCreativeStudioStore({ rootDir: getCreativeStudioRootDir() });
-    const studioMediaStore = createStudioMediaStore({
-      store: studioStore,
-      getAvailableDiskBytes: getAvailableStudioDiskBytes,
-    });
-    await studioMediaStore.cleanupOrphanParts();
-    installCreativeStudioProtocol(protocol, studioMediaStore);
+    if (!isWebUIMode && !isResetPasswordMode) {
+      await getCreativeStudioRuntime().start();
+    }
     rendererInitialLanguage = ProcessConfig.getSync('language') ?? null;
     mark('initializeProcess');
   } catch (error) {
@@ -1205,6 +1204,7 @@ installQuitCleanup({
     disposeCronResumeListener = null;
   },
   cancelAppOperations: () => appOperationsBroker.cancelAll(),
+  disposeCreativeStudio: disposeCreativeStudioRuntime,
   disposeOfficeArtifacts: disposeOfficeArtifactService,
   // Stop aioncore subprocess — backend shutdown kills all agent children
   // transitively (no separate frontend workerTaskManager remains).

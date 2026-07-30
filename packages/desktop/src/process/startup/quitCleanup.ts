@@ -16,6 +16,7 @@ type QuitCleanupDeps = {
   destroyTray: () => void;
   disposeCronResumeListener: () => void;
   cancelAppOperations: () => void;
+  disposeCreativeStudio: () => Promise<void>;
   disposeOfficeArtifacts: () => Promise<void>;
   stopBackend: () => Promise<void>;
   destroyPetWindow: () => Promise<void> | void;
@@ -57,6 +58,8 @@ async function runQuitCleanup(deps: QuitCleanupDeps): Promise<void> {
   const cleanup = async () => {
     deps.disposeCronResumeListener();
     deps.cancelAppOperations();
+
+    await deps.disposeCreativeStudio().catch((err) => deps.logError('[App] Failed to dispose Creative Studio:', err));
 
     await deps.stopBackend().catch((err) => deps.logError('[App] Failed to stop backend:', err));
 

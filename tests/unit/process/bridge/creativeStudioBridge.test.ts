@@ -23,6 +23,10 @@ const mocks = vi.hoisted(() => ({
   selectAssetProvider: vi.fn(),
   chooseAndImportReferenceProvider: vi.fn(),
   chooseAndExportAssetsProvider: vi.fn(),
+  submitScenesProvider: vi.fn(),
+  cancelJobProvider: vi.fn(),
+  retryJobProvider: vi.fn(),
+  retryDownloadProvider: vi.fn(),
   listConnectionCandidatesProvider: vi.fn(),
   listConnectionsProvider: vi.fn(),
   validateConnectionProvider: vi.fn(),
@@ -46,6 +50,10 @@ vi.mock('@/common', () => ({
       selectAsset: { provider: mocks.selectAssetProvider },
       chooseAndImportReference: { provider: mocks.chooseAndImportReferenceProvider },
       chooseAndExportAssets: { provider: mocks.chooseAndExportAssetsProvider },
+      submitScenes: { provider: mocks.submitScenesProvider },
+      cancelJob: { provider: mocks.cancelJobProvider },
+      retryJob: { provider: mocks.retryJobProvider },
+      retryDownload: { provider: mocks.retryDownloadProvider },
       listConnectionCandidates: { provider: mocks.listConnectionCandidatesProvider },
       listConnections: { provider: mocks.listConnectionsProvider },
       validateConnection: { provider: mocks.validateConnectionProvider },
@@ -57,12 +65,9 @@ vi.mock('@/common', () => ({
   },
 }));
 
-import {
-  buildCreativeStudioServiceDeps,
-  initCreativeStudioBridge,
-  type CreativeStudioBridgeDependencies,
-} from '@process/bridge/creativeStudioBridge';
+import { initCreativeStudioBridge, type CreativeStudioBridgeDependencies } from '@process/bridge/creativeStudioBridge';
 import { CreativeStudioServiceError } from '@process/services/creative-studio/creativeStudioService';
+import { StudioJobManagerError } from '@process/services/creative-studio/jobManager';
 
 const project: StudioProject = {
   schemaVersion: 1,
@@ -102,6 +107,10 @@ describe('initCreativeStudioBridge', () => {
         selectAsset: vi.fn(async () => project),
         importReferenceFromPath: vi.fn(),
         exportAssetsToDirectory: vi.fn(),
+        submitScenes: vi.fn(async () => []),
+        cancelJob: vi.fn(),
+        retryJob: vi.fn(),
+        retryDownload: vi.fn(),
         listConnectionCandidates: vi.fn(async () => []),
         listConnections: vi.fn(async () => []),
         validateConnection: vi.fn(),
@@ -126,6 +135,10 @@ describe('initCreativeStudioBridge', () => {
     expect(mocks.selectAssetProvider).toHaveBeenCalledOnce();
     expect(mocks.chooseAndImportReferenceProvider).toHaveBeenCalledOnce();
     expect(mocks.chooseAndExportAssetsProvider).toHaveBeenCalledOnce();
+    expect(mocks.submitScenesProvider).toHaveBeenCalledOnce();
+    expect(mocks.cancelJobProvider).toHaveBeenCalledOnce();
+    expect(mocks.retryJobProvider).toHaveBeenCalledOnce();
+    expect(mocks.retryDownloadProvider).toHaveBeenCalledOnce();
     expect(mocks.listConnectionCandidatesProvider).toHaveBeenCalledOnce();
     expect(mocks.listConnectionsProvider).toHaveBeenCalledOnce();
     expect(mocks.validateConnectionProvider).toHaveBeenCalledOnce();
@@ -133,6 +146,83 @@ describe('initCreativeStudioBridge', () => {
     expect(mocks.removeConnectionProvider).toHaveBeenCalledOnce();
     expect(mocks.listRoutesProvider).toHaveBeenCalledOnce();
   });
+
+  it('delegates generation mutations with their route, revision, and acknowledgement contracts intact', async () => {
+    const service = dependencies.getService();
+    initCreativeStudioBridge({ getService: () => service });
+    const submit = mocks.submitScenesProvider.mock.calls[0]?.[0] as ProviderHandler;
+    const cancel = mocks.cancelJobProvider.mock.calls[0]?.[0] as ProviderHandler;
+    const retry = mocks.retryJobProvider.mock.calls[0]?.[0] as ProviderHandler;
+    const retryDownload = mocks.retryDownloadProvider.mock.calls[0]?.[0] as ProviderHandler;
+    const submitInput = {
+      projectId: 'project_1',
+      expectedRevision: 1,
+      sceneIds: ['scene_1'],
+      catalogVersion: '0123456789abcdef',
+      routes: [
+        {
+          sceneId: 'scene_1',
+          providerId: 'provider_1',
+          adapterId: 'weprompt-media-gateway-v1',
+          model: 'open-sora',
+          kind: 'video',
+        },
+      ],
+    };
+    const jobInput = { projectId: 'project_1', jobId: 'job_1', expectedRevision: 2 };
+    const retryInput = { ...jobInput, acknowledgePossibleDuplicateCharge: true };
+
+    await submit(submitInput);
+    await cancel(jobInput);
+    await retry(retryInput);
+    await retryDownload(jobInput);
+
+    expect(service.submitScenes).toHaveBeenCalledWith(submitInput);
+    expect(service.cancelJob).toHaveBeenCalledWith(jobInput);
+    expect(service.retryJob).toHaveBeenCalledWith(retryInput);
+    expect(service.retryDownload).toHaveBeenCalledWith(jobInput);
+  });
+
+  it.each([
+    [
+      'cancelJob',
+      mocks.cancelJobProvider,
+      new StudioJobManagerError('cancellation_refused'),
+      'cancellation_refused',
+      'conversation.creativeStudio.errors.cancellationRefused',
+    ],
+    [
+      'retryJob',
+      mocks.retryJobProvider,
+      new StudioJobManagerError('duplicate_charge_acknowledgement_required'),
+      'duplicate_charge_acknowledgement_required',
+      'conversation.creativeStudio.errors.duplicateChargeAcknowledgementRequired',
+    ],
+    [
+      'retryDownload',
+      mocks.retryDownloadProvider,
+      new StudioJobManagerError('unsupported'),
+      'unsupported',
+      'conversation.creativeStudio.jobs.errors.unsupported',
+    ],
+  ] as const)(
+    'redacts %s manager failures into a stable typed command envelope',
+    async (method, provider, failure, code, messageKey) => {
+      const service = {
+        ...dependencies.getService(),
+        [method]: vi.fn(async () => {
+          throw failure;
+        }),
+      };
+      initCreativeStudioBridge({ getService: () => service });
+      const handler = provider.mock.calls[0]?.[0] as ProviderHandler;
+
+      await expect(handler({ projectId: 'project_1', jobId: 'job_1', expectedRevision: 1 })).resolves.toEqual({
+        ok: false,
+        error: { code, messageKey },
+      });
+    }
+  );
 
   it('delegates connection and route commands through the same redacted command envelope', async () => {
     const service = {
@@ -173,7 +263,7 @@ describe('initCreativeStudioBridge', () => {
       validate({ providerId: 'provider_1', adapterId: 'weprompt-media-gateway-v1', model: 'open-sora' })
     ).resolves.toEqual({
       ok: false,
-      error: { code: 'provider_error', messageKey: 'creativeStudio.errors.provider' },
+      error: { code: 'provider_error', messageKey: 'conversation.creativeStudio.errors.provider' },
     });
   });
 
@@ -261,8 +351,12 @@ describe('initCreativeStudioBridge', () => {
   });
 
   it.each([
-    [new CreativeStudioMediaError('invalid_media'), 'invalid_payload', 'creativeStudio.errors.invalidPayload'],
-    [new CreativeStudioMediaError('storage_error'), 'storage_error', 'creativeStudio.errors.storage'],
+    [
+      new CreativeStudioMediaError('invalid_media'),
+      'invalid_payload',
+      'conversation.creativeStudio.errors.invalidPayload',
+    ],
+    [new CreativeStudioMediaError('storage_error'), 'storage_error', 'conversation.creativeStudio.errors.storage'],
   ] as const)('maps media failures without leaking their main-process details', async (failure, code, messageKey) => {
     const service = {
       ...dependencies.getService(),
@@ -306,7 +400,7 @@ describe('initCreativeStudioBridge', () => {
 
     await expect(handler(undefined)).resolves.toEqual({
       ok: false,
-      error: { code: 'storage_error', messageKey: 'creativeStudio.errors.storage' },
+      error: { code: 'storage_error', messageKey: 'conversation.creativeStudio.errors.storage' },
     });
   });
 
@@ -333,7 +427,7 @@ describe('initCreativeStudioBridge', () => {
 
     await expect(handler({ projectId: 'project_1', expectedRevision: 1, name: 'Changed' })).resolves.toEqual({
       ok: false,
-      error: { code: 'stale_project', messageKey: 'creativeStudio.errors.staleProject' },
+      error: { code: 'stale_project', messageKey: 'conversation.creativeStudio.errors.staleProject' },
     });
   });
 
@@ -354,11 +448,11 @@ describe('initCreativeStudioBridge', () => {
   });
 
   it.each([
-    ['planning_unavailable', 'creativeStudio.errors.planningUnavailable'],
-    ['storyboard_exists', 'creativeStudio.errors.storyboardExists'],
-    ['busy', 'creativeStudio.errors.busy'],
-    ['provider_error', 'creativeStudio.errors.provider'],
-    ['stale_project', 'creativeStudio.errors.staleProject'],
+    ['planning_unavailable', 'conversation.creativeStudio.errors.planningUnavailable'],
+    ['storyboard_exists', 'conversation.creativeStudio.errors.storyboardExists'],
+    ['busy', 'conversation.creativeStudio.errors.busy'],
+    ['provider_error', 'conversation.creativeStudio.errors.provider'],
+    ['stale_project', 'conversation.creativeStudio.errors.staleProject'],
   ] as const)('returns a redacted %s planning envelope', async (code, messageKey) => {
     dependencies = {
       getService: () => ({
@@ -431,13 +525,5 @@ describe('initCreativeStudioBridge', () => {
     expect(service.updateScene).toHaveBeenCalledOnce();
     expect(service.reorderScenes).toHaveBeenCalledOnce();
     expect(service.selectAsset).toHaveBeenCalledOnce();
-  });
-
-  it('builds a project-id-only event dependency instead of exposing full project data', () => {
-    const deps = buildCreativeStudioServiceDeps();
-
-    deps.onProjectUpdated('project_1');
-
-    expect(mocks.projectUpdatedEmit).toHaveBeenCalledWith({ projectId: 'project_1' });
   });
 });

@@ -170,21 +170,84 @@ describe('Creative Studio media protocol lifecycle', () => {
     ).resolves.toMatchObject({ status: 416 });
     expect(openVerifiedStream).not.toHaveBeenCalled();
   });
+
+  it('destroys an open response stream when its protocol installation is disposed', async () => {
+    const handle = vi.fn();
+    const stream = new Readable({ read: (): undefined => undefined });
+    const installation = installCreativeStudioProtocol(
+      { handle },
+      {
+        resolveAsset: async () => ({
+          asset: { mimeType: 'video/mp4', byteSize: 10 },
+          openVerifiedStream: async () => stream,
+        }),
+      }
+    );
+    const handler = handle.mock.calls[0]?.[1] as (request: Request) => Promise<Response>;
+
+    await expect(handler(new Request('weprompt-studio://asset/project_1/asset_1'))).resolves.toMatchObject({
+      status: 200,
+    });
+    expect(stream.destroyed).toBe(false);
+
+    await installation.dispose();
+    await installation.dispose();
+
+    expect(stream.destroyed).toBe(true);
+  });
+
+  it('awaits an in-flight handler and prevents it from opening a stream during disposal', async () => {
+    const handle = vi.fn();
+    let releaseAsset: (() => void) | undefined;
+    let markResolverStarted: (() => void) | undefined;
+    const resolverStarted = new Promise<void>((resolve) => {
+      markResolverStarted = resolve;
+    });
+    const openVerifiedStream = vi.fn(async () => Readable.from([]));
+    const installation = installCreativeStudioProtocol(
+      { handle },
+      {
+        resolveAsset: () =>
+          new Promise((resolve) => {
+            markResolverStarted?.();
+            releaseAsset = () =>
+              resolve({
+                asset: { mimeType: 'video/mp4', byteSize: 10 },
+                openVerifiedStream,
+              });
+          }),
+      }
+    );
+    const handler = handle.mock.calls[0]?.[1] as (request: Request) => Promise<Response>;
+    const response = handler(new Request('weprompt-studio://asset/project_1/asset_1'));
+    await resolverStarted;
+
+    let disposalFinished = false;
+    const disposal = installation.dispose().then(() => {
+      disposalFinished = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(disposalFinished).toBe(false);
+
+    releaseAsset?.();
+    await disposal;
+
+    await expect(response).resolves.toMatchObject({ status: 503 });
+    expect(openVerifiedStream).not.toHaveBeenCalled();
+  });
 });
 
 describe('Creative Studio protocol startup ordering', () => {
-  it('registers before app readiness, then cleans storage before installing the protocol', async () => {
+  it('registers before app readiness and starts the runtime only after storage initialization', async () => {
     const source = await fs.readFile(path.resolve(process.cwd(), 'packages/desktop/src/index.ts'), 'utf8');
     const register = source.indexOf('registerCreativeStudioScheme(protocol)');
     const ready = source.indexOf('.whenReady()');
     const initialize = source.indexOf('await initializeProcess()');
-    const cleanup = source.indexOf('await studioMediaStore.cleanupOrphanParts()');
-    const install = source.indexOf('installCreativeStudioProtocol(protocol, studioMediaStore)');
+    const startRuntime = source.indexOf('await getCreativeStudioRuntime().start()');
 
     expect(register).toBeGreaterThanOrEqual(0);
     expect(ready).toBeGreaterThan(register);
     expect(initialize).toBeGreaterThanOrEqual(0);
-    expect(cleanup).toBeGreaterThan(initialize);
-    expect(install).toBeGreaterThan(cleanup);
+    expect(startRuntime).toBeGreaterThan(initialize);
   });
 });
