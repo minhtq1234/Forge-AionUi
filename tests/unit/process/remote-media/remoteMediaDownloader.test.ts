@@ -9,7 +9,10 @@
 import { Readable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import type { RemoteMediaError } from '@process/services/remote-media/remoteMediaDownloader';
-import { downloadRemoteMedia } from '@process/services/remote-media/remoteMediaDownloader';
+import {
+  downloadRemoteMedia,
+  REMOTE_MEDIA_DEFAULT_TIMEOUT_MS,
+} from '@process/services/remote-media/remoteMediaDownloader';
 
 describe('downloadRemoteMedia', () => {
   it('uses the resolved address as a pinned lookup and consumes only a matching peer', async () => {
@@ -71,6 +74,25 @@ describe('downloadRemoteMedia', () => {
       })
     ).rejects.toMatchObject<Partial<RemoteMediaError>>({ code: 'unsafe_remote_address' });
     expect(lookup).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects an HTTPS redirect downgrade to an untrusted public HTTP origin', async () => {
+    const request = vi.fn(async () => ({
+      statusCode: 302,
+      headers: { location: 'http://redirect.example.test/output.png' },
+      remoteAddress: '8.8.8.8',
+      body: Readable.from([]),
+    }));
+
+    await expect(
+      downloadRemoteMedia('https://media.example.test/output.png', {
+        lookup: async () => [{ address: '8.8.8.8', family: 4 }],
+        request,
+        write: async () => undefined,
+        maxBytes: 10,
+      })
+    ).rejects.toMatchObject<Partial<RemoteMediaError>>({ code: 'unsafe_remote_address' });
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a declared or streamed size over the limit without returning remote detail', async () => {
@@ -236,6 +258,88 @@ describe('downloadRemoteMedia', () => {
     triggerTimeout?.();
     await expect(download).rejects.toMatchObject<Partial<RemoteMediaError>>({ code: 'remote_timeout' });
   });
+
+  it('arms the finite default deadline before a hung DNS lookup', async () => {
+    let triggerTimeout: (() => void) | undefined;
+    const setTimer = vi.fn((callback: () => void) => {
+      triggerTimeout = callback;
+      return 'timer';
+    });
+    const download = downloadRemoteMedia('https://media.example.test/output.png', {
+      lookup: async () => await new Promise(() => undefined),
+      request: async () => {
+        throw new Error('request should not run');
+      },
+      write: async () => undefined,
+      maxBytes: 10,
+      setTimer,
+      clearTimer: vi.fn(),
+    });
+
+    await Promise.resolve();
+    expect(setTimer).toHaveBeenCalledWith(expect.any(Function), REMOTE_MEDIA_DEFAULT_TIMEOUT_MS);
+    triggerTimeout?.();
+    await expect(download).rejects.toMatchObject<Partial<RemoteMediaError>>({ code: 'remote_timeout' });
+  });
+
+  it('keeps the finite default deadline active while the response body hangs', async () => {
+    let triggerTimeout: (() => void) | undefined;
+    let markBodyStarted: (() => void) | undefined;
+    const bodyStarted = new Promise<void>((resolve) => {
+      markBodyStarted = resolve;
+    });
+    const body = {
+      async *[Symbol.asyncIterator](): AsyncGenerator<Uint8Array> {
+        markBodyStarted?.();
+        await new Promise(() => undefined);
+      },
+    };
+    const setTimer = vi.fn((callback: () => void) => {
+      triggerTimeout = callback;
+      return 'timer';
+    });
+    const download = downloadRemoteMedia('https://media.example.test/output.png', {
+      lookup: async () => [{ address: '8.8.8.8', family: 4 }],
+      request: async () => ({
+        statusCode: 200,
+        headers: {},
+        remoteAddress: '8.8.8.8',
+        body,
+      }),
+      write: async () => undefined,
+      maxBytes: 10,
+      setTimer,
+      clearTimer: vi.fn(),
+    });
+
+    await bodyStarted;
+    expect(setTimer).toHaveBeenCalledWith(expect.any(Function), REMOTE_MEDIA_DEFAULT_TIMEOUT_MS);
+    triggerTimeout?.();
+    await expect(download).rejects.toMatchObject<Partial<RemoteMediaError>>({ code: 'remote_timeout' });
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    'fails closed for an invalid explicit timeout: %s',
+    async (timeoutMs) => {
+      const lookup = vi.fn(async () => [{ address: '8.8.8.8', family: 4 as const }]);
+      await expect(
+        downloadRemoteMedia('https://media.example.test/output.png', {
+          lookup,
+          request: async () => ({
+            statusCode: 200,
+            headers: {},
+            remoteAddress: '8.8.8.8',
+            body: Readable.from([]),
+          }),
+          write: async () => undefined,
+          maxBytes: 10,
+          timeoutMs,
+          setTimer: vi.fn(),
+        })
+      ).rejects.toMatchObject<Partial<RemoteMediaError>>({ code: 'remote_download_failed' });
+      expect(lookup).not.toHaveBeenCalled();
+    }
+  );
 
   it('keeps one deadline active across a redirect and its DNS re-resolution', async () => {
     let triggerTimeout: (() => void) | undefined;

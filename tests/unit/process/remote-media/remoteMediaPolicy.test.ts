@@ -21,6 +21,14 @@ describe('validateRemoteMediaTarget', () => {
     expect(target.port).toBe(443);
   });
 
+  it('rejects an ordinary public HTTP provider output', async () => {
+    await expect(
+      validateRemoteMediaTarget(new URL('http://media.example.test/output.png'), {
+        lookup: async () => [{ address: '8.8.8.8', family: 4 }],
+      })
+    ).rejects.toMatchObject<Partial<RemoteMediaError>>({ code: 'unsafe_remote_address' });
+  });
+
   it.each(['file:///tmp/output.png', 'https://user:secret@media.example.test/output.png'])(
     'rejects an unsafe remote URL without preserving its sensitive detail: %s',
     async (value) => {
@@ -89,6 +97,15 @@ describe('validateRemoteMediaTarget', () => {
       validateRemoteMediaTarget(new URL('http://gateway.internal:8081/v1/output'), {
         trustedPrivateGatewayOrigin: 'http://gateway.internal:8080',
         lookup: async () => [{ address: '10.0.0.8', family: 4 }],
+      })
+    ).rejects.toMatchObject<Partial<RemoteMediaError>>({ code: 'unsafe_remote_address' });
+  });
+
+  it('does not let a trusted HTTP origin exception apply when that origin resolves publicly', async () => {
+    await expect(
+      validateRemoteMediaTarget(new URL('http://gateway.internal:8080/v1/output'), {
+        trustedPrivateGatewayOrigin: 'http://gateway.internal:8080',
+        lookup: async () => [{ address: '8.8.8.8', family: 4 }],
       })
     ).rejects.toMatchObject<Partial<RemoteMediaError>>({ code: 'unsafe_remote_address' });
   });

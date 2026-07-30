@@ -69,6 +69,9 @@ export type RemoteMediaDownloadDeps = RemoteMediaPolicyDeps & {
   clearTimer?: (timer: unknown) => void;
 };
 
+/** Finite whole-download budget used when a caller does not specify one. */
+export const REMOTE_MEDIA_DEFAULT_TIMEOUT_MS = 120_000;
+
 export type RemoteMediaDownloadResult = {
   byteSize: number;
   /** Lowercase media type without parameters from the final 2xx response. */
@@ -313,9 +316,17 @@ export const validateRemoteMediaTarget = async (
   const trustedGateway = normalizedOrigin(deps.trustedPrivateGatewayOrigin ?? '') === targetOrigin(url);
   const allPublic = addresses.every((answer) => !isBlockedRemoteAddress(answer.address));
   const allPrivate = addresses.every((answer) => isPrivateRemoteAddress(answer.address));
+  const trustedPrivateGateway = trustedGateway && allPrivate;
   // A gateway exception is deliberately narrow: it never relaxes loopback,
   // link-local/metadata, CGNAT, multicast, or mixed public/private DNS.
-  if (!allPublic && !(trustedGateway && allPrivate)) throw new RemoteMediaError('unsafe_remote_address');
+  // Plain HTTP is reserved exclusively for that private gateway; public
+  // provider outputs and every other origin must use HTTPS.
+  if (
+    (url.protocol === 'http:' && !trustedPrivateGateway) ||
+    (url.protocol === 'https:' && !allPublic && !trustedPrivateGateway)
+  ) {
+    throw new RemoteMediaError('unsafe_remote_address');
+  }
   const first = addresses[0];
   if (!first) throw new RemoteMediaError('unsafe_remote_address');
   return {
@@ -408,7 +419,7 @@ const createRemoteMediaDeadline = (deps: RemoteMediaDownloadDeps): RemoteMediaDe
   deps.signal?.addEventListener('abort', externalAbort, { once: true });
   if (deps.signal?.aborted) externalAbort();
 
-  const timeoutMs = deps.timeoutMs;
+  const timeoutMs = deps.timeoutMs ?? REMOTE_MEDIA_DEFAULT_TIMEOUT_MS;
   const setTimer = deps.setTimer ?? ((callback, milliseconds) => setTimeout(callback, milliseconds));
   const clearTimer = deps.clearTimer ?? ((timer) => clearTimeout(timer as ReturnType<typeof setTimeout>));
   const timer =
@@ -456,16 +467,19 @@ export const downloadRemoteMedia = async (
     throw new RemoteMediaError('invalid_remote_url');
   }
   const maxRedirects = deps.maxRedirects ?? 3;
+  const timeoutMs = deps.timeoutMs ?? REMOTE_MEDIA_DEFAULT_TIMEOUT_MS;
   if (
     !Number.isSafeInteger(maxRedirects) ||
     maxRedirects < 0 ||
     !Number.isSafeInteger(deps.maxBytes) ||
-    deps.maxBytes < 0
+    deps.maxBytes < 0 ||
+    !Number.isSafeInteger(timeoutMs) ||
+    timeoutMs <= 0
   ) {
     throw new RemoteMediaError('remote_download_failed');
   }
 
-  const deadline = createRemoteMediaDeadline(deps);
+  const deadline = createRemoteMediaDeadline({ ...deps, timeoutMs });
   const lookupWithDeadline = (hostname: string): Promise<RemoteDnsAddress[]> =>
     deadline.run(() => deps.lookup(hostname));
   try {
