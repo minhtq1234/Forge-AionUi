@@ -166,6 +166,57 @@ const safeIdSchema = z
 const projectKnowledgeProjectIdSchema = z.object({ projectId: safeIdSchema }).strict();
 const projectKnowledgeSourceRefSchema = z.object({ projectId: safeIdSchema, sourceId: safeIdSchema }).strict();
 
+const studioExpectedRevisionSchema = z.number().finite().int().positive();
+const studioProjectInputSchema = z
+  .object({
+    name: z.string().trim().min(1).max(256),
+    brief: z.string().max(16 * 1024),
+    forgeProjectId: safeIdSchema.optional(),
+    aspectRatio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4']),
+    targetDurationSeconds: z.number().finite().int().min(5).max(60),
+    resolution: z.enum(['720p', '1080p']),
+  })
+  .strict();
+const studioProjectRequestSchema = z.object({ projectId: safeIdSchema }).strict();
+const studioSceneSchema = z
+  .object({
+    id: safeIdSchema,
+    title: z.string().trim().min(1).max(256),
+    purpose: z.string().max(256),
+    visualPrompt: z.string().max(8 * 1024),
+    narration: z.string().max(4 * 1024),
+    onScreenText: z.string().max(1024),
+    mediaKind: z.enum(['image', 'video']),
+    durationSeconds: z.number().finite().int().min(1).max(60),
+    referenceAssetId: safeIdSchema.nullable(),
+    selectedAssetId: safeIdSchema.nullable(),
+    assetIds: z
+      .array(safeIdSchema)
+      .max(256)
+      .refine((ids) => new Set(ids).size === ids.length),
+    jobIds: z
+      .array(safeIdSchema)
+      .max(256)
+      .refine((ids) => new Set(ids).size === ids.length),
+    reviewState: z.enum(['draft', 'ready', 'generating', 'complete', 'blocked']),
+  })
+  .strict();
+const studioUpdateProjectSchema = z
+  .object({
+    projectId: safeIdSchema,
+    expectedRevision: studioExpectedRevisionSchema,
+    name: z.string().trim().min(1).max(256).optional(),
+    brief: z
+      .string()
+      .max(16 * 1024)
+      .optional(),
+    aspectRatio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4']).optional(),
+    targetDurationSeconds: z.number().finite().int().min(5).max(60).optional(),
+    resolution: z.enum(['720p', '1080p']).optional(),
+  })
+  .strict()
+  .refine((input) => Object.keys(input).some((key) => key !== 'projectId' && key !== 'expectedRevision'));
+
 export const INVALID_NATIVE_BRIDGE_PAYLOAD_MESSAGE = '[adapter] Native IPC request rejected: invalid operation payload';
 
 export const nativeBridgePayloadSchemas = {
@@ -234,6 +285,40 @@ export const nativeBridgePayloadSchemas = {
   'project-knowledge.retry-source': projectKnowledgeSourceRefSchema,
   'project-knowledge.remove-store': projectKnowledgeProjectIdSchema,
   'project-knowledge.get-session-mcp-server': projectKnowledgeProjectIdSchema,
+  'creative-studio.list-projects': voidPayloadSchema,
+  'creative-studio.create-project': studioProjectInputSchema,
+  'creative-studio.get-project': studioProjectRequestSchema,
+  'creative-studio.update-project': studioUpdateProjectSchema,
+  'creative-studio.delete-project': z
+    .object({ projectId: safeIdSchema, expectedRevision: studioExpectedRevisionSchema })
+    .strict(),
+  'creative-studio.update-scene': z
+    .object({
+      projectId: safeIdSchema,
+      expectedRevision: studioExpectedRevisionSchema,
+      sceneId: safeIdSchema,
+      scene: studioSceneSchema.nullable(),
+    })
+    .strict(),
+  'creative-studio.reorder-scenes': z
+    .object({
+      projectId: safeIdSchema,
+      expectedRevision: studioExpectedRevisionSchema,
+      sceneOrder: z
+        .array(safeIdSchema)
+        .min(1)
+        .max(24)
+        .refine((ids) => new Set(ids).size === ids.length),
+    })
+    .strict(),
+  'creative-studio.select-asset': z
+    .object({
+      projectId: safeIdSchema,
+      expectedRevision: studioExpectedRevisionSchema,
+      sceneId: safeIdSchema,
+      assetId: safeIdSchema,
+    })
+    .strict(),
   'office-artifact.get-state': z.object(officeArtifactRequestShape).strict(),
   'office-artifact.prepare-preview': z.object(officeArtifactRequestShape).strict(),
   'office-artifact.start-preview': z.object({ leaseId: identifierSchema, url: urlSchema.optional() }).strict(),

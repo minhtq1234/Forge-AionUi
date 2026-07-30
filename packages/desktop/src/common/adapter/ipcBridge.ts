@@ -60,6 +60,18 @@ import type {
 } from '../types/platform/acpTypes';
 import type { IProjectKnowledgeListResult } from '../types/project/knowledgeTypes';
 import type {
+  CreateStudioProjectInput,
+  StudioCommandResult,
+  StudioDeleteProjectRequest,
+  StudioProject,
+  StudioProjectRequest,
+  StudioProjectSummary,
+  StudioReorderScenesRequest,
+  StudioSelectAssetRequest,
+  StudioUpdateProjectRequest,
+  StudioUpdateSceneRequest,
+} from '../types/project/creativeStudioTypes';
+import type {
   CreateProviderRequest,
   FetchModelsAnonymousRequest,
   FetchModelsResponse,
@@ -979,6 +991,38 @@ export const projectKnowledge = {
     'project-knowledge.get-session-mcp-server'
   ),
   updated: bridge.buildEmitter<{ projectId: string }>('project-knowledge.updated'),
+};
+
+// ---------------------------------------------------------------------------
+// Creative Studio — native main process owns durable project manifests
+// ---------------------------------------------------------------------------
+
+export const creativeStudio = {
+  listProjects: bridge.buildProvider<StudioCommandResult<StudioProjectSummary[]>, void>(
+    'creative-studio.list-projects'
+  ),
+  createProject: bridge.buildProvider<StudioCommandResult<StudioProject>, CreateStudioProjectInput>(
+    'creative-studio.create-project'
+  ),
+  getProject: bridge.buildProvider<StudioCommandResult<StudioProject | null>, StudioProjectRequest>(
+    'creative-studio.get-project'
+  ),
+  updateProject: bridge.buildProvider<StudioCommandResult<StudioProject>, StudioUpdateProjectRequest>(
+    'creative-studio.update-project'
+  ),
+  deleteProject: bridge.buildProvider<StudioCommandResult<boolean>, StudioDeleteProjectRequest>(
+    'creative-studio.delete-project'
+  ),
+  updateScene: bridge.buildProvider<StudioCommandResult<StudioProject>, StudioUpdateSceneRequest>(
+    'creative-studio.update-scene'
+  ),
+  reorderScenes: bridge.buildProvider<StudioCommandResult<StudioProject>, StudioReorderScenesRequest>(
+    'creative-studio.reorder-scenes'
+  ),
+  selectAsset: bridge.buildProvider<StudioCommandResult<StudioProject>, StudioSelectAssetRequest>(
+    'creative-studio.select-asset'
+  ),
+  projectUpdated: bridge.buildEmitter<{ projectId: string }>('studio.project-updated'),
 };
 
 // ---------------------------------------------------------------------------

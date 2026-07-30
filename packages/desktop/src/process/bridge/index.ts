@@ -13,6 +13,7 @@ import { initNotificationBridge } from './native/notificationBridge';
 import { initWebuiBridge } from './webuiBridge';
 import { initThemeBridge } from './native/themeBridge';
 import { initProjectKnowledgeBridge } from './projectKnowledgeBridge';
+import { initCreativeStudioBridge } from './creativeStudioBridge';
 import { ipcBridge } from '@/common';
 import { runContextCompact } from '@process/services/app-operations';
 
@@ -58,11 +59,13 @@ export function initAllBridges(_deps: BridgeDependencies = {}): void {
   initWebuiBridge();
   initThemeBridge();
   initProjectKnowledgeBridge();
+  initCreativeStudioBridge();
   initAppOperationsBridge();
 }
 
 export {
   initApplicationBridge,
+  initCreativeStudioBridge,
   initDialogBridge,
   initNotificationBridge,
   initProjectKnowledgeBridge,

@@ -134,8 +134,6 @@ export type StudioProjectSummary = {
 };
 
 export type CreateStudioProjectInput = {
-  /** Internal callers may supply a safe ID; the normal desktop flow omits it. */
-  id?: string;
   name: string;
   brief: string;
   forgeProjectId?: string;
@@ -196,6 +194,10 @@ export type StudioProjectRequest = {
   projectId: string;
 };
 
+export type StudioDeleteProjectRequest = StudioProjectRequest & {
+  expectedRevision: number;
+};
+
 export type StudioUpdateProjectRequest = StudioProjectRequest & {
   expectedRevision: number;
   name?: string;
@@ -208,7 +210,7 @@ export type StudioUpdateProjectRequest = StudioProjectRequest & {
 export type StudioUpdateSceneRequest = StudioProjectRequest & {
   sceneId: string;
   expectedRevision: number;
-  scene: StudioScene;
+  scene: StudioScene | null;
 };
 
 export type StudioReorderScenesRequest = StudioProjectRequest & {
@@ -225,6 +227,8 @@ export type StudioSelectVariationRequest = StudioProjectRequest & {
   assetId: string;
   expectedRevision: number;
 };
+
+export type StudioSelectAssetRequest = StudioSelectVariationRequest;
 
 export type StudioJobRequest = StudioProjectRequest & {
   jobId: string;
@@ -250,8 +254,10 @@ export type StudioDesktopApi = {
   createProject(input: CreateStudioProjectInput): Promise<StudioCommandResult<StudioProject>>;
   getProject(input: StudioProjectRequest): Promise<StudioCommandResult<StudioProject | null>>;
   updateProject(input: StudioUpdateProjectRequest): Promise<StudioCommandResult<StudioProject>>;
+  deleteProject(input: StudioDeleteProjectRequest): Promise<StudioCommandResult<boolean>>;
   updateScene(input: StudioUpdateSceneRequest): Promise<StudioCommandResult<StudioProject>>;
   reorderScenes(input: StudioReorderScenesRequest): Promise<StudioCommandResult<StudioProject>>;
+  selectAsset(input: StudioSelectAssetRequest): Promise<StudioCommandResult<StudioProject>>;
   importReference(input: StudioProjectRequest): Promise<StudioCommandResult<StudioAsset | null>>;
   selectVariation(input: StudioSelectVariationRequest): Promise<StudioCommandResult<StudioProject>>;
   submitScenes(input: StudioSubmitScenesRequest): Promise<StudioCommandResult<StudioJob[]>>;

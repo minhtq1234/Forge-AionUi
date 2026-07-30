@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   initDialogBridge: vi.fn(),
   initNotificationBridge: vi.fn(),
   initProjectKnowledgeBridge: vi.fn(),
+  initCreativeStudioBridge: vi.fn(),
   initSystemSettingsBridge: vi.fn(),
   initThemeBridge: vi.fn(),
   initUpdateBridge: vi.fn(),
@@ -39,6 +40,9 @@ vi.mock('@process/bridge/native/dialogBridge', () => ({ initDialogBridge: mocks.
 vi.mock('@process/bridge/native/notificationBridge', () => ({ initNotificationBridge: mocks.initNotificationBridge }));
 vi.mock('@process/bridge/projectKnowledgeBridge', () => ({
   initProjectKnowledgeBridge: mocks.initProjectKnowledgeBridge,
+}));
+vi.mock('@process/bridge/creativeStudioBridge', () => ({
+  initCreativeStudioBridge: mocks.initCreativeStudioBridge,
 }));
 vi.mock('@process/bridge/native/systemSettingsBridge', () => ({
   initSystemSettingsBridge: mocks.initSystemSettingsBridge,

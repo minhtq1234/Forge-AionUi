@@ -308,7 +308,7 @@ describe('creative studio project store', () => {
   it('deletes a project explicitly instead of retaining its summary after removal', async () => {
     const project = await store.createProject(makeInput());
 
-    expect(await store.deleteProject(project.id)).toBe(true);
+    expect(await store.deleteProject(project.id, project.revision)).toBe(true);
     expect(await store.getProject(project.id)).toBeNull();
     expect(await store.listProjects()).toEqual([]);
   });
@@ -319,7 +319,7 @@ describe('creative studio project store', () => {
     writeFileSync(marker, 'must survive');
 
     try {
-      await expect(store.deleteProject(path.join('..', path.basename(outsideDir)))).resolves.toBe(false);
+      await expect(store.deleteProject(path.join('..', path.basename(outsideDir)), 1)).resolves.toBe(false);
       expect(existsSync(marker)).toBe(true);
     } finally {
       await rm(outsideDir, { recursive: true, force: true });
@@ -333,7 +333,7 @@ describe('creative studio project store', () => {
     symlinkSync(outsideDir, path.join(rootDir, 'project_link'));
 
     try {
-      await expect(store.deleteProject('project_link')).rejects.toMatchObject({ code: 'storage_error' });
+      await expect(store.deleteProject('project_link', 1)).rejects.toMatchObject({ code: 'storage_error' });
       expect(existsSync(marker)).toBe(true);
     } finally {
       await rm(outsideDir, { recursive: true, force: true });
