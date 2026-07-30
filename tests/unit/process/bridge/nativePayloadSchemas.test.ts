@@ -125,6 +125,12 @@ const VALID_PAYLOADS = {
     sceneId: 'scene_1',
     assetId: 'asset_1',
   },
+  'creative-studio.choose-and-import-reference': {
+    projectId: 'project_1',
+    sceneId: 'scene_1',
+    expectedRevision: 1,
+  },
+  'creative-studio.choose-and-export-assets': { projectId: 'project_1', includeReferences: true },
   'app-operations.cancel': { operation_id: 'operation-1' },
   'office-artifact.get-state': {
     conversationId: 'conversation-1',
@@ -431,6 +437,22 @@ const INVALID_PAYLOADS = [
     { ...VALID_PAYLOADS['creative-studio.create-project'], targetDurationSeconds: Number.POSITIVE_INFINITY },
   ],
   ['creative-studio.get-project', 'project id traversal', { projectId: '../project_1' }],
+  ['creative-studio.choose-and-import-reference', 'missing expected revision', { projectId: 'project_1' }],
+  [
+    'creative-studio.choose-and-import-reference',
+    'attempted source path',
+    { projectId: 'project_1', expectedRevision: 1, sourcePath: '/tmp/reference.png' },
+  ],
+  [
+    'creative-studio.choose-and-import-reference',
+    'scene traversal',
+    { projectId: 'project_1', sceneId: '../scene_1', expectedRevision: 1 },
+  ],
+  [
+    'creative-studio.choose-and-export-assets',
+    'wrong include references boolean',
+    { projectId: 'project_1', includeReferences: 'yes' },
+  ],
   [
     'creative-studio.propose-storyboard',
     'project id traversal',

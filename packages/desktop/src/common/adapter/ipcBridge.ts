@@ -63,10 +63,14 @@ import type {
   CreateStudioProjectInput,
   ProposeStudioStoryboardInput,
   StudioCommandResult,
+  StudioChooseAndExportAssetsRequest,
+  StudioChooseAndImportReferenceRequest,
   StudioDeleteProjectRequest,
   StudioProject,
   StudioProjectRequest,
   StudioProjectSummary,
+  StudioImportOutcome,
+  StudioExportOutcome,
   StudioReorderScenesRequest,
   StudioSelectAssetRequest,
   StudioUpdateProjectRequest,
@@ -1026,6 +1030,14 @@ export const creativeStudio = {
   selectAsset: bridge.buildProvider<StudioCommandResult<StudioProject>, StudioSelectAssetRequest>(
     'creative-studio.select-asset'
   ),
+  chooseAndImportReference: bridge.buildProvider<
+    StudioCommandResult<StudioImportOutcome>,
+    StudioChooseAndImportReferenceRequest
+  >('creative-studio.choose-and-import-reference'),
+  chooseAndExportAssets: bridge.buildProvider<
+    StudioCommandResult<StudioExportOutcome>,
+    StudioChooseAndExportAssetsRequest
+  >('creative-studio.choose-and-export-assets'),
   projectUpdated: bridge.buildEmitter<{ projectId: string }>('studio.project-updated'),
 };
 

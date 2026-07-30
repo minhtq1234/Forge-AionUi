@@ -73,6 +73,7 @@ const addSucceededJob = (project: StudioProject): StudioProject => {
     mimeType: 'image/png',
     managedAsset: { collection: 'assets', fileName: 'asset_1.png' },
     byteSize: 1,
+    sha256: '0'.repeat(64),
     createdAt: next.createdAt,
   };
   next.jobs.job_1 = {

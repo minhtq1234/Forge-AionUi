@@ -53,6 +53,8 @@ export const NATIVE_BRIDGE_PROVIDER_KEYS = [
   'creative-studio.update-scene',
   'creative-studio.reorder-scenes',
   'creative-studio.select-asset',
+  'creative-studio.choose-and-import-reference',
+  'creative-studio.choose-and-export-assets',
   'office-artifact.get-state',
   'office-artifact.prepare-preview',
   'office-artifact.start-preview',

@@ -85,6 +85,8 @@ export type CreativeStudioStore = {
     expectedRevision?: number
   ): Promise<StudioProject>;
   deleteProject(projectId: string, expectedRevision: number): Promise<boolean>;
+  /** Main-process-only canonical project path; never return this through IPC. */
+  getVerifiedProjectDirectory(projectId: string): Promise<string | null>;
 };
 
 export type CreativeStudioStoreDeps = {
@@ -163,8 +165,7 @@ const validateAsset = (
     value.id === assetId &&
     isSafeId(assetId) &&
     value.projectId === projectId &&
-    isSafeId(value.sceneId) &&
-    sceneIds.has(value.sceneId) &&
+    (value.sceneId === null || (isSafeId(value.sceneId) && sceneIds.has(value.sceneId))) &&
     isString(value.mediaKind) &&
     MEDIA_KINDS.has(value.mediaKind) &&
     isNonEmptyString(value.mimeType) &&
@@ -172,6 +173,11 @@ const validateAsset = (
     ASSET_COLLECTIONS.has(value.managedAsset.collection) &&
     isSafeAssetFileName(value.managedAsset.fileName) &&
     isIntegerInRange(value.byteSize, 0, Number.MAX_SAFE_INTEGER) &&
+    isString(value.sha256) &&
+    /^[a-f0-9]{64}$/i.test(value.sha256) &&
+    (value.width === undefined || isIntegerInRange(value.width, 1, Number.MAX_SAFE_INTEGER)) &&
+    (value.height === undefined || isIntegerInRange(value.height, 1, Number.MAX_SAFE_INTEGER)) &&
+    (value.durationSeconds === undefined || isIntegerInRange(value.durationSeconds, 1, Number.MAX_SAFE_INTEGER)) &&
     isNonEmptyString(value.createdAt)
   );
 };
@@ -560,6 +566,11 @@ export const createCreativeStudioStore = (deps: CreativeStudioStoreDeps): Creati
     async getProject(projectId: string): Promise<StudioProject | null> {
       if (!isSafeId(projectId)) return null;
       return readProject(await canonicalRoot(), projectId);
+    },
+
+    async getVerifiedProjectDirectory(projectId: string): Promise<string | null> {
+      if (!isSafeId(projectId)) return null;
+      return projectDirectory(await canonicalRoot(), projectId, false);
     },
 
     async updateProject(

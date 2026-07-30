@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StudioProject } from '@/common/types/project/creativeStudioTypes';
 import { CreativeStudioStoreError } from '@process/services/creative-studio/store';
+import { CreativeStudioMediaError } from '@process/services/creative-studio/mediaStore';
 
 const mocks = vi.hoisted(() => ({
   listProjectsProvider: vi.fn(),
@@ -20,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   updateSceneProvider: vi.fn(),
   reorderScenesProvider: vi.fn(),
   selectAssetProvider: vi.fn(),
+  chooseAndImportReferenceProvider: vi.fn(),
+  chooseAndExportAssetsProvider: vi.fn(),
   projectUpdatedEmit: vi.fn(),
 }));
 
@@ -35,6 +38,8 @@ vi.mock('@/common', () => ({
       updateScene: { provider: mocks.updateSceneProvider },
       reorderScenes: { provider: mocks.reorderScenesProvider },
       selectAsset: { provider: mocks.selectAssetProvider },
+      chooseAndImportReference: { provider: mocks.chooseAndImportReferenceProvider },
+      chooseAndExportAssets: { provider: mocks.chooseAndExportAssetsProvider },
       projectUpdated: { emit: mocks.projectUpdatedEmit },
     },
   },
@@ -83,6 +88,8 @@ describe('initCreativeStudioBridge', () => {
         updateScene: vi.fn(async () => project),
         reorderScenes: vi.fn(async () => project),
         selectAsset: vi.fn(async () => project),
+        importReferenceFromPath: vi.fn(),
+        exportAssetsToDirectory: vi.fn(),
       }),
     };
   });
@@ -99,6 +106,114 @@ describe('initCreativeStudioBridge', () => {
     expect(mocks.updateSceneProvider).toHaveBeenCalledOnce();
     expect(mocks.reorderScenesProvider).toHaveBeenCalledOnce();
     expect(mocks.selectAssetProvider).toHaveBeenCalledOnce();
+    expect(mocks.chooseAndImportReferenceProvider).toHaveBeenCalledOnce();
+    expect(mocks.chooseAndExportAssetsProvider).toHaveBeenCalledOnce();
+  });
+
+  it('returns explicit cancellation outcomes without handing a path to either service operation', async () => {
+    const service = dependencies.getService();
+    const showOpenDialog = vi.fn(async () => ({ canceled: true, filePaths: ['/private/ignored.png'] }));
+    const showExportDialog = vi.fn(async () => ({ canceled: true, filePaths: ['/private/ignored-export'] }));
+    initCreativeStudioBridge({
+      getService: () => service,
+      getParentWindow: () => undefined,
+      showOpenDialog,
+      showExportDialog,
+    });
+    const importHandler = mocks.chooseAndImportReferenceProvider.mock.calls[0]?.[0] as ProviderHandler;
+    const exportHandler = mocks.chooseAndExportAssetsProvider.mock.calls[0]?.[0] as ProviderHandler;
+
+    await expect(importHandler({ projectId: 'project_1', expectedRevision: 1, sceneId: 'scene_1' })).resolves.toEqual({
+      ok: true,
+      data: { status: 'cancelled' },
+    });
+    await expect(exportHandler({ projectId: 'project_1', includeReferences: true })).resolves.toEqual({
+      ok: true,
+      data: { status: 'cancelled' },
+    });
+    expect(service.importReferenceFromPath).not.toHaveBeenCalled();
+    expect(service.exportAssetsToDirectory).not.toHaveBeenCalled();
+  });
+
+  it('keeps selected paths in main while returning only safe import and export DTOs', async () => {
+    const importPath = '/private/user/reference.png';
+    const exportPath = '/private/user/export-target';
+    const asset = {
+      id: 'asset_1',
+      projectId: 'project_1',
+      sceneId: null,
+      mediaKind: 'image' as const,
+      mimeType: 'image/png',
+      managedAsset: { collection: 'imports' as const, fileName: 'asset_1.png' },
+      byteSize: 33,
+      sha256: 'a'.repeat(64),
+      createdAt: '2026-07-30T00:00:00.000Z',
+    };
+    const service = {
+      ...dependencies.getService(),
+      importReferenceFromPath: vi.fn(async () => asset),
+      exportAssetsToDirectory: vi.fn(async () => ({
+        folderName: 'Film-20260730-120000',
+        exported: [{ assetId: 'asset_1', fileName: 'scene-01.png' }],
+        missingSceneIds: [],
+      })),
+    };
+    initCreativeStudioBridge({
+      getService: () => service,
+      getParentWindow: () => undefined,
+      showOpenDialog: async () => ({ canceled: false, filePaths: [importPath] }),
+      showExportDialog: async () => ({ canceled: false, filePaths: [exportPath] }),
+    });
+    const importHandler = mocks.chooseAndImportReferenceProvider.mock.calls[0]?.[0] as ProviderHandler;
+    const exportHandler = mocks.chooseAndExportAssetsProvider.mock.calls[0]?.[0] as ProviderHandler;
+
+    const imported = await importHandler({ projectId: 'project_1', expectedRevision: 1 });
+    const exported = await exportHandler({ projectId: 'project_1', includeReferences: false });
+
+    expect(service.importReferenceFromPath).toHaveBeenCalledWith({
+      projectId: 'project_1',
+      expectedRevision: 1,
+      sourcePath: importPath,
+    });
+    expect(service.exportAssetsToDirectory).toHaveBeenCalledWith({
+      projectId: 'project_1',
+      includeReferences: false,
+      destinationDirectory: exportPath,
+    });
+    expect(imported).toEqual({ ok: true, data: { status: 'imported', asset } });
+    expect(exported).toEqual({
+      ok: true,
+      data: {
+        status: 'exported',
+        folderName: 'Film-20260730-120000',
+        exported: [{ assetId: 'asset_1', fileName: 'scene-01.png' }],
+        missingSceneIds: [],
+      },
+    });
+    expect(JSON.stringify({ imported, exported })).not.toContain('/private/user');
+  });
+
+  it.each([
+    [new CreativeStudioMediaError('invalid_media'), 'invalid_payload', 'creativeStudio.errors.invalidPayload'],
+    [new CreativeStudioMediaError('storage_error'), 'storage_error', 'creativeStudio.errors.storage'],
+  ] as const)('maps media failures without leaking their main-process details', async (failure, code, messageKey) => {
+    const service = {
+      ...dependencies.getService(),
+      importReferenceFromPath: vi.fn(async () => {
+        throw failure;
+      }),
+    };
+    initCreativeStudioBridge({
+      getService: () => service,
+      getParentWindow: () => undefined,
+      showOpenDialog: async () => ({ canceled: false, filePaths: ['/private/sensitive.png'] }),
+    });
+    const handler = mocks.chooseAndImportReferenceProvider.mock.calls[0]?.[0] as ProviderHandler;
+
+    await expect(handler({ projectId: 'project_1', expectedRevision: 1 })).resolves.toEqual({
+      ok: false,
+      error: { code, messageKey },
+    });
   });
 
   it('returns a typed storage result instead of leaking an unexpected service exception', async () => {
@@ -115,6 +230,8 @@ describe('initCreativeStudioBridge', () => {
         updateScene: vi.fn(),
         reorderScenes: vi.fn(),
         selectAsset: vi.fn(),
+        importReferenceFromPath: vi.fn(),
+        exportAssetsToDirectory: vi.fn(),
       }),
     };
     initCreativeStudioBridge(dependencies);
@@ -140,6 +257,8 @@ describe('initCreativeStudioBridge', () => {
         updateScene: vi.fn(),
         reorderScenes: vi.fn(),
         selectAsset: vi.fn(),
+        importReferenceFromPath: vi.fn(),
+        exportAssetsToDirectory: vi.fn(),
       }),
     };
     initCreativeStudioBridge(dependencies);
@@ -189,6 +308,8 @@ describe('initCreativeStudioBridge', () => {
         updateScene: vi.fn(),
         reorderScenes: vi.fn(),
         selectAsset: vi.fn(),
+        importReferenceFromPath: vi.fn(),
+        exportAssetsToDirectory: vi.fn(),
       }),
     };
     initCreativeStudioBridge(dependencies);

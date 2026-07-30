@@ -13,7 +13,7 @@ import { captureBackendStartupFailure, initSentry, scheduleStartupLogReport, set
 initSentry();
 
 import './process/utils/configureConsoleLog';
-import { app, BrowserWindow, ipcMain, nativeImage, powerMonitor, session, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage, powerMonitor, protocol, session, shell } from 'electron';
 import fixPath from 'fix-path';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -21,11 +21,17 @@ import { initMainAdapterWithWindow } from './common/adapter/main';
 import { DESKTOP_PET_ENABLED } from './common/config/constants';
 import { ipcBridge } from './common';
 import { initializeProcess } from './process';
+import { createCreativeStudioStore } from './process/services/creative-studio/store';
+import { createStudioMediaStore, getAvailableStudioDiskBytes } from './process/services/creative-studio/mediaStore';
+import {
+  installCreativeStudioProtocol,
+  registerCreativeStudioScheme,
+} from './process/services/creative-studio/mediaProtocol';
 import { startBackendOrExit } from './process/startup/backendStartup';
 import { assertStartupArchitectureCompatible } from './process/startup/architectureCompatibility';
 import { classifyBackendStartupFailure } from './process/startup/backendStartupFailure';
 import { installQuitCleanup } from './process/startup/quitCleanup';
-import { ProcessConfig } from './process/utils/initStorage';
+import { getCreativeStudioRootDir, ProcessConfig } from './process/utils/initStorage';
 import type { BackendStartupFailureInfo } from './common/types/platform/electron';
 import { registerWindowMaximizeListeners } from '@process/bridge';
 import { BackendLifecycleManager } from '@aionui/web-host';
@@ -78,6 +84,9 @@ import {
 import { readCloseToTraySetting } from './process/utils/closeToTraySetting';
 // @ts-expect-error - electron-squirrel-startup doesn't have types
 import electronSquirrelStartup from 'electron-squirrel-startup';
+
+// Privileges are accepted only before Electron reaches its ready lifecycle.
+registerCreativeStudioScheme(protocol);
 
 // ============ Single Instance Lock ============
 // Acquire lock early so the second instance quits before doing unnecessary work.
@@ -557,7 +566,8 @@ const CSP_DIRECTIVES = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: weprompt-studio:",
+  "media-src 'self' weprompt-studio:",
   "font-src 'self' data:",
   "connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
   "worker-src 'self' blob:",
@@ -827,6 +837,13 @@ const handleAppReady = async (): Promise<void> => {
 
   try {
     await initializeProcess();
+    const studioStore = createCreativeStudioStore({ rootDir: getCreativeStudioRootDir() });
+    const studioMediaStore = createStudioMediaStore({
+      store: studioStore,
+      getAvailableDiskBytes: getAvailableStudioDiskBytes,
+    });
+    await studioMediaStore.cleanupOrphanParts();
+    installCreativeStudioProtocol(protocol, studioMediaStore);
     rendererInitialLanguage = ProcessConfig.getSync('language') ?? null;
     mark('initializeProcess');
   } catch (error) {

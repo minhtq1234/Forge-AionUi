@@ -326,6 +326,16 @@ export const nativeBridgePayloadSchemas = {
       assetId: safeIdSchema,
     })
     .strict(),
+  'creative-studio.choose-and-import-reference': z
+    .object({
+      projectId: safeIdSchema,
+      sceneId: safeIdSchema.optional(),
+      expectedRevision: studioExpectedRevisionSchema,
+    })
+    .strict(),
+  'creative-studio.choose-and-export-assets': z
+    .object({ projectId: safeIdSchema, includeReferences: z.boolean() })
+    .strict(),
   'office-artifact.get-state': z.object(officeArtifactRequestShape).strict(),
   'office-artifact.prepare-preview': z.object(officeArtifactRequestShape).strict(),
   'office-artifact.start-preview': z.object({ leaseId: identifierSchema, url: urlSchema.optional() }).strict(),

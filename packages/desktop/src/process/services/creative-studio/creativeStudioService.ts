@@ -15,6 +15,8 @@ import type {
   StudioUpdateSceneRequest,
   StudioReorderScenesRequest,
   StudioDeleteProjectRequest,
+  StudioAsset,
+  StudioExportItem,
 } from '@/common/types/project/creativeStudioTypes';
 import type { AppOperationResult } from '@/common/types/appOperations';
 import { runStudioStoryboardDraft } from '@process/services/app-operations';
@@ -41,6 +43,17 @@ export type CreativeStudioService = {
   updateScene(input: StudioUpdateSceneRequest): Promise<StudioProject>;
   reorderScenes(input: StudioReorderScenesRequest): Promise<StudioProject>;
   selectAsset(input: StudioSelectAssetRequest): Promise<StudioProject>;
+  importReferenceFromPath(input: {
+    projectId: string;
+    sceneId?: string;
+    expectedRevision: number;
+    sourcePath: string;
+  }): Promise<StudioAsset>;
+  exportAssetsToDirectory(input: {
+    projectId: string;
+    destinationDirectory: string;
+    includeReferences: boolean;
+  }): Promise<{ folderName: string; exported: StudioExportItem[]; missingSceneIds: string[] }>;
 };
 
 export type CreativeStudioServiceDeps = {
@@ -50,6 +63,19 @@ export type CreativeStudioServiceDeps = {
     input: StudioStoryboardDraftTaskInput
   ) => Promise<AppOperationResult<StudioStoryboardDraftOutput>>;
   createSceneId?: () => string;
+  mediaStore?: {
+    importReferenceFromPath(input: {
+      projectId: string;
+      sceneId?: string;
+      expectedRevision: number;
+      sourcePath: string;
+    }): Promise<StudioAsset>;
+    exportAssetsToDirectory(input: {
+      projectId: string;
+      destinationDirectory: string;
+      includeReferences: boolean;
+    }): Promise<{ folderName: string; exported: StudioExportItem[]; missingSceneIds: string[] }>;
+  };
 };
 
 /** A safe, stable service error that can cross only through the bridge error mapper. */
@@ -345,6 +371,27 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
           input.expectedRevision
         )
       );
+    },
+
+    async importReferenceFromPath(input): Promise<StudioAsset> {
+      assertSafeId(input.projectId, 'project id');
+      assertExpectedRevision(input.expectedRevision);
+      if (input.sceneId !== undefined) assertSafeId(input.sceneId, 'scene id');
+      if (typeof input.sourcePath !== 'string' || input.sourcePath.length === 0)
+        throw invalid('Invalid Studio source path');
+      if (!deps.mediaStore) throw new CreativeStudioStoreError('storage_error', 'Studio media storage is unavailable');
+      const asset = await deps.mediaStore.importReferenceFromPath(input);
+      deps.onProjectUpdated(input.projectId);
+      return asset;
+    },
+
+    async exportAssetsToDirectory(input) {
+      assertSafeId(input.projectId, 'project id');
+      if (typeof input.destinationDirectory !== 'string' || typeof input.includeReferences !== 'boolean') {
+        throw invalid('Invalid Studio export request');
+      }
+      if (!deps.mediaStore) throw new CreativeStudioStoreError('storage_error', 'Studio media storage is unavailable');
+      return deps.mediaStore.exportAssetsToDirectory(input);
     },
   };
 };

@@ -39,11 +39,16 @@ export type StudioManagedAssetRef = {
 export type StudioAsset = {
   id: string;
   projectId: string;
-  sceneId: string;
+  /** Null for project-level reference material that is not attached to a scene. */
+  sceneId: string | null;
   mediaKind: StudioMediaKind;
   mimeType: string;
   managedAsset: StudioManagedAssetRef;
   byteSize: number;
+  sha256: string;
+  width?: number;
+  height?: number;
+  durationSeconds?: number;
   createdAt: string;
 };
 
@@ -244,14 +249,22 @@ export type StudioSubmitScenesRequest = StudioProjectRequest & {
   expectedRevision: number;
 };
 
-export type StudioExportAssetsRequest = StudioProjectRequest & {
+export type StudioChooseAndImportReferenceRequest = StudioProjectRequest & {
+  sceneId?: string;
+  expectedRevision: number;
+};
+
+export type StudioChooseAndExportAssetsRequest = StudioProjectRequest & {
   includeReferences: boolean;
 };
 
-export type StudioExportResult = {
-  exportedAssetIds: string[];
-  missingAssetIds: string[];
-};
+export type StudioImportOutcome = { status: 'imported'; asset: StudioAsset } | { status: 'cancelled' };
+
+export type StudioExportItem = { assetId: string; fileName: string };
+
+export type StudioExportOutcome =
+  | { status: 'exported'; folderName: string; exported: StudioExportItem[]; missingSceneIds: string[] }
+  | { status: 'cancelled' };
 
 /** The renderer-facing native API. Inputs and outputs contain IDs and metadata only. */
 export type StudioDesktopApi = {
@@ -264,10 +277,12 @@ export type StudioDesktopApi = {
   updateScene(input: StudioUpdateSceneRequest): Promise<StudioCommandResult<StudioProject>>;
   reorderScenes(input: StudioReorderScenesRequest): Promise<StudioCommandResult<StudioProject>>;
   selectAsset(input: StudioSelectAssetRequest): Promise<StudioCommandResult<StudioProject>>;
-  importReference(input: StudioProjectRequest): Promise<StudioCommandResult<StudioAsset | null>>;
+  chooseAndImportReference(
+    input: StudioChooseAndImportReferenceRequest
+  ): Promise<StudioCommandResult<StudioImportOutcome>>;
   selectVariation(input: StudioSelectVariationRequest): Promise<StudioCommandResult<StudioProject>>;
   submitScenes(input: StudioSubmitScenesRequest): Promise<StudioCommandResult<StudioJob[]>>;
   cancelJob(input: StudioJobRequest): Promise<StudioCommandResult<StudioJob>>;
   retryJob(input: StudioJobRequest): Promise<StudioCommandResult<StudioJob>>;
-  exportAssets(input: StudioExportAssetsRequest): Promise<StudioCommandResult<StudioExportResult>>;
+  chooseAndExportAssets(input: StudioChooseAndExportAssetsRequest): Promise<StudioCommandResult<StudioExportOutcome>>;
 };

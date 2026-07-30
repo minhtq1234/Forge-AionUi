@@ -216,6 +216,7 @@ describe('CreativeStudioService', () => {
           mimeType: 'image/png',
           managedAsset: { collection: 'assets', fileName: 'asset_2.png' },
           byteSize: 1,
+          sha256: '1'.repeat(64),
           createdAt: next.createdAt,
         };
         next.scenes.scene_2.assetIds = ['asset_2'];
