@@ -459,17 +459,26 @@ describe('creative studio project store', () => {
     const withTerminalJob = await store.updateProject(project.id, (current) => {
       const next = addSucceededJob(current);
       next.jobs.job_1.status = 'failed';
-      next.jobs.job_1.error = { code: 'provider_unavailable', messageKey: 'creativeStudio.errors.providerUnavailable' };
+      next.jobs.job_1.error = {
+        code: 'provider_unavailable',
+        messageKey: 'conversation.creativeStudio.jobs.errors.providerUnavailable',
+      };
       return next;
     });
 
     const corrected = await store.updateProject(withTerminalJob.id, (current) => {
       const next = cloneProject(current);
-      next.jobs.job_1.error = { code: 'timeout', messageKey: 'creativeStudio.errors.timeout' };
+      next.jobs.job_1.error = {
+        code: 'timeout',
+        messageKey: 'conversation.creativeStudio.jobs.errors.timeout',
+      };
       return next;
     });
 
-    expect(corrected.jobs.job_1.error).toEqual({ code: 'timeout', messageKey: 'creativeStudio.errors.timeout' });
+    expect(corrected.jobs.job_1.error).toEqual({
+      code: 'timeout',
+      messageKey: 'conversation.creativeStudio.jobs.errors.timeout',
+    });
   });
 
   it.each([
@@ -621,7 +630,7 @@ describe('creative studio project store', () => {
       next.jobs.job_1.outputAssetIds = [];
       next.jobs.job_1.error = {
         code: 'submission_unknown',
-        messageKey: 'creativeStudio.errors.submissionUnknown',
+        messageKey: 'conversation.creativeStudio.jobs.errors.submissionUnknown',
       };
       return next;
     });

@@ -1,0 +1,86 @@
+.library {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.header,
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  margin: 0;
+  color: var(--color-text-1);
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.subtitle,
+.sceneCount,
+.readiness,
+.emptyTitle {
+  color: var(--color-text-2);
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  font-size: 14px;
+}
+
+.readiness {
+  display: flex;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.alert {
+  color: var(--color-danger-6);
+}
+
+.loading {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.sceneCount {
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.empty {
+  padding: 48px 0;
+}
+
+.emptyTitle {
+  margin: 0;
+  color: var(--color-text-1);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
