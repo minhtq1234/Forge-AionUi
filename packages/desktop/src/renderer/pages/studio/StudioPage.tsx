@@ -4,31 +4,171 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Button, Spin } from '@arco-design/web-react';
-import React, { useCallback, useState } from 'react';
+import { Button, Modal, Spin } from '@arco-design/web-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { ipcBridge } from '@/common';
+import type {
+  StudioRendererProject,
+  StudioRouteCatalogEntry,
+  StudioScene,
+  StudioSceneRouteSnapshot,
+  StudioSelectVariationRequest,
+} from '@/common/types/project/creativeStudioTypes';
+
 import {
+  AssetStrip,
+  GenerationControls,
+  GenerationReviewModal,
+  type GenerationBatchReviewRequest,
+  type GenerationReviewScene,
+  type GenerationSingleReviewRequest,
+  SceneTimeline,
   SceneInspector,
   StagePreview,
   StoryboardDraftModal,
   StoryboardPanel,
+  StudioConnectionModal,
   StudioHeader,
   StudioLibrary,
   StudioNavigationLock,
 } from './components';
-import { useStoryboardEditor, useStudioProject } from './hooks';
+import { useStoryboardEditor, useStudioJobs, useStudioProject } from './hooks';
 import styles from './StudioPage.module.css';
+
+type GenerationReviewState = {
+  mode: 'single' | 'batch';
+  scenes: GenerationReviewScene[];
+  catalogVersion: string | null;
+  availableRoutes: StudioRouteCatalogEntry[];
+  projectId: string;
+  projectRevision: number;
+};
+
+const routeIdentity = (
+  route: Pick<StudioRouteCatalogEntry | StudioSceneRouteSnapshot, 'providerId' | 'adapterId' | 'model' | 'kind'>
+): string => `${route.providerId}\u0000${route.adapterId}\u0000${route.model}\u0000${route.kind}`;
+
+const projectRoutingIdentity = (project: StudioRendererProject): string =>
+  (['image', 'video'] as const)
+    .map((kind) => {
+      const route = project.routing[kind];
+      return route === null
+        ? `${kind}:none`
+        : `${kind}:${route.providerId}\u0000${route.adapterId}\u0000${route.model}`;
+    })
+    .join('\u0001');
+
+const routeIsCompatible = (
+  project: StudioRendererProject,
+  scene: StudioScene,
+  route: StudioSceneRouteSnapshot,
+  availableRoutes: readonly StudioRouteCatalogEntry[]
+): boolean => {
+  const catalogRoute = availableRoutes.find((candidate) => routeIdentity(candidate) === routeIdentity(route));
+  if (
+    catalogRoute === undefined ||
+    catalogRoute.health === 'unavailable' ||
+    route.sceneId !== scene.id ||
+    route.kind !== scene.mediaKind
+  ) {
+    return false;
+  }
+
+  const { constraints } = catalogRoute;
+  return (
+    constraints.silentOutput &&
+    constraints.aspectRatios.includes(project.aspectRatio) &&
+    constraints.resolutions.includes(project.resolution) &&
+    scene.durationSeconds >= constraints.minDurationSeconds &&
+    scene.durationSeconds <= constraints.maxDurationSeconds &&
+    (scene.referenceAssetId === null || constraints.supportsFirstFrame)
+  );
+};
+
+const toReviewScene = (
+  project: StudioRendererProject,
+  scene: StudioScene,
+  route: StudioSceneRouteSnapshot | null,
+  availableRoutes: readonly StudioRouteCatalogEntry[],
+  routeStatus?: 'valid' | 'invalid' | 'missing'
+): GenerationReviewScene => ({
+  id: scene.id,
+  title: scene.title,
+  mediaKind: scene.mediaKind,
+  durationSeconds: scene.durationSeconds,
+  route:
+    route === null
+      ? { status: 'missing', snapshot: null }
+      : {
+          status:
+            routeStatus === 'invalid' || !routeIsCompatible(project, scene, route, availableRoutes)
+              ? 'invalid'
+              : 'valid',
+          snapshot: route,
+        },
+});
+
+const sceneHasActiveGenerationJob = (project: StudioRendererProject, scene: StudioScene): boolean =>
+  scene.jobIds.some((jobId) => {
+    const job = project.jobs[jobId];
+    return (
+      job?.projectId === project.id &&
+      job.sceneId === scene.id &&
+      !['succeeded', 'failed', 'cancelled'].includes(job.status)
+    );
+  });
+
+const sceneCanOpenSingleReview = (project: StudioRendererProject, scene: StudioScene): boolean =>
+  scene.visualPrompt.trim().length > 0 &&
+  scene.reviewState !== 'generating' &&
+  !sceneHasActiveGenerationJob(project, scene);
 
 const StudioProjectShell: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const { project: loadedProject, loading, notFound, errorMessageKey, refetch } = useStudioProject(id);
+  const {
+    project: loadedProject,
+    loading,
+    notFound,
+    errorMessageKey,
+    refetch,
+  } = useStudioProject(id, {
+    subscribeToUpdates: false,
+  });
   const editor = useStoryboardEditor({ project: loadedProject, refetch });
+  const studioJobs = useStudioJobs({
+    project: editor.project ?? loadedProject,
+    refetch,
+    reconcileOnSubscribe: true,
+  });
   const [draftModalVisible, setDraftModalVisible] = useState(false);
-  const project = editor.project ?? loadedProject;
+  const [generationReview, setGenerationReview] = useState<GenerationReviewState | null>(null);
+  const [connectionVisible, setConnectionVisible] = useState(false);
+  const [routeCatalogEpoch, setRouteCatalogEpoch] = useState(0);
+  const [headerBatchLoading, setHeaderBatchLoading] = useState(false);
+  const [headerGenerationIssue, setHeaderGenerationIssue] = useState<string | null>(null);
+  const [generationReviewIssueMessageKey, setGenerationReviewIssueMessageKey] = useState<string | null>(null);
+  const [generationReviewRefreshing, setGenerationReviewRefreshing] = useState(false);
+  const [selectedRoutes, setSelectedRoutes] = useState<Record<string, StudioSceneRouteSnapshot>>({});
+  const [duplicateChargeJobId, setDuplicateChargeJobId] = useState<string | null>(null);
+  const [variationPending, setVariationPending] = useState(false);
+  const [variationIssueMessageKey, setVariationIssueMessageKey] = useState<string | null>(null);
+  const [referenceImportSceneId, setReferenceImportSceneId] = useState<string | null>(null);
+  const [referenceImportIssue, setReferenceImportIssue] = useState<{
+    sceneId: string;
+    messageKey: string;
+  } | null>(null);
+  const headerBatchLoadingRef = useRef(false);
+  const generationReviewRefreshingRef = useRef(false);
+  const variationPendingRef = useRef(false);
+  const referenceImportSceneIdRef = useRef<string | null>(null);
+  const project = studioJobs.project ?? editor.project ?? loadedProject;
+  const canonicalProjectRef = useRef<StudioRendererProject | null>(project);
+  canonicalProjectRef.current = project;
   const draftConflict = editor.conflict?.operation === 'draft_storyboard' ? editor.conflict : null;
   const nonDraftConflict =
     editor.conflict !== null && editor.conflict.operation !== 'draft_storyboard' ? editor.conflict : null;
@@ -55,6 +195,88 @@ const StudioProjectShell: React.FC = () => {
       : draftConflict
         ? draftConflict.messageKey
         : editor.planningErrorMessageKey;
+  const canonicalOrderedScenes = useMemo(
+    () =>
+      project === null
+        ? []
+        : project.sceneOrder.flatMap((sceneId) => {
+            const scene = project.scenes[sceneId];
+            return scene === undefined ? [] : [scene];
+          }),
+    [project]
+  );
+  const readyScenes = useMemo(
+    () =>
+      canonicalOrderedScenes.filter(
+        (scene) => project !== null && sceneCanOpenSingleReview(project, scene) && scene.selectedAssetId === null
+      ),
+    [canonicalOrderedScenes, project]
+  );
+  const selectedScene =
+    project !== null && editor.selectedSceneId !== null ? (project.scenes[editor.selectedSceneId] ?? null) : null;
+  const selectedRoute = selectedScene === null ? null : (selectedRoutes[selectedScene.id] ?? null);
+  const selectedAsset =
+    project !== null && selectedScene?.selectedAssetId ? (project.assets[selectedScene.selectedAssetId] ?? null) : null;
+  const selectedReferenceAsset =
+    project !== null && selectedScene?.referenceAssetId
+      ? (project.assets[selectedScene.referenceAssetId] ?? null)
+      : null;
+  const posterAsset = useMemo(() => {
+    if (
+      project === null ||
+      selectedScene === null ||
+      selectedScene.mediaKind !== 'video' ||
+      selectedScene.selectedAssetId === null
+    ) {
+      return null;
+    }
+    const producingJobs = selectedScene.jobIds
+      .map((jobId) => project.jobs[jobId])
+      .filter(
+        (job) =>
+          job?.status === 'succeeded' &&
+          job.sceneId === selectedScene.id &&
+          job.outputAssetIds[0] === selectedScene.selectedAssetId
+      );
+    if (producingJobs.length !== 1) return null;
+    const producingJob = producingJobs[0]!;
+    const posters = producingJob.outputAssetIds
+      .slice(1)
+      .map((assetId) => project.assets[assetId])
+      .filter(
+        (asset) =>
+          asset?.projectId === project.id &&
+          asset.sceneId === selectedScene.id &&
+          asset.mediaKind === 'image' &&
+          asset.managedAsset.collection === 'thumbnails' &&
+          selectedScene.assetIds.includes(asset.id)
+      );
+    return posters.length === 1 ? posters[0]! : null;
+  }, [project, selectedScene]);
+  const selectedSceneJobs = useMemo(
+    () =>
+      selectedScene === null
+        ? []
+        : studioJobs.jobs.filter((job) => job.sceneId === selectedScene.id && selectedScene.jobIds.includes(job.id)),
+    [selectedScene, studioJobs.jobs]
+  );
+  const canonicalMutationPending =
+    editor.mutationPending || studioJobs.mutationPending || variationPending || headerBatchLoading;
+  const generationBlocked =
+    project === null ||
+    editor.hasUnsavedSceneDrafts ||
+    editor.conflict !== null ||
+    editor.drafting ||
+    canonicalMutationPending ||
+    referenceImportSceneId !== null;
+  const generationActionIssue =
+    studioJobs.issue?.jobId !== undefined && selectedSceneJobs.some((job) => job.id === studioJobs.issue?.jobId)
+      ? {
+          jobId: studioJobs.issue.jobId,
+          code: studioJobs.issue.code,
+          messageKey: studioJobs.issue.messageKey,
+        }
+      : null;
 
   const handleDraftStoryboard = useCallback(
     async (replaceExisting: boolean): Promise<void> => {
@@ -62,6 +284,339 @@ const StudioProjectShell: React.FC = () => {
     },
     [editor]
   );
+
+  const openSingleReview = useCallback(
+    (request: GenerationSingleReviewRequest): void => {
+      if (project === null || generationBlocked || request.catalogVersion === null) return;
+      const scene = project.scenes[request.sceneId];
+      if (scene === undefined || !sceneCanOpenSingleReview(project, scene)) {
+        return;
+      }
+      studioJobs.clearIssue();
+      setHeaderGenerationIssue(null);
+      setGenerationReviewIssueMessageKey(null);
+      setGenerationReview({
+        mode: 'single',
+        scenes: [toReviewScene(project, scene, request.route, request.availableRoutes, request.routeStatus)],
+        catalogVersion: request.catalogVersion,
+        availableRoutes: request.availableRoutes,
+        projectId: project.id,
+        projectRevision: project.revision,
+      });
+    },
+    [generationBlocked, project, studioJobs]
+  );
+
+  const openBatchReview = useCallback(
+    (request: GenerationBatchReviewRequest): void => {
+      if (project === null || generationBlocked || request.catalogVersion === null || readyScenes.length === 0) return;
+      const scenes = readyScenes.map((scene) => {
+        const explicitRoute = selectedRoutes[scene.id] ?? null;
+        const suggestedRoute = request.suggestedRoutes[scene.mediaKind];
+        const route =
+          explicitRoute ??
+          (suggestedRoute === null
+            ? null
+            : {
+                sceneId: scene.id,
+                providerId: suggestedRoute.providerId,
+                adapterId: suggestedRoute.adapterId,
+                model: suggestedRoute.model,
+                kind: suggestedRoute.kind,
+              });
+        return toReviewScene(project, scene, route, request.availableRoutes);
+      });
+      studioJobs.clearIssue();
+      setHeaderGenerationIssue(null);
+      setGenerationReviewIssueMessageKey(null);
+      setGenerationReview({
+        mode: 'batch',
+        scenes,
+        catalogVersion: request.catalogVersion,
+        availableRoutes: request.availableRoutes,
+        projectId: project.id,
+        projectRevision: project.revision,
+      });
+    },
+    [generationBlocked, project, readyScenes, selectedRoutes, studioJobs]
+  );
+
+  const openHeaderBatchReview = useCallback(async (): Promise<void> => {
+    if (
+      project === null ||
+      generationBlocked ||
+      readyScenes.length === 0 ||
+      headerBatchLoading ||
+      headerBatchLoadingRef.current
+    ) {
+      return;
+    }
+    headerBatchLoadingRef.current = true;
+    setHeaderBatchLoading(true);
+    setHeaderGenerationIssue(null);
+    const reviewedProjectId = project.id;
+    const reviewedProjectRevision = project.revision;
+    try {
+      const result = await ipcBridge.creativeStudio.listRoutes.invoke({ projectId: project.id });
+      if (result.ok === false) {
+        setHeaderGenerationIssue(result.error.messageKey);
+        return;
+      }
+      const canonical = canonicalProjectRef.current;
+      if (canonical?.id !== reviewedProjectId || canonical.revision !== reviewedProjectRevision) {
+        setHeaderGenerationIssue('conversation.creativeStudio.errors.staleProject');
+        return;
+      }
+      const suggestedRoute = (kind: 'image' | 'video') => {
+        const route = result.data.suggestions[kind].route;
+        return route === null
+          ? null
+          : {
+              providerId: route.providerId,
+              adapterId: route.adapterId,
+              model: route.model,
+              kind: route.kind,
+            };
+      };
+      openBatchReview({
+        catalogVersion: result.data.catalogVersion,
+        suggestedRoutes: {
+          image: suggestedRoute('image'),
+          video: suggestedRoute('video'),
+        },
+        availableRoutes: result.data.automatic,
+      });
+    } catch {
+      setHeaderGenerationIssue('conversation.creativeStudio.errors.provider');
+    } finally {
+      headerBatchLoadingRef.current = false;
+      setHeaderBatchLoading(false);
+    }
+  }, [generationBlocked, headerBatchLoading, openBatchReview, project, readyScenes.length]);
+
+  const confirmGeneration = useCallback(
+    async ({ sceneIds, routes }: { sceneIds: string[]; routes: StudioSceneRouteSnapshot[] }): Promise<void> => {
+      if (
+        generationReview?.catalogVersion === null ||
+        generationReview === null ||
+        project === null ||
+        generationReviewRefreshingRef.current
+      ) {
+        return;
+      }
+
+      if (generationReview.projectId !== project.id || generationReview.projectRevision !== project.revision) {
+        generationReviewRefreshingRef.current = true;
+        setGenerationReviewRefreshing(true);
+        setGenerationReviewIssueMessageKey('conversation.creativeStudio.errors.staleProject');
+        studioJobs.clearIssue();
+        studioJobs.clearStaleIntent();
+        try {
+          const result = await ipcBridge.creativeStudio.listRoutes.invoke({ projectId: project.id });
+          if (result.ok === false) {
+            setGenerationReviewIssueMessageKey(result.error.messageKey);
+            return;
+          }
+          const canonical = canonicalProjectRef.current;
+          if (canonical?.id !== project.id || canonical.revision !== project.revision) {
+            setGenerationReviewIssueMessageKey('conversation.creativeStudio.errors.staleProject');
+            return;
+          }
+          const routeForScene = (scene: StudioScene): StudioSceneRouteSnapshot | null => {
+            const explicitRoute = selectedRoutes[scene.id];
+            if (explicitRoute !== undefined) return explicitRoute;
+            const suggestion = result.data.suggestions[scene.mediaKind].route;
+            return suggestion === null
+              ? null
+              : {
+                  sceneId: scene.id,
+                  providerId: suggestion.providerId,
+                  adapterId: suggestion.adapterId,
+                  model: suggestion.model,
+                  kind: suggestion.kind,
+                };
+          };
+          const refreshedScenes =
+            generationReview.mode === 'single'
+              ? generationReview.scenes.flatMap(({ id: sceneId }) => {
+                  const scene = project.scenes[sceneId];
+                  return scene === undefined || !sceneCanOpenSingleReview(project, scene)
+                    ? []
+                    : [toReviewScene(project, scene, routeForScene(scene), result.data.automatic)];
+                })
+              : readyScenes.map((scene) => toReviewScene(project, scene, routeForScene(scene), result.data.automatic));
+          setGenerationReview({
+            mode: generationReview.mode,
+            scenes: refreshedScenes,
+            catalogVersion: result.data.catalogVersion,
+            availableRoutes: result.data.automatic,
+            projectId: project.id,
+            projectRevision: project.revision,
+          });
+        } catch {
+          setGenerationReviewIssueMessageKey('conversation.creativeStudio.errors.provider');
+        } finally {
+          generationReviewRefreshingRef.current = false;
+          setGenerationReviewRefreshing(false);
+        }
+        return;
+      }
+
+      const submitted = await studioJobs.submitScenes({
+        sceneIds,
+        routes,
+        catalogVersion: generationReview.catalogVersion,
+        expectedRevision: generationReview.projectRevision,
+      });
+      if (submitted) setGenerationReview(null);
+    },
+    [generationReview, project, readyScenes, selectedRoutes, studioJobs]
+  );
+
+  useEffect(() => {
+    const staleIntent = studioJobs.staleIntent;
+    if (staleIntent?.operation !== 'submit_scenes' || project === null) return;
+    setGenerationReview((current) => {
+      if (current === null) return null;
+      const currentById = new Map(current.scenes.map((scene) => [scene.id, scene]));
+      const routeByScene = new Map(staleIntent.routes.map((route) => [route.sceneId, route]));
+      return {
+        ...current,
+        catalogVersion: staleIntent.catalogVersion,
+        projectId: project.id,
+        projectRevision: project.revision,
+        scenes: staleIntent.sceneIds.flatMap((sceneId) => {
+          const scene = project.scenes[sceneId];
+          const route = routeByScene.get(sceneId) ?? null;
+          const eligible =
+            scene !== undefined &&
+            sceneCanOpenSingleReview(project, scene) &&
+            (current.mode === 'single' || scene.selectedAssetId === null);
+          if (eligible) {
+            return [toReviewScene(project, scene, route, current.availableRoutes)];
+          }
+          const previous = currentById.get(sceneId);
+          return previous === undefined
+            ? []
+            : [
+                {
+                  ...previous,
+                  route:
+                    previous.route.snapshot === null
+                      ? previous.route
+                      : { status: 'invalid' as const, snapshot: previous.route.snapshot },
+                },
+              ];
+        }),
+      };
+    });
+  }, [project, studioJobs.staleIntent]);
+
+  const handleSelectVariation = useCallback(
+    async (request: StudioSelectVariationRequest): Promise<void> => {
+      if (
+        project === null ||
+        canonicalMutationPending ||
+        variationPendingRef.current ||
+        editor.hasUnsavedSceneDrafts ||
+        editor.conflict !== null ||
+        request.projectId !== project.id
+      ) {
+        return;
+      }
+      const scene = project.scenes[request.sceneId];
+      const asset = project.assets[request.assetId];
+      if (
+        scene === undefined ||
+        asset === undefined ||
+        asset.projectId !== project.id ||
+        asset.sceneId !== scene.id ||
+        asset.mediaKind !== scene.mediaKind ||
+        asset.managedAsset.collection !== 'assets' ||
+        !scene.assetIds.includes(asset.id)
+      ) {
+        return;
+      }
+
+      variationPendingRef.current = true;
+      setVariationPending(true);
+      setVariationIssueMessageKey(null);
+      try {
+        const result = await ipcBridge.creativeStudio.selectAsset.invoke({
+          projectId: project.id,
+          sceneId: scene.id,
+          assetId: asset.id,
+          expectedRevision: project.revision,
+        });
+        if (result.ok === false) {
+          if (result.error.code === 'stale_project') await refetch();
+          setVariationIssueMessageKey(result.error.messageKey);
+          return;
+        }
+        await refetch();
+      } catch {
+        setVariationIssueMessageKey('conversation.creativeStudio.errors.storage');
+      } finally {
+        variationPendingRef.current = false;
+        setVariationPending(false);
+      }
+    },
+    [canonicalMutationPending, editor.conflict, editor.hasUnsavedSceneDrafts, project, refetch]
+  );
+
+  const handleImportReference = useCallback(async (): Promise<void> => {
+    const sceneId = editor.selectedScene?.id;
+    if (
+      sceneId === undefined ||
+      editor.conflict !== null ||
+      editor.drafting ||
+      editor.mutationPending ||
+      studioJobs.mutationPending ||
+      variationPending ||
+      referenceImportSceneId !== null ||
+      referenceImportSceneIdRef.current !== null
+    ) {
+      return;
+    }
+
+    referenceImportSceneIdRef.current = sceneId;
+    setReferenceImportSceneId(sceneId);
+    setReferenceImportIssue(null);
+    try {
+      const hadUnsavedSelectedSceneDraft = editor.hasUnsavedSelectedSceneDraft;
+      const saved = await editor.flushSceneDraft();
+      if (hadUnsavedSelectedSceneDraft && !saved) return;
+      const canonical = await refetch();
+      if (canonical === null || !Object.hasOwn(canonical.scenes, sceneId)) {
+        setReferenceImportIssue({
+          sceneId,
+          messageKey: 'conversation.creativeStudio.errors.storage',
+        });
+        return;
+      }
+      const result = await ipcBridge.creativeStudio.chooseAndImportReference.invoke({
+        projectId: canonical.id,
+        sceneId,
+        expectedRevision: canonical.revision,
+      });
+      if (result.ok === false) {
+        if (result.error.code === 'stale_project') await refetch();
+        setReferenceImportIssue({ sceneId, messageKey: result.error.messageKey });
+        return;
+      }
+      if (result.data.status === 'imported') await refetch();
+    } catch {
+      setReferenceImportIssue({
+        sceneId,
+        messageKey: 'conversation.creativeStudio.errors.storage',
+      });
+    } finally {
+      if (referenceImportSceneIdRef.current === sceneId) {
+        referenceImportSceneIdRef.current = null;
+      }
+      setReferenceImportSceneId(null);
+    }
+  }, [editor, refetch, referenceImportSceneId, studioJobs.mutationPending, variationPending]);
 
   if (loading) {
     return (
@@ -92,10 +647,21 @@ const StudioProjectShell: React.FC = () => {
 
   return (
     <section aria-label={t('conversation.creativeStudio.project.title')} className={styles.projectShell}>
-      <StudioNavigationLock locked={editor.hasUnsavedSceneDrafts || editor.conflict !== null || editor.drafting} />
-      {errorMessageKey && (
+      <StudioNavigationLock
+        locked={
+          editor.hasUnsavedSceneDrafts ||
+          editor.conflict !== null ||
+          editor.drafting ||
+          canonicalMutationPending ||
+          referenceImportSceneId !== null ||
+          generationReview !== null ||
+          connectionVisible ||
+          duplicateChargeJobId !== null
+        }
+      />
+      {(errorMessageKey || headerGenerationIssue) && (
         <div role='alert' className={styles.projectAlert}>
-          {t(errorMessageKey)}
+          {t(errorMessageKey ?? headerGenerationIssue!)}
         </div>
       )}
       <StudioHeader
@@ -105,8 +671,11 @@ const StudioProjectShell: React.FC = () => {
         planningErrorMessageKey={draftErrorMessageKey}
         drafting={editor.drafting}
         draftDisabled={nonDraftConflict !== null}
+        generationDisabled={generationBlocked || readyScenes.length === 0}
+        generationPending={headerBatchLoading || studioJobs.mutationPending}
         onBack={() => navigate('/studio')}
         onOpenDraft={() => setDraftModalVisible(true)}
+        onOpenGenerationReview={() => void openHeaderBatchReview()}
       />
       <div className={styles.editorGrid}>
         <StoryboardPanel
@@ -116,7 +685,7 @@ const StudioProjectShell: React.FC = () => {
           durationTotalSeconds={editor.durationTotalSeconds}
           durationMatchesTarget={editor.durationMatchesTarget}
           canAddScene={editor.canAddScene}
-          mutationPending={editor.mutationPending}
+          mutationPending={canonicalMutationPending}
           errorMessageKey={panelConflict?.messageKey ?? panelSceneIssue?.messageKey ?? nonDraftError?.messageKey}
           statusMessageKey={
             panelSceneIssue || nonDraftError || panelConflict
@@ -144,26 +713,101 @@ const StudioProjectShell: React.FC = () => {
               : editor.discardConflict
           }
         />
-        <StagePreview projectId={project.id} selectedScene={editor.selectedScene} />
-        <SceneInspector
-          selectedScene={editor.selectedScene}
-          sceneDraft={editor.sceneDraft}
-          mutationPending={editor.mutationPending}
-          errorMessageKey={inspectorSceneIssue?.messageKey}
-          statusMessageKey={
-            editor.mutationPending
-              ? 'conversation.creativeStudio.inspector.saving'
-              : inspectorSceneIssue
-                ? 'conversation.creativeStudio.inspector.unsavedChanges'
-                : null
-          }
-          conflict={inspectorRecoveryVisible}
-          onUpdateSceneDraft={editor.updateSceneDraft}
-          onFlushSceneDraft={editor.flushSceneDraft}
-          onRetryConflict={inspectorConflict ? editor.retryConflict : editor.flushSceneDraft}
-          onDiscardConflict={inspectorConflict ? editor.discardConflict : editor.discardSceneDraft}
-        />
+        <div className={styles.previewColumn}>
+          <StagePreview
+            projectId={project.id}
+            selectedScene={selectedScene}
+            selectedAsset={selectedAsset}
+            posterAsset={posterAsset}
+          />
+          {variationIssueMessageKey && (
+            <div role='alert' className={styles.projectAlert}>
+              {t(variationIssueMessageKey)}
+            </div>
+          )}
+          <AssetStrip
+            projectId={project.id}
+            scene={selectedScene}
+            assets={project.assets}
+            projectRevision={project.revision}
+            mutationPending={canonicalMutationPending || editor.hasUnsavedSceneDrafts}
+            onSelectAsset={handleSelectVariation}
+          />
+        </div>
+        <div className={styles.inspectorColumn}>
+          <SceneInspector
+            projectId={project.id}
+            selectedScene={editor.selectedScene}
+            referenceAsset={selectedReferenceAsset}
+            sceneDraft={editor.sceneDraft}
+            mutationPending={canonicalMutationPending}
+            errorMessageKey={
+              inspectorSceneIssue?.messageKey ??
+              (referenceImportIssue !== null && referenceImportIssue.sceneId === editor.selectedScene?.id
+                ? referenceImportIssue.messageKey
+                : null)
+            }
+            statusMessageKey={
+              editor.mutationPending
+                ? 'conversation.creativeStudio.inspector.saving'
+                : inspectorSceneIssue
+                  ? 'conversation.creativeStudio.inspector.unsavedChanges'
+                  : null
+            }
+            conflict={inspectorRecoveryVisible}
+            onUpdateSceneDraft={editor.updateSceneDraft}
+            onFlushSceneDraft={editor.flushSceneDraft}
+            onRetryConflict={inspectorConflict ? editor.retryConflict : editor.flushSceneDraft}
+            onDiscardConflict={inspectorConflict ? editor.discardConflict : editor.discardSceneDraft}
+            importingReference={referenceImportSceneId === editor.selectedScene?.id}
+            onImportReference={handleImportReference}
+          />
+          <div className={styles.generationPanel}>
+            <GenerationControls
+              key={`${project.id}-${routeCatalogEpoch}-${projectRoutingIdentity(project)}`}
+              projectId={project.id}
+              scene={
+                selectedScene === null
+                  ? null
+                  : {
+                      id: selectedScene.id,
+                      mediaKind: selectedScene.mediaKind,
+                      hasSelectedAsset: selectedScene.selectedAssetId !== null,
+                    }
+              }
+              aspectRatio={project.aspectRatio}
+              resolution={project.resolution}
+              sceneDurationSeconds={selectedScene?.durationSeconds}
+              hasReference={selectedScene?.referenceAssetId !== null}
+              selectedRoute={selectedRoute}
+              batchSceneCount={readyScenes.length}
+              disabled={generationBlocked}
+              singleDisabled={selectedScene !== null && !sceneCanOpenSingleReview(project, selectedScene)}
+              jobs={selectedSceneJobs}
+              pendingJobIds={studioJobs.mutationPending ? selectedSceneJobs.map((job) => job.id) : []}
+              actionIssue={generationActionIssue}
+              onRouteChange={(route) =>
+                setSelectedRoutes((current) => ({
+                  ...current,
+                  [route.sceneId]: route,
+                }))
+              }
+              onOpenSingleReview={openSingleReview}
+              onOpenBatchReview={openBatchReview}
+              onOpenConnection={() => setConnectionVisible(true)}
+              onCancelJob={studioJobs.cancelJob}
+              onRetryJob={studioJobs.retryJob}
+              onRetryDownload={studioJobs.retryDownload}
+              onReviewUnknownSubmission={setDuplicateChargeJobId}
+            />
+          </div>
+        </div>
       </div>
+      <SceneTimeline
+        orderedScenes={canonicalOrderedScenes}
+        selectedSceneId={editor.selectedSceneId}
+        onSelectScene={editor.selectScene}
+      />
       <StoryboardDraftModal
         visible={draftModalVisible}
         project={project}
@@ -179,6 +823,81 @@ const StudioProjectShell: React.FC = () => {
         onOpenSettings={() => setTimeout(() => navigate('/settings/model'), 0)}
         onRefreshPlanning={editor.refreshPlanning}
       />
+      <GenerationReviewModal
+        visible={generationReview !== null}
+        mode={generationReview?.mode ?? 'single'}
+        scenes={generationReview?.scenes ?? []}
+        aspectRatio={project.aspectRatio}
+        resolution={project.resolution}
+        targetDurationSeconds={project.targetDurationSeconds}
+        submitting={studioJobs.mutationPending || generationReviewRefreshing}
+        submissionBlocked={studioJobs.issue?.operation === 'submit_scenes' && studioJobs.issue.code === 'invalid_route'}
+        errorMessageKey={
+          studioJobs.issue?.operation === 'submit_scenes'
+            ? studioJobs.issue.messageKey
+            : generationReviewIssueMessageKey
+        }
+        onCancel={() => {
+          if (!studioJobs.mutationPending && !generationReviewRefreshing) {
+            studioJobs.clearIssue();
+            studioJobs.clearStaleIntent();
+            setGenerationReviewIssueMessageKey(null);
+            setGenerationReview(null);
+          }
+        }}
+        onConfirm={confirmGeneration}
+      />
+      <StudioConnectionModal
+        visible={connectionVisible}
+        refreshToken={routeCatalogEpoch}
+        onCancel={() => setConnectionVisible(false)}
+        onOpenSettings={(path) => {
+          setConnectionVisible(false);
+          setTimeout(() => navigate(path), 0);
+        }}
+        onSaved={() => {
+          setConnectionVisible(false);
+          setRouteCatalogEpoch((epoch) => epoch + 1);
+        }}
+        onRemoved={() => setRouteCatalogEpoch((epoch) => epoch + 1)}
+      />
+      <Modal
+        visible={duplicateChargeJobId !== null}
+        title={t('conversation.creativeStudio.jobs.retryChargeTitle')}
+        closable={!studioJobs.mutationPending}
+        maskClosable={!studioJobs.mutationPending}
+        escToExit={!studioJobs.mutationPending}
+        onCancel={() => {
+          if (!studioJobs.mutationPending) setDuplicateChargeJobId(null);
+        }}
+        footer={
+          <div className='flex flex-wrap justify-end gap-8px'>
+            <Button disabled={studioJobs.mutationPending} onClick={() => setDuplicateChargeJobId(null)}>
+              {t('conversation.creativeStudio.review.cancel')}
+            </Button>
+            <Button
+              type='primary'
+              loading={studioJobs.mutationPending}
+              onClick={() => {
+                const jobId = duplicateChargeJobId;
+                if (jobId === null || studioJobs.mutationPending) return;
+                void studioJobs.retryJob(jobId, true).then((retried) => {
+                  if (retried) setDuplicateChargeJobId(null);
+                });
+              }}
+            >
+              {t('conversation.creativeStudio.jobs.retryChargeConfirm')}
+            </Button>
+          </div>
+        }
+      >
+        <p>{t('conversation.creativeStudio.jobs.retryChargeBody')}</p>
+        {studioJobs.issue?.jobId === duplicateChargeJobId && (
+          <div role='alert' className={styles.projectAlert}>
+            {t(studioJobs.issue.messageKey)}
+          </div>
+        )}
+      </Modal>
     </section>
   );
 };

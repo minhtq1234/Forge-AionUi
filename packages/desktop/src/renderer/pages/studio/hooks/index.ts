@@ -9,4 +9,12 @@ export {
   type UseStoryboardEditorOptions,
   type UseStoryboardEditorResult,
 } from './useStoryboardEditor';
-export { useStudioProject, type UseStudioProjectResult } from './useStudioProject';
+export {
+  useStudioJobs,
+  type StudioJobIssue,
+  type StudioStaleIntent,
+  type StudioSubmitIntent,
+  type UseStudioJobsOptions,
+  type UseStudioJobsResult,
+} from './useStudioJobs';
+export { useStudioProject, type UseStudioProjectOptions, type UseStudioProjectResult } from './useStudioProject';

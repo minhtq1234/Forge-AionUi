@@ -144,6 +144,8 @@ type HarnessOptions = {
   sleep?: (delayMs: number, signal: AbortSignal) => Promise<void>;
   jitterMs?: (baseMs: number, attempt: number) => number;
   catalog?: () => Promise<StudioRouteCatalog>;
+  decorateMediaStore?: (mediaStore: StudioMediaStore) => StudioMediaStore;
+  onProjectUpdated?: (projectId: string) => void;
 };
 
 const sequence = (values: string[]): (() => string) => {
@@ -170,9 +172,10 @@ const createHarness = async (adapter: GenerationProviderAdapter, options: Harnes
     scenes: Object.fromEntries(scenes.map((candidate) => [candidate.id, candidate])),
   }));
   const mediaStore = createStudioMediaStore({ store });
+  const managerMediaStore = options.decorateMediaStore?.(mediaStore) ?? mediaStore;
   const manager = createStudioJobManager({
     store,
-    mediaStore,
+    mediaStore: managerMediaStore,
     providerResolver: {
       listConnectionCandidates: async () => [],
       listRoutes: options.catalog ?? (async () => catalog(routes)),
@@ -191,6 +194,7 @@ const createHarness = async (adapter: GenerationProviderAdapter, options: Harnes
     createIdempotencyKey: sequence(options.idempotencyKeys ?? ['key_1']),
     sleep: options.sleep,
     jitterMs: options.jitterMs ?? ((baseMs) => baseMs),
+    ...(options.onProjectUpdated === undefined ? {} : { onProjectUpdated: options.onProjectUpdated }),
   });
   const harness = { rootDir, store, mediaStore, project, manager };
   harnesses.push(harness);
@@ -246,6 +250,50 @@ describe('StudioJobManager durable submission', () => {
         status: 'needs_attention',
         error: { code: 'submission_unknown' },
       })
+    );
+  });
+
+  it('rejects another paid submission while the scene already has active generation work', async () => {
+    const submission = deferred<ProviderSubmitResult>();
+    const submit = vi.fn(async () => submission.promise);
+    const adapter: GenerationProviderAdapter = {
+      id: 'weprompt-image-v1',
+      validateConnection: async () => ({ ok: true }),
+      validateRequest: (request) => ({
+        ok: true,
+        normalized: {
+          aspectRatio: request.aspectRatio,
+          resolution: request.resolution,
+          durationSeconds: request.durationSeconds,
+        },
+      }),
+      submit,
+    };
+    const harness = await createHarness(adapter);
+    await harness.manager.submitScenes({
+      projectId: harness.project.id,
+      expectedRevision: harness.project.revision,
+      sceneIds: ['scene_1'],
+      routes: [route],
+      catalogVersion: 'catalog_1',
+    });
+    await waitFor(() => expect(submit).toHaveBeenCalledOnce());
+    const active = (await harness.store.getProject(harness.project.id))!;
+
+    await expect(
+      harness.manager.submitScenes({
+        projectId: active.id,
+        expectedRevision: active.revision,
+        sceneIds: ['scene_1'],
+        routes: [route],
+        catalogVersion: 'catalog_1',
+      })
+    ).rejects.toMatchObject({ code: 'busy' });
+    expect(submit).toHaveBeenCalledOnce();
+
+    submission.reject(new Error('transport interrupted'));
+    await waitFor(async () =>
+      expect((await harness.store.getProject(harness.project.id))?.jobs.job_1.status).toBe('needs_attention')
     );
   });
 
@@ -852,7 +900,7 @@ describe('StudioJobManager scheduling', () => {
     for (const gate of gates) gate.reject(Object.assign(new Error('provider failed'), { code: 'no_output' }));
   });
 
-  it('commits two concurrent completions for the same scene without stale-revision loss', async () => {
+  it('commits concurrent completions for separate scenes without stale-revision loss', async () => {
     const gates: Array<Deferred<ProviderSubmitResult>> = [];
     let call = 0;
     let outputPaths: string[] = [];
@@ -884,7 +932,11 @@ describe('StudioJobManager scheduling', () => {
         }));
       },
     };
+    const secondScene = scene({ id: 'scene_2', title: 'Closing' });
+    const secondRoute = { ...route, sceneId: secondScene.id };
     const harness = await createHarness(adapter, {
+      scenes: [scene(), secondScene],
+      routes: [route, secondRoute],
       jobIds: ['job_1', 'job_2'],
       idempotencyKeys: ['key_1', 'key_2'],
     });
@@ -894,17 +946,8 @@ describe('StudioJobManager scheduling', () => {
     await harness.manager.submitScenes({
       projectId: harness.project.id,
       expectedRevision: harness.project.revision,
-      sceneIds: ['scene_1'],
-      routes: [route],
-      catalogVersion: 'catalog_1',
-    });
-    await waitFor(() => expect(gates).toHaveLength(1));
-    const afterFirst = (await harness.store.getProject(harness.project.id))!;
-    await harness.manager.submitScenes({
-      projectId: harness.project.id,
-      expectedRevision: afterFirst.revision,
-      sceneIds: ['scene_1'],
-      routes: [route],
+      sceneIds: ['scene_1', secondScene.id],
+      routes: [route, secondRoute],
       catalogVersion: 'catalog_1',
     });
     await waitFor(() => expect(gates).toHaveLength(2));
@@ -1429,10 +1472,19 @@ describe('StudioJobManager retries', () => {
     await waitFor(async () =>
       expect((await harness.store.getProject(harness.project.id))?.jobs.job_2.status).toBe('failed')
     );
-    expect((await harness.store.getProject(harness.project.id))?.jobs.job_1).toMatchObject({
+    const retriedProject = (await harness.store.getProject(harness.project.id))!;
+    expect(retriedProject.jobs.job_1).toMatchObject({
       status: 'failed',
       error: { code: 'no_output' },
     });
+    await expect(
+      harness.manager.retryJob({
+        projectId: retriedProject.id,
+        jobId: 'job_1',
+        expectedRevision: retriedProject.revision,
+      })
+    ).rejects.toMatchObject({ code: 'busy' });
+    expect(submit).toHaveBeenCalledTimes(2);
   });
 
   it('requires and audits duplicate-charge acknowledgement before retrying an unknown submission', async () => {
@@ -1470,6 +1522,17 @@ describe('StudioJobManager retries', () => {
       expect((await harness.store.getProject(harness.project.id))?.jobs.job_1.status).toBe('needs_attention')
     );
     const unknown = (await harness.store.getProject(harness.project.id))!;
+    expect(submissions).toBe(1);
+
+    await expect(
+      harness.manager.submitScenes({
+        projectId: unknown.id,
+        expectedRevision: unknown.revision,
+        sceneIds: ['scene_1'],
+        routes: [route],
+        catalogVersion: 'catalog_1',
+      })
+    ).rejects.toMatchObject({ code: 'duplicate_charge_acknowledgement_required' });
     expect(submissions).toBe(1);
 
     await expect(
@@ -2126,6 +2189,298 @@ describe('StudioJobManager disposal fencing', () => {
     await expect(cancellation).rejects.toMatchObject({ code: 'invalid_request' });
     await expect(disposal).resolves.toBeUndefined();
     expect(cancel).not.toHaveBeenCalled();
+  });
+});
+
+describe('StudioJobManager video poster outputs', () => {
+  const videoProvider: IProvider = {
+    ...provider,
+    name: 'Video provider',
+    models: ['video-model'],
+  };
+  const videoRoute: StudioSceneRouteSnapshot = {
+    sceneId: 'scene_1',
+    providerId: videoProvider.id,
+    adapterId: 'weprompt-media-gateway-v1',
+    model: 'video-model',
+    kind: 'video',
+  };
+  const videoScene = (): StudioScene => scene({ mediaKind: 'video', durationSeconds: 5 });
+
+  it('persists a single provider poster beside the selected primary video', async () => {
+    let primaryPath = '';
+    let posterPath = '';
+    const adapter: GenerationProviderAdapter = {
+      id: 'weprompt-media-gateway-v1',
+      validateConnection: async () => ({ ok: true }),
+      validateRequest: (request) => ({
+        ok: true,
+        normalized: {
+          aspectRatio: request.aspectRatio,
+          resolution: request.resolution,
+          durationSeconds: request.durationSeconds,
+        },
+      }),
+      submit: async () => ({
+        kind: 'complete',
+        outputs: [
+          {
+            mediaKind: 'video',
+            role: 'primary',
+            source: { kind: 'file', path: primaryPath },
+            mimeType: 'video/mp4',
+          },
+          {
+            mediaKind: 'image',
+            role: 'poster',
+            source: { kind: 'file', path: posterPath },
+            mimeType: 'image/png',
+          },
+        ],
+      }),
+    };
+    const harness = await createHarness(adapter, {
+      scenes: [videoScene()],
+      routes: [videoRoute],
+      provider: videoProvider,
+    });
+    primaryPath = path.join(harness.rootDir, 'primary.mp4');
+    posterPath = path.join(harness.rootDir, 'poster.png');
+    await Promise.all([writeFile(primaryPath, mp4), writeFile(posterPath, png)]);
+
+    await harness.manager.submitScenes({
+      projectId: harness.project.id,
+      expectedRevision: harness.project.revision,
+      sceneIds: ['scene_1'],
+      routes: [videoRoute],
+      catalogVersion: 'catalog_1',
+    });
+
+    await waitFor(async () =>
+      expect((await harness.store.getProject(harness.project.id))?.jobs.job_1.outputAssetIds).toHaveLength(2)
+    );
+    const project = (await harness.store.getProject(harness.project.id))!;
+    const [primaryAssetId, posterAssetId] = project.jobs.job_1.outputAssetIds;
+    expect(project.jobs.job_1.status).toBe('succeeded');
+    expect(project.scenes.scene_1).toMatchObject({
+      assetIds: [primaryAssetId, posterAssetId],
+      selectedAssetId: primaryAssetId,
+      reviewState: 'complete',
+    });
+    expect(project.assets[primaryAssetId!]).toMatchObject({
+      mediaKind: 'video',
+      managedAsset: { collection: 'assets' },
+    });
+    expect(project.assets[posterAssetId!]).toMatchObject({
+      mediaKind: 'image',
+      managedAsset: { collection: 'thumbnails' },
+    });
+    expect(JSON.stringify(project)).not.toContain(primaryPath);
+    expect(JSON.stringify(project)).not.toContain(posterPath);
+  });
+
+  it('releases the video generation slot after primary success while an optional poster is still persisting', async () => {
+    let firstPrimaryPath = '';
+    let secondPrimaryPath = '';
+    let posterPath = '';
+    let submission = 0;
+    const posterStarted = deferred<void>();
+    const releasePoster = deferred<void>();
+    const adapter: GenerationProviderAdapter = {
+      id: 'weprompt-media-gateway-v1',
+      validateConnection: async () => ({ ok: true }),
+      validateRequest: (request) => ({
+        ok: true,
+        normalized: {
+          aspectRatio: request.aspectRatio,
+          resolution: request.resolution,
+          durationSeconds: request.durationSeconds,
+        },
+      }),
+      submit: vi.fn(async () => {
+        submission += 1;
+        return {
+          kind: 'complete' as const,
+          outputs:
+            submission === 1
+              ? [
+                  {
+                    mediaKind: 'video' as const,
+                    role: 'primary' as const,
+                    source: { kind: 'file' as const, path: firstPrimaryPath },
+                    mimeType: 'video/mp4',
+                  },
+                  {
+                    mediaKind: 'image' as const,
+                    role: 'poster' as const,
+                    source: { kind: 'file' as const, path: posterPath },
+                    mimeType: 'image/png',
+                  },
+                ]
+              : [
+                  {
+                    mediaKind: 'video' as const,
+                    role: 'primary' as const,
+                    source: { kind: 'file' as const, path: secondPrimaryPath },
+                    mimeType: 'video/mp4',
+                  },
+                ],
+        };
+      }),
+    };
+    const secondScene = videoScene();
+    secondScene.id = 'scene_2';
+    secondScene.title = 'Closing';
+    const secondRoute = { ...videoRoute, sceneId: secondScene.id };
+    const harness = await createHarness(adapter, {
+      scenes: [videoScene(), secondScene],
+      routes: [videoRoute, secondRoute],
+      provider: videoProvider,
+      jobIds: ['job_1', 'job_2'],
+      idempotencyKeys: ['key_1', 'key_2'],
+      decorateMediaStore: (mediaStore) => ({
+        ...mediaStore,
+        persistProviderPosterForJob: async (input) => {
+          posterStarted.resolve(undefined);
+          await releasePoster.promise;
+          return mediaStore.persistProviderPosterForJob(input);
+        },
+      }),
+    });
+    firstPrimaryPath = path.join(harness.rootDir, 'primary-one.mp4');
+    secondPrimaryPath = path.join(harness.rootDir, 'primary-two.mp4');
+    posterPath = path.join(harness.rootDir, 'slow-poster.png');
+    await Promise.all([
+      writeFile(firstPrimaryPath, mp4),
+      writeFile(secondPrimaryPath, mp4),
+      writeFile(posterPath, png),
+    ]);
+
+    await harness.manager.submitScenes({
+      projectId: harness.project.id,
+      expectedRevision: harness.project.revision,
+      sceneIds: ['scene_1', 'scene_2'],
+      routes: [videoRoute, secondRoute],
+      catalogVersion: 'catalog_1',
+    });
+
+    await posterStarted.promise;
+    await waitFor(async () => {
+      const project = await harness.store.getProject(harness.project.id);
+      expect(project?.jobs.job_1.status).toBe('succeeded');
+      expect(adapter.submit).toHaveBeenCalledTimes(2);
+      expect(project?.jobs.job_2.status).toBe('succeeded');
+    });
+
+    releasePoster.resolve(undefined);
+    await waitFor(async () =>
+      expect((await harness.store.getProject(harness.project.id))?.jobs.job_1.outputAssetIds).toHaveLength(2)
+    );
+  });
+
+  it('keeps a successful primary video when the provider omits its poster', async () => {
+    let primaryPath = '';
+    const adapter: GenerationProviderAdapter = {
+      id: 'weprompt-media-gateway-v1',
+      validateConnection: async () => ({ ok: true }),
+      validateRequest: (request) => ({
+        ok: true,
+        normalized: {
+          aspectRatio: request.aspectRatio,
+          resolution: request.resolution,
+          durationSeconds: request.durationSeconds,
+        },
+      }),
+      submit: async () => ({
+        kind: 'complete',
+        outputs: [
+          {
+            mediaKind: 'video',
+            role: 'primary',
+            source: { kind: 'file', path: primaryPath },
+            mimeType: 'video/mp4',
+          },
+        ],
+      }),
+    };
+    const harness = await createHarness(adapter, {
+      scenes: [videoScene()],
+      routes: [videoRoute],
+      provider: videoProvider,
+    });
+    primaryPath = path.join(harness.rootDir, 'primary-only.mp4');
+    await writeFile(primaryPath, mp4);
+
+    await harness.manager.submitScenes({
+      projectId: harness.project.id,
+      expectedRevision: harness.project.revision,
+      sceneIds: ['scene_1'],
+      routes: [videoRoute],
+      catalogVersion: 'catalog_1',
+    });
+
+    await waitFor(async () =>
+      expect((await harness.store.getProject(harness.project.id))?.jobs.job_1.status).toBe('succeeded')
+    );
+    const project = (await harness.store.getProject(harness.project.id))!;
+    expect(project.jobs.job_1.outputAssetIds).toHaveLength(1);
+    expect(project.scenes.scene_1.selectedAssetId).toBe(project.jobs.job_1.outputAssetIds[0]);
+  });
+
+  it('keeps a successful primary video when poster persistence fails', async () => {
+    let primaryPath = '';
+    const adapter: GenerationProviderAdapter = {
+      id: 'weprompt-media-gateway-v1',
+      validateConnection: async () => ({ ok: true }),
+      validateRequest: (request) => ({
+        ok: true,
+        normalized: {
+          aspectRatio: request.aspectRatio,
+          resolution: request.resolution,
+          durationSeconds: request.durationSeconds,
+        },
+      }),
+      submit: async () => ({
+        kind: 'complete',
+        outputs: [
+          {
+            mediaKind: 'video',
+            role: 'primary',
+            source: { kind: 'file', path: primaryPath },
+            mimeType: 'video/mp4',
+          },
+          {
+            mediaKind: 'image',
+            role: 'poster',
+            source: { kind: 'file', path: path.join(path.dirname(primaryPath), 'missing-poster.png') },
+            mimeType: 'image/png',
+          },
+        ],
+      }),
+    };
+    const harness = await createHarness(adapter, {
+      scenes: [videoScene()],
+      routes: [videoRoute],
+      provider: videoProvider,
+    });
+    primaryPath = path.join(harness.rootDir, 'primary-with-missing-poster.mp4');
+    await writeFile(primaryPath, mp4);
+
+    await harness.manager.submitScenes({
+      projectId: harness.project.id,
+      expectedRevision: harness.project.revision,
+      sceneIds: ['scene_1'],
+      routes: [videoRoute],
+      catalogVersion: 'catalog_1',
+    });
+
+    await waitFor(async () =>
+      expect((await harness.store.getProject(harness.project.id))?.jobs.job_1.status).toBe('succeeded')
+    );
+    const project = (await harness.store.getProject(harness.project.id))!;
+    expect(project.jobs.job_1).toMatchObject({ status: 'succeeded', error: null });
+    expect(project.jobs.job_1.outputAssetIds).toHaveLength(1);
+    expect(project.scenes.scene_1.selectedAssetId).toBe(project.jobs.job_1.outputAssetIds[0]);
   });
 });
 

@@ -105,6 +105,23 @@ export type PersistProviderJobOutputUrlInput = Omit<PersistProviderOutputUrlInpu
   jobId: string;
 };
 
+export type PersistProviderJobPosterInput = {
+  projectId: string;
+  sceneId: string;
+  jobId: string;
+  primaryAssetId: string;
+  declaredMimeType: string;
+  declaredByteSize?: number;
+  width?: number;
+  height?: number;
+  body: AsyncIterable<Uint8Array>;
+};
+
+export type PersistProviderJobPosterUrlInput = Omit<PersistProviderJobPosterInput, 'body'> & {
+  url: string;
+  downloader: Omit<RemoteMediaDownloadDeps, 'write' | 'maxBytes'>;
+};
+
 export type InternalStudioExportResult = {
   folderName: string;
   exported: Array<{ assetId: string; fileName: string }>;
@@ -117,6 +134,8 @@ export type StudioMediaStore = {
   persistProviderOutputFromUrl(input: PersistProviderOutputUrlInput): Promise<StudioAsset>;
   persistProviderOutputForJob(input: PersistProviderJobOutputInput): Promise<StudioAsset>;
   persistProviderOutputFromUrlForJob(input: PersistProviderJobOutputUrlInput): Promise<StudioAsset>;
+  persistProviderPosterForJob(input: PersistProviderJobPosterInput): Promise<StudioAsset>;
+  persistProviderPosterFromUrlForJob(input: PersistProviderJobPosterUrlInput): Promise<StudioAsset>;
   resolveAsset(
     projectId: string,
     assetId: string
@@ -682,10 +701,12 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
 
   type ProviderOutputMetadata = Omit<PersistProviderOutputInput, 'body'>;
   type ProviderJobOutputMetadata = Omit<PersistProviderJobOutputInput, 'body'>;
+  type ProviderJobPosterMetadata = Omit<PersistProviderJobPosterInput, 'body'>;
   type ProviderWritePlan = {
     projectDir: string;
     project: StudioProject;
     capacity: WriteCapacity;
+    collection: 'assets' | 'thumbnails';
   };
 
   const validateProviderOutputMetadata = (
@@ -737,6 +758,7 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
       projectDir,
       project,
       capacity: await planWriteCapacity(project, projectDir, perAssetMaxBytes, input.declaredByteSize),
+      collection: 'assets',
     };
   };
 
@@ -770,6 +792,57 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
       projectDir,
       project,
       capacity: await planWriteCapacity(project, projectDir, perAssetMaxBytes, input.declaredByteSize),
+      collection: 'assets',
+    };
+  };
+
+  const validateProviderPosterLineage = (
+    project: StudioProject,
+    input: ProviderJobPosterMetadata
+  ): { scene: StudioProject['scenes'][string]; job: StudioProject['jobs'][string] } => {
+    const scene = project.scenes[input.sceneId];
+    const job = project.jobs[input.jobId];
+    if (!scene || !job) throw new CreativeStudioMediaError('not_found');
+    if (scene.mediaKind !== 'video') throw new CreativeStudioMediaError('invalid_media');
+    if (job.status !== 'succeeded') throw new CreativeStudioMediaError('job_inactive');
+    const primary = project.assets[input.primaryAssetId];
+    if (
+      !primary ||
+      primary.projectId !== input.projectId ||
+      primary.sceneId !== input.sceneId ||
+      primary.mediaKind !== 'video' ||
+      primary.managedAsset.collection !== 'assets'
+    ) {
+      throw new CreativeStudioMediaError('job_inactive');
+    }
+    if (
+      job.projectId !== input.projectId ||
+      job.sceneId !== input.sceneId ||
+      job.outputAssetIds.length !== 1 ||
+      job.outputAssetIds[0] !== input.primaryAssetId ||
+      !scene.assetIds.includes(input.primaryAssetId)
+    ) {
+      throw new CreativeStudioMediaError('job_inactive');
+    }
+    return { scene, job };
+  };
+
+  const prepareProviderPosterWrite = async (input: ProviderJobPosterMetadata): Promise<ProviderWritePlan> => {
+    validateProviderOutputMetadata({ ...input, mediaKind: 'image' }, false);
+    if (!SAFE_ID.test(input.primaryAssetId) || !input.declaredMimeType.startsWith('image/')) {
+      throw new CreativeStudioMediaError('invalid_media');
+    }
+    const [projectDir, project] = await Promise.all([
+      deps.store.getVerifiedProjectDirectory(input.projectId),
+      deps.store.getProject(input.projectId),
+    ]);
+    if (!projectDir || !project) throw new CreativeStudioMediaError('not_found');
+    validateProviderPosterLineage(project, input);
+    return {
+      projectDir,
+      project,
+      capacity: await planWriteCapacity(project, projectDir, limits.imageOutputMaxBytes, input.declaredByteSize),
+      collection: 'thumbnails',
     };
   };
 
@@ -787,7 +860,7 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
     let finalIdentity: FileIdentity | null = null;
     try {
       const partsDir = await ensureManagedDirectory(plan.projectDir, 'parts');
-      const assetsDir = await ensureManagedDirectory(plan.projectDir, 'assets');
+      const collectionDir = await ensureManagedDirectory(plan.projectDir, plan.collection);
       partPath = path.join(partsDir, `${assetId}.part`);
       const writer = createWriteStream(partPath, { flags: 'wx' });
       const hash = createHash('sha256');
@@ -813,8 +886,8 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
       if (!signature || signature.mimeType !== input.declaredMimeType || input.mediaKind !== signatureKind) {
         throw new CreativeStudioMediaError('invalid_media');
       }
-      finalPath = path.join(assetsDir, `${assetId}.${signature.extension}`);
-      finalIdentity = await finalizeManagedPart(partPath, partsDir, finalPath, assetsDir);
+      finalPath = path.join(collectionDir, `${assetId}.${signature.extension}`);
+      finalIdentity = await finalizeManagedPart(partPath, partsDir, finalPath, collectionDir);
       partPath = null;
       const asset: StudioAsset = {
         id: assetId,
@@ -822,7 +895,7 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
         sceneId: input.sceneId,
         mediaKind: input.mediaKind,
         mimeType: signature.mimeType,
-        managedAsset: { collection: 'assets', fileName: `${assetId}.${signature.extension}` },
+        managedAsset: { collection: plan.collection, fileName: `${assetId}.${signature.extension}` },
         byteSize,
         sha256: hash.digest('hex'),
         ...(input.width === undefined ? {} : { width: input.width }),
@@ -892,6 +965,31 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
     persistProviderOutputWithPlan(input, await prepareProviderJobWrite(input), (asset) =>
       commitProviderJobAsset(input, asset)
     );
+
+  const commitProviderJobPoster = async (input: ProviderJobPosterMetadata, posterAsset: StudioAsset): Promise<void> => {
+    await deps.store.updateProject(input.projectId, (current) => {
+      const { scene, job } = validateProviderPosterLineage(current, input);
+      if (posterAsset.mediaKind !== 'image' || posterAsset.managedAsset.collection !== 'thumbnails') {
+        throw new CreativeStudioMediaError('invalid_media');
+      }
+      const usedBytes = Object.values(current.assets).reduce((total, candidate) => total + candidate.byteSize, 0);
+      if (usedBytes + posterAsset.byteSize > limits.projectMaxBytes) {
+        throw new CreativeStudioMediaError('invalid_media');
+      }
+      current.assets[posterAsset.id] = posterAsset;
+      scene.assetIds.push(posterAsset.id);
+      job.outputAssetIds.push(posterAsset.id);
+      job.updatedAt = now();
+      return current;
+    });
+  };
+
+  const persistProviderPosterForJob = async (input: PersistProviderJobPosterInput): Promise<StudioAsset> => {
+    const plan = await prepareProviderPosterWrite(input);
+    return persistProviderOutputWithPlan({ ...input, mediaKind: 'image' }, plan, (asset) =>
+      commitProviderJobPoster(input, asset)
+    );
+  };
 
   /** Pipes the single SSRF-safe downloader into the same managed `.part` persistence path without buffering media. */
   const persistProviderOutputFromUrlWithPlan = async (
@@ -971,6 +1069,14 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
     const plan = await prepareProviderJobWrite(input);
     return persistProviderOutputFromUrlWithPlan(input, plan, (body) =>
       persistProviderOutputWithPlan({ ...input, body }, plan, (asset) => commitProviderJobAsset(input, asset))
+    );
+  };
+
+  const persistProviderPosterFromUrlForJob = async (input: PersistProviderJobPosterUrlInput): Promise<StudioAsset> => {
+    const plan = await prepareProviderPosterWrite(input);
+    const normalized = { ...input, mediaKind: 'image' as const };
+    return persistProviderOutputFromUrlWithPlan(normalized, plan, (body) =>
+      persistProviderOutputWithPlan({ ...normalized, body }, plan, (asset) => commitProviderJobPoster(input, asset))
     );
   };
 
@@ -1058,6 +1164,8 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
     persistProviderOutputFromUrl,
     persistProviderOutputForJob,
     persistProviderOutputFromUrlForJob,
+    persistProviderPosterForJob,
+    persistProviderPosterFromUrlForJob,
     resolveAsset,
     resolveProviderInput,
     exportAssetsToDirectory,

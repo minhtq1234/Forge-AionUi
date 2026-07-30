@@ -72,6 +72,7 @@ export type StudioJobManagerErrorCode =
   | 'invalid_request'
   | 'invalid_route'
   | 'provider_error'
+  | 'busy'
   | 'unsupported'
   | 'cancellation_refused'
   | 'duplicate_charge_acknowledgement_required';
@@ -525,6 +526,87 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
     return job.status === 'running';
   };
 
+  const persistPosterOutput = async (
+    context: ExecutionContext,
+    outputs: ProviderOutput[],
+    primaryAssetId: string,
+    signal: AbortSignal
+  ): Promise<boolean> => {
+    if (context.mediaKind !== 'video') return false;
+    const posters = outputs.filter((output) => output.role === 'poster');
+    if (posters.length !== 1 || posters[0]!.mediaKind !== 'image') return false;
+    const poster = posters[0]!;
+    try {
+      if (poster.source.kind === 'url') {
+        await deps.mediaStore.persistProviderPosterFromUrlForJob({
+          projectId: context.projectId,
+          sceneId: context.sceneId,
+          jobId: context.jobId,
+          primaryAssetId,
+          declaredMimeType: poster.mimeType,
+          ...(poster.byteSize === undefined ? {} : { declaredByteSize: poster.byteSize }),
+          ...(poster.width === undefined ? {} : { width: poster.width }),
+          ...(poster.height === undefined ? {} : { height: poster.height }),
+          url: poster.source.url,
+          downloader: outputDownloader(context.provider, context.adapter.id, signal),
+        });
+        return true;
+      }
+      const stats = await fs.lstat(poster.source.path);
+      if (!stats.isFile() || stats.isSymbolicLink()) throw new CreativeStudioMediaError('invalid_media');
+      const body = createReadStream(poster.source.path);
+      const abortBody = (): void => {
+        body.destroy(abortError());
+      };
+      signal.addEventListener('abort', abortBody, { once: true });
+      if (signal.aborted) abortBody();
+      try {
+        await deps.mediaStore.persistProviderPosterForJob({
+          projectId: context.projectId,
+          sceneId: context.sceneId,
+          jobId: context.jobId,
+          primaryAssetId,
+          declaredMimeType: poster.mimeType,
+          declaredByteSize: poster.byteSize ?? stats.size,
+          ...(poster.width === undefined ? {} : { width: poster.width }),
+          ...(poster.height === undefined ? {} : { height: poster.height }),
+          body,
+        });
+        return true;
+      } finally {
+        signal.removeEventListener('abort', abortBody);
+        if (signal.aborted && !body.destroyed) body.destroy(abortError());
+      }
+    } catch {
+      // Posters are an optional convenience. A failed poster must never undo
+      // or downgrade a primary video that was already committed successfully.
+      return false;
+    }
+  };
+
+  const trackPosterOutput = (
+    context: ExecutionContext,
+    outputs: ProviderOutput[],
+    primaryAssetId: string,
+    parentSignal: AbortSignal
+  ): void => {
+    if (context.mediaKind !== 'video' || disposed || parentSignal.aborted) return;
+    const controller = new AbortController();
+    const abortFromParent = (): void => controller.abort();
+    parentSignal.addEventListener('abort', abortFromParent, { once: true });
+    operationControllers.add(controller);
+    const task = persistPosterOutput(context, outputs, primaryAssetId, controller.signal)
+      .then((persisted) => {
+        if (persisted) notify(context.projectId);
+      })
+      .finally(() => {
+        parentSignal.removeEventListener('abort', abortFromParent);
+        operationControllers.delete(controller);
+        activeRuns.delete(task);
+      });
+    activeRuns.add(task);
+  };
+
   const persistPrimaryOutput = async (
     context: ExecutionContext,
     outputs: ProviderOutput[],
@@ -539,9 +621,10 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
       return transitionFailure(context.projectId, context.jobId, 'failed', 'no_output');
     }
     try {
+      let primaryAssetId: string;
       if (output.source.kind === 'url') {
         if (!output.mimeType) throw new CreativeStudioMediaError('invalid_media');
-        await deps.mediaStore.persistProviderOutputFromUrlForJob({
+        const primaryAsset = await deps.mediaStore.persistProviderOutputFromUrlForJob({
           projectId: context.projectId,
           sceneId: context.sceneId,
           jobId: context.jobId,
@@ -554,6 +637,7 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
           url: output.source.url,
           downloader: outputDownloader(context.provider, context.adapter.id, signal),
         });
+        primaryAssetId = primaryAsset.id;
       } else {
         const stats = await fs.lstat(output.source.path);
         if (!stats.isFile() || stats.isSymbolicLink()) throw new CreativeStudioMediaError('invalid_media');
@@ -564,7 +648,7 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
         signal.addEventListener('abort', abortBody, { once: true });
         if (signal.aborted) abortBody();
         try {
-          await deps.mediaStore.persistProviderOutputForJob({
+          const primaryAsset = await deps.mediaStore.persistProviderOutputForJob({
             projectId: context.projectId,
             sceneId: context.sceneId,
             jobId: context.jobId,
@@ -576,6 +660,7 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
             ...(output.durationSeconds === undefined ? {} : { durationSeconds: output.durationSeconds }),
             body,
           });
+          primaryAssetId = primaryAsset.id;
         } finally {
           signal.removeEventListener('abort', abortBody);
           if (signal.aborted && !body.destroyed) body.destroy(abortError());
@@ -585,6 +670,7 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
       const project = await deps.store.getProject(context.projectId);
       const committed = project?.jobs[context.jobId];
       if (!committed) throw new CreativeStudioStoreError('not_found', 'Studio job not found');
+      trackPosterOutput(context, outputs, primaryAssetId, signal);
       return committed;
     } catch (error) {
       if (error instanceof CreativeStudioMediaError && error.code === 'job_inactive') {
@@ -898,6 +984,21 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
     for (const sceneId of input.sceneIds) {
       const route = routeByScene.get(sceneId);
       if (!route) invalidRequest();
+      const scene = project.scenes[sceneId];
+      const sceneJobs =
+        scene?.jobIds.flatMap((jobId) => {
+          const job = project.jobs[jobId];
+          return job?.projectId === project.id && job.sceneId === sceneId ? [job] : [];
+        }) ?? [];
+      const hasUnresolvedUnknownSubmission = sceneJobs.some(
+        (job) => job.status === 'needs_attention' && job.error?.code === 'submission_unknown'
+      );
+      if (hasUnresolvedUnknownSubmission) {
+        throw new StudioJobManagerError('duplicate_charge_acknowledgement_required');
+      }
+      if (scene?.reviewState === 'generating' || sceneJobs.some((job) => !TERMINAL_STATUSES.has(job.status))) {
+        throw new StudioJobManagerError('busy');
+      }
       prepared.push(await resolveProvider(project, sceneId, route, input.catalogVersion));
     }
     if (disposed) throw new StudioJobManagerError('invalid_request');
@@ -985,6 +1086,18 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
     requireSafeId(input.jobId);
     const previous = project.jobs[input.jobId];
     if (!previous) throw new CreativeStudioStoreError('not_found', 'Studio job not found');
+    const scene = project.scenes[previous.sceneId];
+    if (!scene) throw new CreativeStudioStoreError('not_found', 'Studio scene not found');
+    const sceneJobs = scene.jobIds.flatMap((jobId) => {
+      const job = project.jobs[jobId];
+      return job?.projectId === project.id && job.sceneId === scene.id ? [job] : [];
+    });
+    if (
+      sceneJobs.some((job) => job.retryOfJobId === previous.id) ||
+      sceneJobs.some((job) => job.id !== previous.id && !TERMINAL_STATUSES.has(job.status))
+    ) {
+      throw new StudioJobManagerError('busy');
+    }
     if (
       (previous.status !== 'failed' && previous.status !== 'needs_attention') ||
       previous.error?.code === 'download_failed'
@@ -1026,8 +1139,6 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
     if (retryReason === 'submission_unknown' && input.acknowledgePossibleDuplicateCharge !== true) {
       throw new StudioJobManagerError('duplicate_charge_acknowledgement_required');
     }
-    const scene = project.scenes[previous.sceneId];
-    if (!scene) throw new CreativeStudioStoreError('not_found', 'Studio scene not found');
     const route = {
       sceneId: scene.id,
       ...previous.provider,
@@ -1054,6 +1165,18 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
     const job = project.jobs[input.jobId];
     if (!job || job.status !== 'failed' || job.error?.code !== 'download_failed') {
       throw new StudioJobManagerError('invalid_request');
+    }
+    const scene = project.scenes[job.sceneId];
+    const sceneJobs =
+      scene?.jobIds.flatMap((jobId) => {
+        const candidate = project.jobs[jobId];
+        return candidate?.projectId === project.id && candidate.sceneId === job.sceneId ? [candidate] : [];
+      }) ?? [];
+    if (
+      sceneJobs.some((candidate) => candidate.retryOfJobId === job.id) ||
+      sceneJobs.some((candidate) => candidate.id !== job.id && !TERMINAL_STATUSES.has(candidate.status))
+    ) {
+      throw new StudioJobManagerError('busy');
     }
     if (job.providerJobId === null) throw new StudioJobManagerError('unsupported');
     const context = await resolveExistingContext(project, job);

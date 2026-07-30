@@ -8,7 +8,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { StudioEditableScene, StudioScene } from '@/common/types/project/creativeStudioTypes';
+import type { StudioAsset, StudioEditableScene, StudioScene } from '@/common/types/project/creativeStudioTypes';
 import { SceneInspector, type SceneInspectorProps } from '@renderer/pages/studio/components/Storyboard/SceneInspector';
 
 vi.mock('react-i18next', () => ({
@@ -43,7 +43,9 @@ const sceneDraft: StudioEditableScene = {
 };
 
 const createProps = (overrides: Partial<SceneInspectorProps> = {}): SceneInspectorProps => ({
+  projectId: 'project-1',
   selectedScene,
+  referenceAsset: null,
   sceneDraft,
   mutationPending: false,
   errorMessageKey: null,
@@ -53,6 +55,8 @@ const createProps = (overrides: Partial<SceneInspectorProps> = {}): SceneInspect
   onFlushSceneDraft: vi.fn(),
   onRetryConflict: vi.fn(),
   onDiscardConflict: vi.fn(),
+  importingReference: false,
+  onImportReference: vi.fn(),
   ...overrides,
 });
 
@@ -183,6 +187,82 @@ describe('SceneInspector', () => {
     fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.storyboard.discard' }));
     expect(props.onRetryConflict).toHaveBeenCalledTimes(1);
     expect(props.onDiscardConflict).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers a managed first-frame import without accepting renderer file input', () => {
+    const props = createProps();
+    render(<SceneInspector {...props} />);
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'conversation.creativeStudio.preview.importReference',
+      })
+    );
+
+    expect(props.onImportReference).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('textbox', { name: /file/i })).not.toBeInTheDocument();
+  });
+
+  it('shows the canonical managed first-frame image after import', () => {
+    const referenceAsset: StudioAsset = {
+      id: 'reference-1',
+      projectId: 'project-1',
+      sceneId: selectedScene.id,
+      mediaKind: 'image',
+      mimeType: 'image/png',
+      managedAsset: { collection: 'imports', fileName: 'reference-1.png' },
+      byteSize: 128,
+      sha256: 'a'.repeat(64),
+      createdAt: '2026-07-30T00:00:00.000Z',
+    };
+    render(
+      <SceneInspector
+        {...createProps({
+          selectedScene: {
+            ...selectedScene,
+            referenceAssetId: referenceAsset.id,
+            assetIds: [referenceAsset.id],
+          },
+          sceneDraft: {
+            ...sceneDraft,
+            referenceAssetId: referenceAsset.id,
+          },
+          referenceAsset,
+        })}
+      />
+    );
+
+    expect(
+      screen.getByRole('figure', {
+        name: 'conversation.creativeStudio.preview.importReference',
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', {
+        name: 'conversation.creativeStudio.preview.importReference',
+      })
+    ).toHaveAttribute('src', 'weprompt-studio://asset/project-1/reference-1');
+  });
+
+  it('announces and disables reference import while the native chooser is active', () => {
+    render(<SceneInspector {...createProps({ importingReference: true })} />);
+
+    expect(
+      screen.getByRole('button', {
+        name: 'conversation.creativeStudio.preview.importing',
+      })
+    ).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('conversation.creativeStudio.preview.importing');
+  });
+
+  it('disables reference import while another canonical mutation is pending', () => {
+    render(<SceneInspector {...createProps({ mutationPending: true })} />);
+
+    expect(
+      screen.getByRole('button', {
+        name: 'conversation.creativeStudio.preview.importReference',
+      })
+    ).toBeDisabled();
   });
 
   it('renders a localized empty state instead of editable controls without a selected scene', () => {

@@ -689,6 +689,21 @@ describe('CreativeStudioService', () => {
       createdAt: '2026-07-30T00:00:00.000Z',
       updatedAt: '2026-07-30T00:00:00.000Z',
     };
+    const nonRetryableDownloadJob: StudioJob = {
+      ...internalJob,
+      id: 'job_without_remote_identity',
+      status: 'failed',
+      providerJobId: null,
+      error: {
+        code: 'download_failed',
+        messageKey: 'conversation.creativeStudio.jobs.errors.downloadFailed',
+      },
+    };
+    const retryableDownloadJob: StudioJob = {
+      ...nonRetryableDownloadJob,
+      id: 'job_with_remote_identity',
+      providerJobId: 'secret_download_remote_id',
+    };
     const projectStore = createCreativeStudioStore({ rootDir, createId: () => 'project_1' });
     const created = await projectStore.createProject(makeInput());
     await projectStore.updateProject(created.id, (current) => {
@@ -707,8 +722,8 @@ describe('CreativeStudioService', () => {
     });
     const submitScenes = vi.fn(async () => [internalJob]);
     const cancelJob = vi.fn(async () => internalJob);
-    const retryJob = vi.fn(async () => internalJob);
-    const retryDownload = vi.fn(async () => internalJob);
+    const retryJob = vi.fn(async () => nonRetryableDownloadJob);
+    const retryDownload = vi.fn(async () => retryableDownloadJob);
     const rendererService = createCreativeStudioService({
       store: projectStore,
       onProjectUpdated,
@@ -735,8 +750,23 @@ describe('CreativeStudioService', () => {
       sha256: '1'.repeat(64),
       createdAt: forgedProject.createdAt,
       idempotencyKey: 'asset-provider-secret',
-    } as StudioAsset & { idempotencyKey: string };
-    forgedProject.scenes.scene_1.assetIds = ['asset_1'];
+      sourcePath: '/secret/provider-primary.mp4',
+    } as StudioAsset & { idempotencyKey: string; sourcePath: string };
+    forgedProject.assets.asset_poster = {
+      id: 'asset_poster',
+      projectId: 'project_1',
+      sceneId: 'scene_1',
+      mediaKind: 'image',
+      mimeType: 'image/png',
+      managedAsset: { collection: 'thumbnails', fileName: 'asset_poster.png' },
+      byteSize: 1,
+      sha256: '2'.repeat(64),
+      createdAt: forgedProject.createdAt,
+      sourceUrl: 'https://provider.example/secret-signed-poster.png',
+    } as StudioAsset & { sourceUrl: string };
+    forgedProject.jobs.job_1.outputAssetIds = ['asset_1', 'asset_poster'];
+    forgedProject.scenes.scene_1.assetIds = ['asset_1', 'asset_poster'];
+    forgedProject.scenes.scene_1.selectedAssetId = 'asset_1';
     vi.spyOn(projectStore, 'getProject').mockResolvedValueOnce(forgedProject);
 
     const projectResult = await rendererService.getProject('project_1');
@@ -768,11 +798,18 @@ describe('CreativeStudioService', () => {
 
     expect(projectResult?.jobs.job_1).not.toHaveProperty('providerJobId');
     expect(projectResult?.jobs.job_1).not.toHaveProperty('idempotencyKey');
+    expect(projectResult?.jobs.job_1.canRetryDownload).toBe(false);
     expect(projectResult?.scenes.scene_1).not.toHaveProperty('providerJobId');
     expect(projectResult?.assets.asset_1).not.toHaveProperty('idempotencyKey');
+    expect(projectResult?.jobs.job_1.outputAssetIds).toEqual(['asset_1', 'asset_poster']);
+    expect(projectResult?.assets.asset_poster.managedAsset.collection).toBe('thumbnails');
+    expect(projectResult?.assets.asset_1).not.toHaveProperty('sourcePath');
+    expect(projectResult?.assets.asset_poster).not.toHaveProperty('sourceUrl');
     expect(updatedProjectResult.jobs.job_1).not.toHaveProperty('providerJobId');
     expect(updatedProjectResult.jobs.job_1).not.toHaveProperty('idempotencyKey');
-    for (const result of jobResults.flat()) {
+    const sanitizedJobResults = jobResults.flat();
+    expect(sanitizedJobResults.map((result) => result.canRetryDownload)).toEqual([false, false, false, true]);
+    for (const result of sanitizedJobResults) {
       expect(result).not.toHaveProperty('providerJobId');
       expect(result).not.toHaveProperty('idempotencyKey');
     }

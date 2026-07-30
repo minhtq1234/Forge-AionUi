@@ -127,7 +127,21 @@ describe('useStoryboardEditor', () => {
     expect(result.current.sceneDraft?.title).toBe('Scene scene-1');
     expect(result.current.durationTotalSeconds).toBe(10);
     expect(result.current.durationMatchesTarget).toBe(true);
+    expect(result.current.hasUnsavedSelectedSceneDraft).toBe(false);
     await waitFor(() => expect(result.current.planning?.health).toBe('ready'));
+  });
+
+  it('distinguishes the selected scene draft from unrelated dirty scene drafts', async () => {
+    vi.useFakeTimers();
+    const initial = project();
+    const { result } = renderHook(() => useStoryboardEditor({ project: initial, refetch: vi.fn(async () => initial) }));
+
+    act(() => result.current.updateSceneDraft({ title: 'Dirty opening' }));
+    expect(result.current.hasUnsavedSelectedSceneDraft).toBe(true);
+
+    act(() => result.current.selectScene('scene-2'));
+    expect(result.current.hasUnsavedSelectedSceneDraft).toBe(false);
+    expect(result.current.hasUnsavedSceneDrafts).toBe(true);
   });
 
   it('does not call IPC when no project or selected scene exists', async () => {

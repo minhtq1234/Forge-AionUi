@@ -6,7 +6,7 @@
 
 import type { StudioRendererProject, StudioRouteCatalog } from '@/common/types/project/creativeStudioTypes';
 import { Button, Tag } from '@arco-design/web-react';
-import { Left, Magic } from '@icon-park/react';
+import { Left, Magic, VideoOne } from '@icon-park/react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -17,8 +17,11 @@ export type StudioHeaderProps = {
   planningErrorMessageKey: string | null;
   drafting: boolean;
   draftDisabled?: boolean;
+  generationDisabled?: boolean;
+  generationPending?: boolean;
   onBack: () => void;
   onOpenDraft: () => void;
+  onOpenGenerationReview?: () => void;
 };
 
 const StudioHeader: React.FC<StudioHeaderProps> = ({
@@ -28,12 +31,16 @@ const StudioHeader: React.FC<StudioHeaderProps> = ({
   planningErrorMessageKey,
   drafting,
   draftDisabled = false,
+  generationDisabled = false,
+  generationPending = false,
   onBack,
   onOpenDraft,
+  onOpenGenerationReview,
 }) => {
   const { t } = useTranslation();
   const isChecking = planningLoading || planning?.health === 'checking';
   const isReady = !isChecking && planning?.health === 'ready' && planning.resolvedModel !== undefined;
+  const generationActionDisabled = generationDisabled || generationPending || onOpenGenerationReview === undefined;
   const readinessKey = isChecking
     ? 'conversation.creativeStudio.draft.checking'
     : isReady
@@ -61,15 +68,29 @@ const StudioHeader: React.FC<StudioHeaderProps> = ({
           <p className='m-0 mt-6px line-clamp-2 text-14px text-t-secondary'>{project.brief}</p>
         </div>
 
-        <Button
-          type='primary'
-          icon={<Magic />}
-          loading={drafting}
-          disabled={drafting || draftDisabled}
-          onClick={onOpenDraft}
-        >
-          {t('conversation.creativeStudio.draft.action')}
-        </Button>
+        <div className='flex flex-wrap items-center gap-8px'>
+          <Button
+            icon={
+              <span aria-hidden='true'>
+                <VideoOne />
+              </span>
+            }
+            loading={generationPending}
+            disabled={generationActionDisabled}
+            onClick={onOpenGenerationReview}
+          >
+            {t('conversation.creativeStudio.review.generateReadyScenes')}
+          </Button>
+          <Button
+            type='primary'
+            icon={<Magic />}
+            loading={drafting}
+            disabled={drafting || draftDisabled}
+            onClick={onOpenDraft}
+          >
+            {t('conversation.creativeStudio.draft.action')}
+          </Button>
+        </div>
       </div>
 
       <div

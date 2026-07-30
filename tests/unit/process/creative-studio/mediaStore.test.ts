@@ -104,6 +104,20 @@ const addActiveImageJob = async (store: CreativeStudioStore): Promise<void> => {
   });
 };
 
+const addActiveVideoJob = async (store: CreativeStudioStore): Promise<void> => {
+  await addActiveImageJob(store);
+  await store.updateProject('project_1', (project) => {
+    const next = structuredClone(project);
+    next.scenes.scene_1.mediaKind = 'video';
+    next.jobs.job_1.provider = {
+      providerId: 'provider_1',
+      adapterId: 'weprompt-media-gateway-v1',
+      model: 'video-model',
+    };
+    return next;
+  });
+};
+
 afterEach(async () => {
   await Promise.all(created.splice(0).map((directory) => fs.rm(directory, { recursive: true, force: true })));
 });
@@ -458,6 +472,148 @@ describe('createStudioMediaStore', () => {
       reviewState: 'complete',
     });
     expect(project?.routing.image).toEqual(project?.jobs.job_1.provider);
+  });
+
+  it('atomically appends one poster thumbnail without replacing a newly selected video variation', async () => {
+    const { rootDir, store } = await makeStore();
+    await addActiveVideoJob(store);
+    const assetIds = [
+      'asset_video_primary',
+      'asset_video_variation',
+      'asset_video_poster',
+      'asset_video_second_poster',
+    ];
+    let assetIndex = 0;
+    const media = createStudioMediaStore({ store, createId: () => assetIds[assetIndex++]! });
+    const primary = await media.persistProviderOutputForJob({
+      projectId: 'project_1',
+      sceneId: 'scene_1',
+      jobId: 'job_1',
+      mediaKind: 'video',
+      declaredMimeType: 'video/mp4',
+      body: Readable.from([mp4]),
+    });
+    await store.updateProject('project_1', (project) => {
+      const next = structuredClone(project);
+      next.jobs.job_2 = {
+        ...next.jobs.job_1,
+        id: 'job_2',
+        status: 'running',
+        idempotencyKey: 'key_2',
+        outputAssetIds: [],
+      };
+      next.scenes.scene_1.jobIds.push('job_2');
+      next.scenes.scene_1.reviewState = 'generating';
+      return next;
+    });
+    const variation = await media.persistProviderOutputForJob({
+      projectId: 'project_1',
+      sceneId: 'scene_1',
+      jobId: 'job_2',
+      mediaKind: 'video',
+      declaredMimeType: 'video/mp4',
+      body: Readable.from([mp4]),
+    });
+
+    const poster = await media.persistProviderPosterForJob({
+      projectId: 'project_1',
+      sceneId: 'scene_1',
+      jobId: 'job_1',
+      primaryAssetId: primary.id,
+      declaredMimeType: 'image/png',
+      body: Readable.from([png]),
+    });
+
+    const project = await store.getProject('project_1');
+    expect(poster).toMatchObject({
+      mediaKind: 'image',
+      managedAsset: { collection: 'thumbnails', fileName: 'asset_video_poster.png' },
+    });
+    expect(project?.jobs.job_1).toMatchObject({
+      status: 'succeeded',
+      outputAssetIds: [primary.id, poster.id],
+      error: null,
+    });
+    expect(project?.scenes.scene_1).toMatchObject({
+      assetIds: [primary.id, variation.id, poster.id],
+      selectedAssetId: variation.id,
+      reviewState: 'complete',
+    });
+    expect(JSON.stringify(project)).not.toContain(rootDir);
+    await expect(
+      fs.access(path.join(rootDir, 'project_1', 'thumbnails', 'asset_video_poster.png'))
+    ).resolves.toBeUndefined();
+
+    await expect(
+      media.persistProviderPosterForJob({
+        projectId: 'project_1',
+        sceneId: 'scene_1',
+        jobId: 'job_1',
+        primaryAssetId: primary.id,
+        declaredMimeType: 'image/png',
+        body: Readable.from([png]),
+      })
+    ).rejects.toMatchObject<Partial<CreativeStudioMediaError>>({ code: 'job_inactive' });
+    expect(Object.keys((await store.getProject('project_1'))?.assets ?? {})).toHaveLength(3);
+  });
+
+  it('rejects inactive, wrong-kind, and invalid-lineage poster writes', async () => {
+    const { store } = await makeStore();
+    await addActiveVideoJob(store);
+    const assetIds = ['asset_video_primary', 'asset_image_primary'];
+    let assetIndex = 0;
+    const media = createStudioMediaStore({ store, createId: () => assetIds[assetIndex++]! });
+    const posterInput = {
+      projectId: 'project_1',
+      sceneId: 'scene_1',
+      jobId: 'job_1',
+      primaryAssetId: 'asset_video_primary',
+      declaredMimeType: 'image/png',
+      body: Readable.from([png]),
+    };
+
+    await expect(media.persistProviderPosterForJob(posterInput)).rejects.toMatchObject<
+      Partial<CreativeStudioMediaError>
+    >({ code: 'job_inactive' });
+
+    const primary = await media.persistProviderOutputForJob({
+      projectId: 'project_1',
+      sceneId: 'scene_1',
+      jobId: 'job_1',
+      mediaKind: 'video',
+      declaredMimeType: 'video/mp4',
+      body: Readable.from([mp4]),
+    });
+    await expect(
+      media.persistProviderPosterForJob({
+        ...posterInput,
+        primaryAssetId: 'asset_not_from_job',
+        body: Readable.from([png]),
+      })
+    ).rejects.toMatchObject<Partial<CreativeStudioMediaError>>({ code: 'job_inactive' });
+
+    const { store: imageStore } = await makeStore();
+    await addActiveImageJob(imageStore);
+    const imageMedia = createStudioMediaStore({ store: imageStore, createId: () => 'asset_image_primary' });
+    const imagePrimary = await imageMedia.persistProviderOutputForJob({
+      projectId: 'project_1',
+      sceneId: 'scene_1',
+      jobId: 'job_1',
+      mediaKind: 'image',
+      declaredMimeType: 'image/png',
+      body: Readable.from([png]),
+    });
+    await expect(
+      imageMedia.persistProviderPosterForJob({
+        projectId: 'project_1',
+        sceneId: 'scene_1',
+        jobId: 'job_1',
+        primaryAssetId: imagePrimary.id,
+        declaredMimeType: 'image/png',
+        body: Readable.from([png]),
+      })
+    ).rejects.toMatchObject<Partial<CreativeStudioMediaError>>({ code: 'invalid_media' });
+    expect(primary.id).toBe('asset_video_primary');
   });
 
   it('unlinks a staged output when cancellation wins the final job-state compare-and-set', async () => {

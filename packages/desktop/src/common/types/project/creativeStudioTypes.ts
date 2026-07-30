@@ -92,7 +92,10 @@ export type StudioJob = {
 };
 
 /** Renderer-facing job metadata. Provider task identity and charge idempotency stay in main. */
-export type StudioRendererJob = Omit<StudioJob, 'idempotencyKey' | 'providerJobId'>;
+export type StudioRendererJob = Omit<StudioJob, 'idempotencyKey' | 'providerJobId'> & {
+  /** Main-derived recovery capability; never exposes the durable provider task identity. */
+  canRetryDownload: boolean;
+};
 
 export type StudioSceneReviewState = 'draft' | 'ready' | 'generating' | 'complete' | 'blocked';
 

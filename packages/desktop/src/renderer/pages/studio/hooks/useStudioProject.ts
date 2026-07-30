@@ -16,8 +16,16 @@ export type UseStudioProjectResult = {
   refetch: () => Promise<StudioRendererProject | null>;
 };
 
+export type UseStudioProjectOptions = {
+  /** Let a higher-level owner subscribe when it coordinates project jobs and refreshes. */
+  subscribeToUpdates?: boolean;
+};
+
 /** Resolves one durable Studio project and keeps it current through the native event stream. */
-export const useStudioProject = (projectId: string | undefined): UseStudioProjectResult => {
+export const useStudioProject = (
+  projectId: string | undefined,
+  { subscribeToUpdates = true }: UseStudioProjectOptions = {}
+): UseStudioProjectResult => {
   const [project, setProject] = useState<StudioRendererProject | null>(null);
   const [loading, setLoading] = useState(Boolean(projectId));
   const [notFound, setNotFound] = useState(false);
@@ -25,6 +33,8 @@ export const useStudioProject = (projectId: string | undefined): UseStudioProjec
   const [resolvedProjectId, setResolvedProjectId] = useState<string | undefined>();
   const generationRef = useRef(0);
   const latestRequestRef = useRef(0);
+  const authoritativeAbsenceRequestRef = useRef(0);
+  const authoritativePresenceRequestRef = useRef(0);
   const projectRef = useRef<StudioRendererProject | null>(null);
 
   const loadProject = useCallback(
@@ -42,25 +52,34 @@ export const useStudioProject = (projectId: string | undefined): UseStudioProjec
 
       try {
         const result = await ipcBridge.creativeStudio.getProject.invoke({ projectId: requestedProjectId });
-        if (generationRef.current !== generation || latestRequestRef.current !== request) return null;
+        if (generationRef.current !== generation) return null;
+        const latestRequest = latestRequestRef.current === request;
 
         if (result.ok === false) {
-          setErrorMessageKey(result.error.messageKey);
+          if (latestRequest) setErrorMessageKey(result.error.messageKey);
           return null;
         }
         if (result.data === null) {
+          if (request < authoritativeAbsenceRequestRef.current || request < authoritativePresenceRequestRef.current)
+            return null;
+          authoritativeAbsenceRequestRef.current = request;
           projectRef.current = null;
           setProject(null);
           setNotFound(true);
+          setErrorMessageKey(null);
           return null;
         }
+        if (request < authoritativeAbsenceRequestRef.current) return null;
+        authoritativePresenceRequestRef.current = Math.max(authoritativePresenceRequestRef.current, request);
 
         const current = projectRef.current;
         const canonical =
           current?.id === result.data.id && current.revision > result.data.revision ? current : result.data;
+        const advanced = current === null || current.id !== canonical.id || canonical.revision > current.revision;
         projectRef.current = canonical;
         setProject(canonical);
         setNotFound(false);
+        if (advanced || latestRequest) setErrorMessageKey(null);
         return canonical;
       } catch {
         if (generationRef.current === generation && latestRequestRef.current === request) {
@@ -91,16 +110,18 @@ export const useStudioProject = (projectId: string | undefined): UseStudioProjec
       return;
     }
 
-    const unsubscribe = ipcBridge.creativeStudio.projectUpdated.on(({ projectId: updatedProjectId }) => {
-      if (updatedProjectId === projectId) void loadProject(projectId, generation, false);
-    });
+    const unsubscribe = subscribeToUpdates
+      ? ipcBridge.creativeStudio.projectUpdated.on(({ projectId: updatedProjectId }) => {
+          if (updatedProjectId === projectId) void loadProject(projectId, generation, false);
+        })
+      : () => {};
     void loadProject(projectId, generation, true);
 
     return () => {
       if (generationRef.current === generation) generationRef.current += 1;
       unsubscribe();
     };
-  }, [loadProject, projectId]);
+  }, [loadProject, projectId, subscribeToUpdates]);
 
   const refetch = useCallback(async (): Promise<StudioRendererProject | null> => {
     if (!projectId) return null;

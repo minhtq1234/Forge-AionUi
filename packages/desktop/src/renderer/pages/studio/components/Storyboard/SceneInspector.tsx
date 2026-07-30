@@ -5,17 +5,26 @@
  */
 
 import { Button, Input, InputNumber, Select, Tabs } from '@arco-design/web-react';
+import { Picture } from '@icon-park/react';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { StudioEditableScene, StudioMediaKind, StudioScene } from '@/common/types/project/creativeStudioTypes';
+import type {
+  StudioAsset,
+  StudioEditableScene,
+  StudioMediaKind,
+  StudioScene,
+} from '@/common/types/project/creativeStudioTypes';
 
+import { createManagedStudioAssetUrl } from '../Preview/StagePreview';
 import styles from './Storyboard.module.css';
 
 type ActionResult = void | Promise<unknown>;
 
 export type SceneInspectorProps = {
+  projectId: string;
   selectedScene: StudioScene | null;
+  referenceAsset: StudioAsset | null;
   sceneDraft: StudioEditableScene | null;
   mutationPending: boolean;
   errorMessageKey?: string | null;
@@ -25,11 +34,15 @@ export type SceneInspectorProps = {
   onFlushSceneDraft: () => ActionResult;
   onRetryConflict: () => ActionResult;
   onDiscardConflict: () => ActionResult;
+  importingReference: boolean;
+  onImportReference: () => ActionResult;
 };
 
 /** Controlled scene fields. Draft ownership and persistence stay in useStoryboardEditor. */
 export const SceneInspector: React.FC<SceneInspectorProps> = ({
+  projectId,
   selectedScene,
+  referenceAsset,
   sceneDraft,
   mutationPending,
   errorMessageKey = null,
@@ -39,6 +52,8 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
   onFlushSceneDraft,
   onRetryConflict,
   onDiscardConflict,
+  importingReference,
+  onImportReference,
 }) => {
   const { t } = useTranslation();
   const [durationInvalid, setDurationInvalid] = useState(false);
@@ -67,6 +82,17 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
   const durationId = selectedScene ? `studio-scene-duration-${selectedScene.id}` : undefined;
   const narrationId = selectedScene ? `studio-scene-narration-${selectedScene.id}` : undefined;
   const onScreenTextId = selectedScene ? `studio-scene-on-screen-text-${selectedScene.id}` : undefined;
+  const referenceSource =
+    selectedScene !== null &&
+    selectedScene.referenceAssetId !== null &&
+    referenceAsset?.id === selectedScene.referenceAssetId &&
+    referenceAsset.projectId === projectId &&
+    referenceAsset.sceneId === selectedScene.id &&
+    referenceAsset.mediaKind === 'image' &&
+    referenceAsset.managedAsset.collection === 'imports' &&
+    selectedScene.assetIds.includes(referenceAsset.id)
+      ? createManagedStudioAssetUrl(projectId, referenceAsset.id)
+      : null;
 
   return (
     <section aria-label={t('conversation.creativeStudio.inspector.title')} className={styles.inspector}>
@@ -161,6 +187,45 @@ export const SceneInspector: React.FC<SceneInspectorProps> = ({
                         <div role='alert' className={`${styles.feedback} ${styles.error}`}>
                           {t('conversation.creativeStudio.inspector.invalidDuration')}
                         </div>
+                      )}
+                    </div>
+
+                    <div className={styles.field}>
+                      {referenceSource !== null && (
+                        <figure
+                          aria-label={t('conversation.creativeStudio.preview.importReference')}
+                          className='m-0 flex items-center gap-10px rounded-8px border border-border-2 bg-fill-1 p-8px'
+                        >
+                          <img
+                            alt={t('conversation.creativeStudio.preview.importReference')}
+                            className='h-48px w-72px rounded-6px object-cover'
+                            src={referenceSource}
+                          />
+                          <figcaption className='text-12px text-t-secondary'>
+                            {t('conversation.creativeStudio.preview.importReference')}
+                          </figcaption>
+                        </figure>
+                      )}
+                      <Button
+                        long
+                        disabled={importingReference || mutationPending}
+                        icon={
+                          <span aria-hidden='true'>
+                            <Picture />
+                          </span>
+                        }
+                        onClick={() => void onImportReference()}
+                      >
+                        {t(
+                          importingReference
+                            ? 'conversation.creativeStudio.preview.importing'
+                            : 'conversation.creativeStudio.preview.importReference'
+                        )}
+                      </Button>
+                      {importingReference && (
+                        <span role='status' className='sr-only'>
+                          {t('conversation.creativeStudio.preview.importing')}
+                        </span>
                       )}
                     </div>
                   </div>

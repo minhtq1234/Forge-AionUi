@@ -135,6 +135,101 @@ describe('StudioHeader', () => {
     expect(screen.queryByText('conversation.creativeStudio.draft.ready')).not.toBeInTheDocument();
     expect(screen.getByText('conversation.creativeStudio.draft.unavailable')).toBeInTheDocument();
   });
+
+  it('delegates generation review opening without submitting generation', () => {
+    const onOpenGenerationReview = vi.fn();
+
+    render(
+      <StudioHeader
+        project={project(true)}
+        planning={planning('ready', { providerId: 'operations-provider', model: 'planner-model' })}
+        planningLoading={false}
+        planningErrorMessageKey={null}
+        drafting={false}
+        onBack={vi.fn()}
+        onOpenDraft={vi.fn()}
+        onOpenGenerationReview={onOpenGenerationReview}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'conversation.creativeStudio.review.generateReadyScenes',
+      })
+    );
+
+    expect(onOpenGenerationReview).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables generation review while the action is gated or pending', () => {
+    const onOpenGenerationReview = vi.fn();
+    const view = render(
+      <StudioHeader
+        project={project(true)}
+        planning={planning('ready', { providerId: 'operations-provider', model: 'planner-model' })}
+        planningLoading={false}
+        planningErrorMessageKey={null}
+        drafting={false}
+        generationDisabled
+        onBack={vi.fn()}
+        onOpenDraft={vi.fn()}
+        onOpenGenerationReview={onOpenGenerationReview}
+      />
+    );
+
+    const action = screen.getByRole('button', {
+      name: 'conversation.creativeStudio.review.generateReadyScenes',
+    });
+    expect(action).toBeDisabled();
+    fireEvent.click(action);
+    expect(onOpenGenerationReview).not.toHaveBeenCalled();
+
+    view.rerender(
+      <StudioHeader
+        project={project(true)}
+        planning={planning('ready', { providerId: 'operations-provider', model: 'planner-model' })}
+        planningLoading={false}
+        planningErrorMessageKey={null}
+        drafting={false}
+        generationPending
+        onBack={vi.fn()}
+        onOpenDraft={vi.fn()}
+        onOpenGenerationReview={onOpenGenerationReview}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', {
+        name: 'conversation.creativeStudio.review.generateReadyScenes',
+      })
+    ).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'conversation.creativeStudio.review.generateReadyScenes',
+      })
+    );
+    expect(onOpenGenerationReview).not.toHaveBeenCalled();
+  });
+
+  it('keeps the optional generation action inert until a review handler is integrated', () => {
+    render(
+      <StudioHeader
+        project={project(true)}
+        planning={planning('ready', { providerId: 'operations-provider', model: 'planner-model' })}
+        planningLoading={false}
+        planningErrorMessageKey={null}
+        drafting={false}
+        onBack={vi.fn()}
+        onOpenDraft={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', {
+        name: 'conversation.creativeStudio.review.generateReadyScenes',
+      })
+    ).toBeDisabled();
+  });
 });
 
 describe('StoryboardDraftModal', () => {

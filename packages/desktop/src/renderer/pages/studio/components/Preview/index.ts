@@ -4,4 +4,5 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export { StagePreview, type StagePreviewProps } from './StagePreview';
+export { AssetStrip, type AssetStripProps } from './AssetStrip';
+export { createManagedStudioAssetUrl, StagePreview, type StagePreviewProps } from './StagePreview';

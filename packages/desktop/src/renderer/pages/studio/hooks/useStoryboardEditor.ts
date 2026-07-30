@@ -52,6 +52,7 @@ export type UseStoryboardEditorResult = {
   selectedScene: StudioScene | null;
   sceneDraft: StudioEditableScene | null;
   hasUnsavedSceneDrafts: boolean;
+  hasUnsavedSelectedSceneDraft: boolean;
   saveIssues: StoryboardEditorIssue[];
   selectScene: (sceneId: string) => void;
   updateSceneDraft: (patch: Partial<StudioEditableScene>) => void;
@@ -963,6 +964,7 @@ export const useStoryboardEditor = ({
     selectedScene,
     sceneDraft,
     hasUnsavedSceneDrafts: dirtySceneIdsRef.current.size > 0,
+    hasUnsavedSelectedSceneDraft: selectedSceneId !== null && dirtySceneIdsRef.current.has(selectedSceneId),
     saveIssues,
     selectScene,
     updateSceneDraft,

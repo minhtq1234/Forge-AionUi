@@ -312,6 +312,7 @@ const toRendererJob = (job: StudioJob): StudioRendererJob => ({
   provider: { ...job.provider },
   outputAssetIds: [...job.outputAssetIds],
   error: job.error === null ? null : { ...job.error },
+  canRetryDownload: job.status === 'failed' && job.error?.code === 'download_failed' && job.providerJobId !== null,
   ...(job.progress === undefined ? {} : { progress: job.progress }),
   retryOfJobId: job.retryOfJobId,
   retryReason: job.retryReason,
