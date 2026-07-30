@@ -9,7 +9,7 @@ import http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import os from 'os';
-import { getDevAppName } from '@/common/platform';
+import { getDevAppName, getIsolatedE2EUserDataPath } from '@/common/platform';
 import { applyGpuRecoveryFlags } from './gpuRecovery';
 
 // ============ Environment Separation ============
@@ -17,7 +17,10 @@ import { applyGpuRecoveryFlags } from './gpuRecovery';
 // Note: getPlatformServices() auto-registration also applies this as a safety net
 // in case Rollup loads initStorage's chunk before this module runs.
 // 开发模式下设置独立 app 名称，userData 目录将与正式版隔离，允许同时运行
-if (!app.isPackaged) {
+const isolatedE2EUserDataPath = app.isPackaged ? null : getIsolatedE2EUserDataPath();
+if (isolatedE2EUserDataPath) {
+  app.setPath('userData', isolatedE2EUserDataPath);
+} else if (!app.isPackaged) {
   const devAppName = getDevAppName();
   app.setName(devAppName);
   // In Electron 28+, setName alone no longer updates userData path on macOS.

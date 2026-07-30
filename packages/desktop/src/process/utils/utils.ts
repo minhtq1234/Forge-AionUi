@@ -5,7 +5,7 @@
  */
 
 import type { IDirOrFile } from '@/common/adapter/ipcBridge';
-import { getPlatformServices } from '@/common/platform';
+import { getPlatformServices, isIsolatedE2EUserDataPath } from '@/common/platform';
 import { getEnvAwareName } from '@/common/config/appEnv';
 import { existsSync, lstatSync, mkdirSync, readlinkSync, realpathSync, symlinkSync, unlinkSync } from 'fs';
 import fs from 'fs/promises';
@@ -98,6 +98,7 @@ const ensureCliSafeSymlink = (targetPath: string, symlinkName: string): string =
 export const getDataPath = (): string => {
   const rootPath = getElectronPathOrFallback('userData');
   const dataPath = path.join(rootPath, 'aionui');
+  if (isIsolatedE2EUserDataPath(rootPath)) return dataPath;
   return ensureCliSafeSymlink(dataPath, getEnvAwareName('.aionui'));
 };
 
@@ -110,6 +111,7 @@ export const getDataPath = (): string => {
 export const getConfigPath = (): string => {
   const rootPath = getElectronPathOrFallback('userData');
   const configPath = path.join(rootPath, 'config');
+  if (isIsolatedE2EUserDataPath(rootPath)) return configPath;
   return ensureCliSafeSymlink(configPath, getEnvAwareName('.aionui-config'));
 };
 

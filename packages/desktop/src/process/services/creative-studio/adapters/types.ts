@@ -104,7 +104,13 @@ export type ProviderHttpResponse = { status: number; json: () => Promise<unknown
 
 export type ProviderFetch = (
   url: string,
-  init: { method: string; headers: Record<string, string>; body?: string; signal: AbortSignal }
+  init: {
+    method: string;
+    headers: Record<string, string>;
+    body?: string;
+    signal: AbortSignal;
+    redirect?: RequestRedirect;
+  }
 ) => Promise<ProviderHttpResponse>;
 
 /**

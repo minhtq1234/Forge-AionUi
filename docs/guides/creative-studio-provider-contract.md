@@ -106,8 +106,13 @@ validated `weprompt-media-gateway-v1` binding. WePrompt never infers gateway
 support from an arbitrary custom provider URL.
 
 The gateway uses the base URL and API key from the selected WePrompt provider
-row. The base URL may be HTTP or HTTPS but cannot contain user information, a
-query, or a fragment. Every request receives:
+row. Remote gateways must use HTTPS. Plain HTTP is allowed only for an exact
+IP-literal loopback host (`127.0.0.1` or `[::1]`) or an IPv4 address in
+`10.0.0.0/8`, `172.16.0.0/12`, or `192.168.0.0/16`. Hostnames, wildcard
+listener addresses, link-local and metadata addresses, CGNAT, and public HTTP
+addresses are rejected. The base URL cannot contain user information, a query,
+or a fragment. Redirects are rejected for every credentialed gateway request.
+Every request receives:
 
 ```text
 Authorization: Bearer <provider api key>
@@ -257,10 +262,11 @@ polling.
 
 Output URLs must be HTTP or HTTPS, contain no embedded credentials, and be at
 most 16 KiB. Public output URLs must use HTTPS. Plain HTTP is usable only at
-the exact configured trusted private gateway origin when every DNS answer is
-allowed-private; the downstream media downloader revalidates the origin, DNS,
-redirects, size, and media signature before persistence. Temporary output URLs
-must not be logged or returned to the renderer.
+the exact configured RFC1918 gateway origin; the downstream media downloader
+revalidates the origin, redirects, size, and media signature before persistence.
+Temporary output URLs must not be logged or returned to the renderer. The
+loopback API exception does not relax the media policy: loopback output URLs are
+rejected.
 
 ### Cancellation and errors
 

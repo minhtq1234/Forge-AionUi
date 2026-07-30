@@ -11,6 +11,7 @@ import { channelItemById, webuiTabByKey } from './selectors';
 
 export const ROUTES = {
   guid: '#/guid',
+  studio: '#/studio',
   settings: {
     gemini: '#/settings/gemini',
     model: '#/settings/model',

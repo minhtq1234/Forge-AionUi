@@ -1237,6 +1237,50 @@ describe('createStudioMediaStore', () => {
     expect(storyboard).not.toContain('http');
   });
 
+  it('rejects an export directory swapped for a symlink before writing asset bytes', async () => {
+    const { rootDir, store } = await makeStore();
+    const sourcePath = path.join(rootDir, 'reference.png');
+    await fs.writeFile(sourcePath, png);
+    const seedMedia = createStudioMediaStore({ store, createId: () => 'asset_1' });
+    await seedMedia.importReferenceFromPath({
+      projectId: 'project_1',
+      sourcePath,
+      expectedRevision: 1,
+    });
+    const destination = await fs.mkdtemp(path.join(os.tmpdir(), 'studio-export-swap-'));
+    const redirected = await fs.mkdtemp(path.join(os.tmpdir(), 'studio-export-redirected-'));
+    created.push(destination, redirected);
+    await fs.mkdir(path.join(redirected, 'references'));
+    const exportDirectory = path.join(destination, 'Film-20260730-120000');
+    const displacedDirectory = path.join(destination, 'displaced-export');
+    let armed = true;
+    const racingStore: CreativeStudioStore = {
+      ...store,
+      async getVerifiedProjectDirectory(projectId) {
+        if (armed) {
+          armed = false;
+          await fs.rename(exportDirectory, displacedDirectory);
+          await fs.symlink(redirected, exportDirectory, process.platform === 'win32' ? 'junction' : 'dir');
+        }
+        return store.getVerifiedProjectDirectory(projectId);
+      },
+    };
+    const media = createStudioMediaStore({ store: racingStore });
+
+    await expect(
+      media.exportAssetsToDirectory({
+        projectId: 'project_1',
+        destinationDirectory: destination,
+        includeReferences: true,
+        timestamp: '20260730-120000',
+      })
+    ).rejects.toMatchObject<Partial<CreativeStudioMediaError>>({ code: 'storage_error' });
+    await expect(fs.access(path.join(redirected, 'references', 'asset_1.png'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    await expect(fs.access(path.join(redirected, 'storyboard.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('returns a bounded main-only provider data URL after revalidating managed bytes', async () => {
     const { rootDir, store } = await makeStore();
     const sourcePath = path.join(rootDir, 'reference.png');

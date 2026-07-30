@@ -5,7 +5,7 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto';
-import { createReadStream, createWriteStream, promises as fs } from 'node:fs';
+import { constants as fsConstants, createReadStream, createWriteStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { PassThrough, Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -179,6 +179,36 @@ const truncateUtf8 = (value: string, maxBytes: number): string => {
   return result;
 };
 
+type FileIdentity = { dev: string; ino: string };
+
+type VerifiedDirectory = {
+  directory: string;
+  identity: FileIdentity;
+};
+
+const fileIdentity = (stats: { dev: number | bigint; ino: number | bigint }): FileIdentity => ({
+  dev: String(stats.dev),
+  ino: String(stats.ino),
+});
+
+const captureVerifiedDirectory = async (directory: string): Promise<VerifiedDirectory> => {
+  try {
+    const stats = await fs.lstat(directory);
+    if (!stats.isDirectory() || stats.isSymbolicLink()) throw new CreativeStudioMediaError('storage_error');
+    return { directory, identity: fileIdentity(stats) };
+  } catch (error) {
+    if (error instanceof CreativeStudioMediaError) throw error;
+    throw new CreativeStudioMediaError('storage_error');
+  }
+};
+
+const assertVerifiedDirectory = async (expected: VerifiedDirectory): Promise<void> => {
+  const current = await captureVerifiedDirectory(expected.directory);
+  if (current.identity.dev !== expected.identity.dev || current.identity.ino !== expected.identity.ino) {
+    throw new CreativeStudioMediaError('storage_error');
+  }
+};
+
 /** Produces a portable basename; callers still acquire the directory atomically. */
 export const sanitizeStudioExportFolderName = (projectName: string): string => {
   const sanitized = projectName
@@ -193,11 +223,9 @@ export const acquireStudioExportDirectory = async (
   destinationDirectory: string,
   projectName: string,
   timestamp: string
-): Promise<{ folderName: string; directory: string }> => {
+): Promise<{ folderName: string; directory: string; identity: FileIdentity }> => {
   if (!/^\d{8}-\d{6}$/.test(timestamp)) throw new CreativeStudioMediaError('storage_error');
-  const destinationStats = await fs.lstat(destinationDirectory);
-  if (!destinationStats.isDirectory() || destinationStats.isSymbolicLink())
-    throw new CreativeStudioMediaError('storage_error');
+  const verifiedDestination = await captureVerifiedDirectory(destinationDirectory);
   const sanitizedProjectName = sanitizeStudioExportFolderName(projectName);
   for (let suffix = 1; suffix < 10_000; suffix += 1) {
     const suffixText = `-${timestamp}${suffix === 1 ? '' : `-${suffix}`}`;
@@ -208,10 +236,14 @@ export const acquireStudioExportDirectory = async (
     const directory = path.join(destinationDirectory, folderName);
     if (path.dirname(directory) !== destinationDirectory) throw new CreativeStudioMediaError('storage_error');
     try {
+      await assertVerifiedDirectory(verifiedDestination);
       await fs.mkdir(directory);
-      return { folderName, directory };
+      const verifiedDirectory = await captureVerifiedDirectory(directory);
+      await assertVerifiedDirectory(verifiedDestination);
+      return { folderName, directory, identity: verifiedDirectory.identity };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw new CreativeStudioMediaError('storage_error');
+      await assertVerifiedDirectory(verifiedDestination);
     }
   }
   throw new CreativeStudioMediaError('storage_error');
@@ -230,13 +262,6 @@ type VerifiedReadExpectation = {
   sha256: string;
   mimeType: string;
 };
-
-type FileIdentity = { dev: string; ino: string };
-
-const fileIdentity = (stats: { dev: number | bigint; ino: number | bigint }): FileIdentity => ({
-  dev: String(stats.dev),
-  ino: String(stats.ino),
-});
 
 /** Opens a file only after comparing path and descriptor identity, so a swap after validation is rejected. */
 export const openVerifiedReadStream = async (
@@ -429,6 +454,89 @@ const unlinkIfIdentityMatches = async (filePath: string, expected: FileIdentity)
     }
   } catch {
     // Cleanup is best-effort and never broadens to an unverified replacement.
+  }
+};
+
+const assertVerifiedDirectories = async (directories: VerifiedDirectory[]): Promise<void> => {
+  await Promise.all(directories.map(assertVerifiedDirectory));
+};
+
+const createVerifiedExportSubdirectory = async (
+  parent: VerifiedDirectory,
+  name: string
+): Promise<VerifiedDirectory> => {
+  const directory = path.join(parent.directory, name);
+  if (path.dirname(directory) !== parent.directory) throw new CreativeStudioMediaError('storage_error');
+  try {
+    await assertVerifiedDirectory(parent);
+    await fs.mkdir(directory);
+    const verified = await captureVerifiedDirectory(directory);
+    await assertVerifiedDirectory(parent);
+    return verified;
+  } catch (error) {
+    if (error instanceof CreativeStudioMediaError) throw error;
+    throw new CreativeStudioMediaError('storage_error');
+  }
+};
+
+/**
+ * Opens a fresh export file without following its final component, verifies the
+ * parent identity again before any bytes are written, and keeps all writes on
+ * that descriptor if the pathname is moved later.
+ */
+const writeVerifiedExportFile = async (
+  filePath: string,
+  parent: VerifiedDirectory,
+  ancestors: VerifiedDirectory[],
+  write: (handle: Awaited<ReturnType<typeof fs.open>>) => Promise<void>
+): Promise<void> => {
+  if (path.dirname(filePath) !== parent.directory) throw new CreativeStudioMediaError('storage_error');
+  const directories = [...ancestors, parent];
+  let handle: Awaited<ReturnType<typeof fs.open>> | null = null;
+  let openedIdentity: FileIdentity | null = null;
+  const closeHandle = async (): Promise<void> => {
+    if (handle === null) return;
+    const openedHandle = handle;
+    handle = null;
+    await openedHandle.close().catch((): undefined => undefined);
+  };
+  try {
+    await assertVerifiedDirectories(directories);
+    handle = await fs.open(
+      filePath,
+      fsConstants.O_WRONLY |
+        fsConstants.O_CREAT |
+        fsConstants.O_EXCL |
+        (typeof fsConstants.O_NOFOLLOW === 'number' ? fsConstants.O_NOFOLLOW : 0)
+    );
+    const opened = await handle.stat();
+    openedIdentity = fileIdentity(opened);
+    if (!opened.isFile()) throw new CreativeStudioMediaError('storage_error');
+    await assertVerifiedDirectories(directories);
+    const beforeWritePath = await regularFile(filePath);
+    const beforeWriteIdentity = fileIdentity(beforeWritePath);
+    if (beforeWriteIdentity.dev !== openedIdentity.dev || beforeWriteIdentity.ino !== openedIdentity.ino) {
+      throw new CreativeStudioMediaError('storage_error');
+    }
+    await write(handle);
+    const after = await handle.stat();
+    const afterIdentity = fileIdentity(after);
+    if (!after.isFile() || afterIdentity.dev !== openedIdentity.dev || afterIdentity.ino !== openedIdentity.ino) {
+      throw new CreativeStudioMediaError('storage_error');
+    }
+    await assertVerifiedDirectories(directories);
+    const afterWritePath = await regularFile(filePath);
+    const afterWritePathIdentity = fileIdentity(afterWritePath);
+    if (afterWritePathIdentity.dev !== openedIdentity.dev || afterWritePathIdentity.ino !== openedIdentity.ino) {
+      throw new CreativeStudioMediaError('storage_error');
+    }
+  } catch (error) {
+    await closeHandle();
+    if (openedIdentity !== null) await unlinkIfIdentityMatches(filePath, openedIdentity);
+    if (error instanceof CreativeStudioMediaError) throw error;
+    throw new CreativeStudioMediaError('storage_error');
+  } finally {
+    await closeHandle();
   }
 };
 
@@ -1089,11 +1197,12 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
     const project = await deps.store.getProject(input.projectId);
     if (!project) throw new CreativeStudioMediaError('not_found');
     const timestamp = input.timestamp ?? new Date().toISOString().replace(/[-:]/g, '').slice(0, 15).replace('T', '-');
-    const { directory, folderName } = await acquireStudioExportDirectory(
+    const { directory, folderName, identity } = await acquireStudioExportDirectory(
       input.destinationDirectory,
       project.name,
       timestamp
     );
+    const verifiedExportDirectory: VerifiedDirectory = { directory, identity };
     const exported: Array<{ assetId: string; fileName: string }> = [];
     const missingSceneIds: string[] = [];
     for (const [index, sceneId] of project.sceneOrder.entries()) {
@@ -1105,24 +1214,35 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
       }
       const extension = path.extname(resolved.asset.managedAsset.fileName).toLowerCase();
       const fileName = `scene-${String(index + 1).padStart(2, '0')}${extension}`;
-      await pipeline(
-        await resolved.openVerifiedStream(),
-        createWriteStream(path.join(directory, fileName), { flags: 'wx' })
-      );
+      await writeVerifiedExportFile(path.join(directory, fileName), verifiedExportDirectory, [], async (handle) => {
+        await pipeline(
+          await resolved.openVerifiedStream(),
+          createWriteStream(path.join(directory, fileName), { fd: handle.fd, autoClose: false })
+        );
+      });
       exported.push({ assetId: resolved.asset.id, fileName });
     }
     if (input.includeReferences) {
-      const referenceDirectory = path.join(directory, 'references');
-      await fs.mkdir(referenceDirectory);
+      const verifiedReferenceDirectory = await createVerifiedExportSubdirectory(verifiedExportDirectory, 'references');
       for (const referenceAsset of Object.values(project.assets).filter(
         (candidate) => candidate.managedAsset.collection === 'imports'
       )) {
         const resolved = await resolveAsset(input.projectId, referenceAsset.id);
         if (!resolved) continue;
         const fileName = resolved.asset.managedAsset.fileName;
-        await pipeline(
-          await resolved.openVerifiedStream(),
-          createWriteStream(path.join(referenceDirectory, fileName), { flags: 'wx' })
+        await writeVerifiedExportFile(
+          path.join(verifiedReferenceDirectory.directory, fileName),
+          verifiedReferenceDirectory,
+          [verifiedExportDirectory],
+          async (handle) => {
+            await pipeline(
+              await resolved.openVerifiedStream(),
+              createWriteStream(path.join(verifiedReferenceDirectory.directory, fileName), {
+                fd: handle.fd,
+                autoClose: false,
+              })
+            );
+          }
         );
         exported.push({ assetId: referenceAsset.id, fileName: `references/${fileName}` });
       }
@@ -1151,10 +1271,14 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
         };
       }),
     };
-    await fs.writeFile(path.join(directory, 'storyboard.json'), JSON.stringify(storyboard, null, 2), {
-      encoding: 'utf8',
-      flag: 'wx',
-    });
+    await writeVerifiedExportFile(
+      path.join(directory, 'storyboard.json'),
+      verifiedExportDirectory,
+      [],
+      async (handle) => {
+        await handle.writeFile(JSON.stringify(storyboard, null, 2), { encoding: 'utf8' });
+      }
+    );
     return { folderName, exported, missingSceneIds };
   };
 

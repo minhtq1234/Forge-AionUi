@@ -323,9 +323,69 @@ describe('Creative Studio provider adapters', () => {
       adapter.poll?.('gateway_1', provider({ base_url: 'ftp://gateway.example' }), signal)
     ).rejects.toMatchObject({ code: 'unsupported' });
     await expect(
+      adapter.poll?.('gateway_1', provider({ base_url: 'http://gateway.internal:8080' }), signal)
+    ).rejects.toMatchObject({ code: 'unsupported' });
+    await expect(
       adapter.cancel?.('gateway_1', provider({ base_url: 'https://gateway.example', api_key: '' }), signal)
     ).rejects.toMatchObject({ code: 'auth' });
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'http://gateway.example',
+    'http://gateway.internal:8080',
+    'http://localhost:8080',
+    'http://0.0.0.0:8080',
+    'http://8.8.8.8:8080',
+    'http://11.0.0.1:8080',
+    'http://100.64.0.1:8080',
+    'http://127.0.0.2:8080',
+    'http://169.254.169.254:8080',
+    'http://172.15.255.255:8080',
+    'http://172.32.0.0:8080',
+    'http://192.167.255.255:8080',
+    'http://192.169.0.0:8080',
+    'http://[fc00::1]:8080',
+    'http://[fe80::1]:8080',
+    'http://[2001:4860:4860::8888]:8080',
+  ])('rejects bearer gateway calls over untrusted HTTP at %s', async (baseUrl) => {
+    const fetch = vi.fn();
+    const adapter = createMediaGatewayAdapter({ fetch });
+    const gateway = provider({ base_url: baseUrl, use_model: 'open-sora' });
+    const signal = new AbortController().signal;
+
+    expect(adapter.validateRequest(request, gateway)).toEqual({
+      ok: false,
+      issues: [{ code: 'provider_unavailable' }],
+    });
+    await expect(adapter.validateConnection({ model: 'open-sora' }, gateway, signal)).resolves.toEqual({
+      ok: false,
+      error: { code: 'unsupported' },
+    });
+    await expect(adapter.submit(request, gateway, signal)).rejects.toMatchObject({ code: 'unsupported' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'http://127.0.0.1:8080',
+    'http://[::1]:8080',
+    'http://10.0.0.1:8080',
+    'http://10.255.255.254:8080',
+    'http://172.16.0.1:8080',
+    'http://172.31.255.254:8080',
+    'http://192.168.0.1:8080',
+    'http://192.168.255.254:8080',
+  ])('allows an explicitly configured loopback or RFC1918 IP-literal HTTP gateway at %s', async (baseUrl) => {
+    const fetch = vi.fn(async () => response(202, { id: 'gateway_1', status: 'queued' }));
+    const adapter = createMediaGatewayAdapter({ fetch });
+    const gateway = provider({ base_url: baseUrl, use_model: 'open-sora' });
+
+    expect(adapter.validateRequest(request, gateway)).toMatchObject({ ok: true });
+    await expect(adapter.submit(request, gateway, new AbortController().signal)).resolves.toEqual({
+      kind: 'remote',
+      providerJobId: 'gateway_1',
+    });
+    expect(fetch).toHaveBeenCalledOnce();
   });
 
   it('distinguishes unsupported provider configuration from missing credentials during validation', async () => {
@@ -667,6 +727,43 @@ describe('Creative Studio provider adapters', () => {
     });
   });
 
+  it('rejects redirects for every credentialed gateway operation', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(200, {
+          schema_version: 1,
+          media_kinds: ['video'],
+          models: ['open-sora'],
+          video: {
+            audio_modes: ['none'],
+            aspect_ratios: ['16:9'],
+            resolutions: ['720p'],
+            min_duration_seconds: 2,
+            max_duration_seconds: 12,
+          },
+        })
+      )
+      .mockResolvedValueOnce(response(202, { id: 'gateway_1', status: 'queued' }))
+      .mockResolvedValueOnce(response(200, { id: 'gateway_1', status: 'running' }))
+      .mockResolvedValueOnce(response(204, undefined, true));
+    const adapter = createMediaGatewayAdapter({ fetch });
+    const gateway = provider({ base_url: 'https://gateway.example', use_model: 'open-sora' });
+    const signal = new AbortController().signal;
+
+    await adapter.validateConnection({ model: 'open-sora' }, gateway, signal);
+    await adapter.submit(request, gateway, signal);
+    await adapter.poll?.('gateway_1', gateway, signal);
+    await adapter.cancel?.('gateway_1', gateway, signal);
+
+    expect(fetch.mock.calls.map(([, init]) => (init as { redirect?: string }).redirect)).toEqual([
+      'error',
+      'error',
+      'error',
+      'error',
+    ]);
+  });
+
   it('rejects a gateway that cannot produce silent video and maps an async job', async () => {
     const unsupported = createMediaGatewayAdapter({
       fetch: async () => response(200, { video: { audio_modes: ['stereo'] } }),
@@ -813,8 +910,8 @@ describe('Creative Studio provider adapters', () => {
     expect(fetch.mock.calls[1]?.[0]).toBe('https://gateway.example/v1/generations/gateway_1/cancel');
   });
 
-  it('preserves valid gateway progress, accepts trusted-private http candidates, and ignores invalid progress', async () => {
-    const gateway = provider({ base_url: 'http://gateway.internal:8080', use_model: 'open-sora' });
+  it('preserves valid gateway progress and ignores invalid progress', async () => {
+    const gateway = provider({ base_url: 'https://gateway.example', use_model: 'open-sora' });
     const running = createMediaGatewayAdapter({
       fetch: async () => response(200, { id: 'gateway_1', status: 'running', progress: 42 }),
     });
@@ -833,7 +930,7 @@ describe('Creative Studio provider adapters', () => {
     const synchronous = createMediaGatewayAdapter({
       fetch: async () =>
         response(200, {
-          outputs: [{ url: 'http://gateway.internal:8080/output/video.mp4', mime_type: 'video/mp4' }],
+          outputs: [{ url: 'https://gateway.example/output/video.mp4', mime_type: 'video/mp4' }],
         }),
     });
     await expect(synchronous.submit(request, gateway, new AbortController().signal)).resolves.toEqual({
@@ -842,7 +939,7 @@ describe('Creative Studio provider adapters', () => {
         {
           mediaKind: 'video',
           role: 'primary',
-          source: { kind: 'url', url: 'http://gateway.internal:8080/output/video.mp4' },
+          source: { kind: 'url', url: 'https://gateway.example/output/video.mp4' },
           mimeType: 'video/mp4',
         },
       ],

@@ -26,6 +26,7 @@ const FIRST_FRAME_MAX_BYTES = 30 * 1024 * 1024;
 const VALIDATION_TIMEOUT_MS = 10_000;
 const ASPECT_RATIOS = new Set(['16:9', '9:16', '1:1', '4:3', '3:4']);
 const RESOLUTIONS = new Set(['720p', '1080p']);
+const HTTP_LOOPBACK_HOSTS = new Set(['127.0.0.1', '[::1]']);
 
 export class MediaGatewayAdapterError extends Error {
   readonly code: SanitizedProviderError['code'];
@@ -39,6 +40,20 @@ export class MediaGatewayAdapterError extends Error {
 
 export type MediaGatewayAdapterDeps = { fetch?: ProviderFetch; validationTimeoutMs?: number };
 
+const isAllowedHttpGatewayHost = (hostname: string): boolean => {
+  if (HTTP_LOOPBACK_HOSTS.has(hostname)) return true;
+  const octets = hostname.split('.').map(Number);
+  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+    return false;
+  }
+  const [first, second] = octets;
+  return (
+    first === 10 ||
+    (first === 172 && second !== undefined && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
+};
+
 const normalizedBaseUrl = (value: string): string | null => {
   try {
     const url = new URL(value);
@@ -47,7 +62,7 @@ const normalizedBaseUrl = (value: string): string | null => {
       url.password ||
       url.search ||
       url.hash ||
-      (url.protocol !== 'https:' && url.protocol !== 'http:')
+      (url.protocol !== 'https:' && (url.protocol !== 'http:' || !isAllowedHttpGatewayHost(url.hostname)))
     )
       return null;
     return url.toString().replace(/\/$/, '');
@@ -257,6 +272,7 @@ export const createMediaGatewayAdapter = (deps: MediaGatewayAdapterDeps = {}): G
     try {
       response = await fetcher(`${baseUrl}${path}`, {
         ...init,
+        redirect: 'error',
         headers: { Authorization: `Bearer ${provider.api_key}`, 'Content-Type': 'application/json' },
       });
     } catch (error) {

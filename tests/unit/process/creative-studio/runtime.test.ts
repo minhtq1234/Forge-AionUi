@@ -369,12 +369,16 @@ describe('Creative Studio E2E fake gate', () => {
     ).toBe(false);
   });
 
-  it('does not construct or expose the fake provider when either flag is absent', async () => {
-    const { captures } = createHarness({ AIONUI_E2E_TEST: '1' });
+  it.each([{ AIONUI_E2E_TEST: '1' }, { AIONUI_E2E_STUDIO_FAKE: '1' }] as const)(
+    'does not install the fake bundle when only one gate flag is present: %o',
+    async (environment) => {
+      const { runtime, captures } = createHarness(environment);
 
-    await expect(captures.resolverInput?.listProviders()).resolves.toEqual([provider()]);
-    await expect(captures.resolverInput?.listConnections()).resolves.toEqual([]);
-  });
+      expect(runtime.adapterRegistry.size).toBe(0);
+      await expect(captures.resolverInput?.listProviders()).resolves.toEqual([provider()]);
+      await expect(captures.resolverInput?.listConnections()).resolves.toEqual([]);
+    }
+  );
 
   it('does not construct or expose the fake provider in a packaged runtime even with both flags', async () => {
     const { captures } = createHarness({ AIONUI_E2E_TEST: '1', AIONUI_E2E_STUDIO_FAKE: '1' }, { isPackaged: true });

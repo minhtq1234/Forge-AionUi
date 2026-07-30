@@ -13,6 +13,18 @@ export function getDevAppName(): string {
   return isMultiInstance ? 'Forge-Dev-2' : 'Forge-Dev';
 }
 
+/** Resolve the explicit per-run Electron profile used by isolated E2E launches. */
+export function getIsolatedE2EUserDataPath(): string | null {
+  if (process.env.AIONUI_E2E_TEST !== '1') return null;
+  const candidate = process.env.AIONUI_E2E_USER_DATA_DIR?.trim();
+  return candidate ? path.resolve(candidate) : null;
+}
+
+export function isIsolatedE2EUserDataPath(userDataPath: string): boolean {
+  const isolatedPath = getIsolatedE2EUserDataPath();
+  return isolatedPath !== null && path.resolve(userDataPath) === isolatedPath;
+}
+
 export function registerPlatformServices(services: IPlatformServices): void {
   _services = services;
 }
@@ -39,7 +51,10 @@ export function getPlatformServices(): IPlatformServices {
         // Dev isolation: set app name before any getPath('userData') call.
         // Rollup may load this chunk before configureChromium.ts runs, so we
         // must apply the dev name here as a safety net.
-        if (!app.isPackaged) {
+        const isolatedE2EUserDataPath = app.isPackaged ? null : getIsolatedE2EUserDataPath();
+        if (isolatedE2EUserDataPath) {
+          app.setPath('userData', isolatedE2EUserDataPath);
+        } else if (!app.isPackaged) {
           const devAppName = getDevAppName();
           app.setName(devAppName);
           app.setPath('userData', path.join(path.dirname(app.getPath('userData')), devAppName));

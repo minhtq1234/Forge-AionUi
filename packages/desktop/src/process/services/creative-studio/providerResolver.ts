@@ -183,6 +183,16 @@ const configuredRoute = (value: unknown, providers: IProvider[]): StudioProvider
   return { providerId: provider.id, adapterId: imageAdapter, model: candidate.use_model };
 };
 
+const resolvePlanningReadiness = async (
+  getPlanningReadiness: StudioProviderResolverDeps['getPlanningReadiness']
+): Promise<PlanningReadiness> => {
+  try {
+    return await getPlanningReadiness();
+  } catch {
+    return { setting: { mode: 'auto' }, health: 'unavailable' };
+  }
+};
+
 /** Resolves fresh AionCore provider rows into renderer-safe connection candidates and routes. */
 export const createStudioProviderResolver = (deps: StudioProviderResolverDeps): StudioProviderResolver => {
   const listConnectionCandidates = async (): Promise<StudioConnectionCandidate[]> => {
@@ -205,7 +215,7 @@ export const createStudioProviderResolver = (deps: StudioProviderResolverDeps): 
     const [providers, settings, planning, connections] = await Promise.all([
       deps.listProviders(),
       deps.getClientSettings(),
-      deps.getPlanningReadiness(),
+      resolvePlanningReadiness(deps.getPlanningReadiness),
       deps.listConnections(),
     ]);
     const routes: StudioRouteCatalog['automatic'] = [];

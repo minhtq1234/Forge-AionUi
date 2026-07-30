@@ -6,7 +6,7 @@
 
 import type { StudioRendererProject, StudioRouteCatalog } from '@/common/types/project/creativeStudioTypes';
 import { Button, Tag } from '@arco-design/web-react';
-import { Left, Magic, VideoOne } from '@icon-park/react';
+import { Download, Left, Magic, VideoOne } from '@icon-park/react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -19,9 +19,12 @@ export type StudioHeaderProps = {
   draftDisabled?: boolean;
   generationDisabled?: boolean;
   generationPending?: boolean;
+  exportDisabled?: boolean;
+  exportPending?: boolean;
   onBack: () => void;
   onOpenDraft: () => void;
   onOpenGenerationReview?: () => void;
+  onOpenExport?: () => void;
 };
 
 const StudioHeader: React.FC<StudioHeaderProps> = ({
@@ -33,9 +36,12 @@ const StudioHeader: React.FC<StudioHeaderProps> = ({
   draftDisabled = false,
   generationDisabled = false,
   generationPending = false,
+  exportDisabled = false,
+  exportPending = false,
   onBack,
   onOpenDraft,
   onOpenGenerationReview,
+  onOpenExport,
 }) => {
   const { t } = useTranslation();
   const isChecking = planningLoading || planning?.health === 'checking';
@@ -69,6 +75,14 @@ const StudioHeader: React.FC<StudioHeaderProps> = ({
         </div>
 
         <div className='flex flex-wrap items-center gap-8px'>
+          <Button
+            icon={<Download />}
+            loading={exportPending}
+            disabled={exportDisabled || exportPending || onOpenExport === undefined}
+            onClick={onOpenExport}
+          >
+            {t('conversation.creativeStudio.export.action')}
+          </Button>
           <Button
             icon={
               <span aria-hidden='true'>

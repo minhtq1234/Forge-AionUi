@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Button, Modal, Spin } from '@arco-design/web-react';
+import { Button, Checkbox, Modal, Spin } from '@arco-design/web-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -162,6 +162,12 @@ const StudioProjectShell: React.FC = () => {
     sceneId: string;
     messageKey: string;
   } | null>(null);
+  const [exportVisible, setExportVisible] = useState(false);
+  const [exportPending, setExportPending] = useState(false);
+  const [exportIncludeReferences, setExportIncludeReferences] = useState(false);
+  const [exportedFolderName, setExportedFolderName] = useState<string | null>(null);
+  const [exportMissingSceneIds, setExportMissingSceneIds] = useState<string[]>([]);
+  const [exportIssueMessageKey, setExportIssueMessageKey] = useState<string | null>(null);
   const headerBatchLoadingRef = useRef(false);
   const generationReviewRefreshingRef = useRef(false);
   const variationPendingRef = useRef(false);
@@ -211,6 +217,23 @@ const StudioProjectShell: React.FC = () => {
         (scene) => project !== null && sceneCanOpenSingleReview(project, scene) && scene.selectedAssetId === null
       ),
     [canonicalOrderedScenes, project]
+  );
+  const hasSelectedExportAssets = useMemo(
+    () =>
+      project !== null &&
+      project.sceneOrder.some((sceneId) => {
+        const scene = project.scenes[sceneId];
+        if (scene?.selectedAssetId === null || scene?.selectedAssetId === undefined) return false;
+        const selected = project.assets[scene.selectedAssetId];
+        return (
+          selected?.projectId === project.id &&
+          selected.sceneId === scene.id &&
+          selected.mediaKind === scene.mediaKind &&
+          selected.managedAsset.collection === 'assets' &&
+          scene.assetIds.includes(selected.id)
+        );
+      }),
+    [project]
   );
   const selectedScene =
     project !== null && editor.selectedSceneId !== null ? (project.scenes[editor.selectedSceneId] ?? null) : null;
@@ -269,6 +292,7 @@ const StudioProjectShell: React.FC = () => {
     editor.drafting ||
     canonicalMutationPending ||
     referenceImportSceneId !== null;
+  const exportBlocked = generationBlocked;
   const generationActionIssue =
     studioJobs.issue?.jobId !== undefined && selectedSceneJobs.some((job) => job.id === studioJobs.issue?.jobId)
       ? {
@@ -618,6 +642,30 @@ const StudioProjectShell: React.FC = () => {
     }
   }, [editor, refetch, referenceImportSceneId, studioJobs.mutationPending, variationPending]);
 
+  const handleExportAssets = useCallback(async (): Promise<void> => {
+    if (exportBlocked || exportPending || project === null) return;
+    setExportIssueMessageKey(null);
+    setExportPending(true);
+    try {
+      const result = await ipcBridge.creativeStudio.chooseAndExportAssets.invoke({
+        projectId: project.id,
+        includeReferences: exportIncludeReferences,
+      });
+      if (result.ok === false) {
+        setExportIssueMessageKey(result.error.messageKey);
+      } else if (result.data.status === 'exported') {
+        setExportedFolderName(result.data.folderName);
+        setExportMissingSceneIds(result.data.missingSceneIds);
+      } else {
+        setExportVisible(false);
+      }
+    } catch {
+      setExportIssueMessageKey('conversation.creativeStudio.export.failed');
+    } finally {
+      setExportPending(false);
+    }
+  }, [exportBlocked, exportIncludeReferences, exportPending, project]);
+
   if (loading) {
     return (
       <div className={styles.centered}>
@@ -656,7 +704,8 @@ const StudioProjectShell: React.FC = () => {
           referenceImportSceneId !== null ||
           generationReview !== null ||
           connectionVisible ||
-          duplicateChargeJobId !== null
+          duplicateChargeJobId !== null ||
+          exportVisible
         }
       />
       {(errorMessageKey || headerGenerationIssue) && (
@@ -673,9 +722,19 @@ const StudioProjectShell: React.FC = () => {
         draftDisabled={nonDraftConflict !== null}
         generationDisabled={generationBlocked || readyScenes.length === 0}
         generationPending={headerBatchLoading || studioJobs.mutationPending}
+        exportDisabled={exportBlocked}
+        exportPending={exportPending}
         onBack={() => navigate('/studio')}
         onOpenDraft={() => setDraftModalVisible(true)}
         onOpenGenerationReview={() => void openHeaderBatchReview()}
+        onOpenExport={() => {
+          if (exportBlocked) return;
+          setExportIncludeReferences(false);
+          setExportedFolderName(null);
+          setExportMissingSceneIds([]);
+          setExportIssueMessageKey(null);
+          setExportVisible(true);
+        }}
       />
       <div className={styles.editorGrid}>
         <StoryboardPanel
@@ -861,6 +920,93 @@ const StudioProjectShell: React.FC = () => {
         }}
         onRemoved={() => setRouteCatalogEpoch((epoch) => epoch + 1)}
       />
+      <Modal
+        visible={exportVisible}
+        title={t(
+          exportedFolderName === null
+            ? 'conversation.creativeStudio.export.title'
+            : exportMissingSceneIds.length > 0
+              ? 'conversation.creativeStudio.export.partialTitle'
+              : 'conversation.creativeStudio.export.successTitle'
+        )}
+        closable={!exportPending}
+        maskClosable={!exportPending}
+        escToExit={!exportPending}
+        onCancel={() => {
+          if (!exportPending) setExportVisible(false);
+        }}
+        footer={
+          <div className='flex flex-wrap justify-end gap-8px'>
+            <Button disabled={exportPending} onClick={() => setExportVisible(false)}>
+              {t('conversation.creativeStudio.export.cancel')}
+            </Button>
+            {exportedFolderName === null && (
+              <Button
+                type='primary'
+                loading={exportPending}
+                disabled={exportPending || !hasSelectedExportAssets}
+                onClick={() => void handleExportAssets()}
+              >
+                {t('conversation.creativeStudio.export.confirm')}
+              </Button>
+            )}
+          </div>
+        }
+      >
+        {exportedFolderName === null ? (
+          <div className='flex flex-col gap-12px'>
+            <p className='m-0'>{t('conversation.creativeStudio.export.body')}</p>
+            {!hasSelectedExportAssets && (
+              <p className='m-0 text-13px text-warning'>{t('conversation.creativeStudio.export.noSelectedAssets')}</p>
+            )}
+            <Checkbox checked={exportIncludeReferences} disabled={exportPending} onChange={setExportIncludeReferences}>
+              {t('conversation.creativeStudio.export.includeReferences')}
+            </Checkbox>
+            {exportPending && (
+              <p role='status' className='m-0 text-13px text-t-secondary'>
+                {t('conversation.creativeStudio.export.choosing')}
+              </p>
+            )}
+            {exportIssueMessageKey !== null && (
+              <div role='alert' className='rounded-8px bg-danger-light-1 p-10px text-13px text-danger'>
+                <p className='m-0'>{t('conversation.creativeStudio.export.failed')}</p>
+                {exportIssueMessageKey !== 'conversation.creativeStudio.export.failed' && (
+                  <p className='mb-0 mt-4px'>{t(exportIssueMessageKey)}</p>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className='flex flex-col gap-12px'>
+            <p className='m-0'>
+              {t(
+                exportMissingSceneIds.length > 0
+                  ? 'conversation.creativeStudio.export.partialBody'
+                  : 'conversation.creativeStudio.export.successBody',
+                {
+                  folderName: exportedFolderName,
+                }
+              )}
+            </p>
+            <dl className='m-0 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-12px gap-y-8px rounded-8px bg-fill-1 p-12px'>
+              <dt className='text-12px text-t-tertiary'>{t('conversation.creativeStudio.export.folderLabel')}</dt>
+              <dd className='m-0 break-all text-13px text-t-primary'>{exportedFolderName}</dd>
+            </dl>
+            {exportMissingSceneIds.length > 0 && (
+              <p className='m-0 text-13px text-warning'>
+                {t('conversation.creativeStudio.export.missingScenes', {
+                  scenes: exportMissingSceneIds
+                    .map((sceneId) => {
+                      const title = project.scenes[sceneId]?.title;
+                      return title === undefined ? sceneId : `${title} (${sceneId})`;
+                    })
+                    .join(', '),
+                })}
+              </p>
+            )}
+          </div>
+        )}
+      </Modal>
       <Modal
         visible={duplicateChargeJobId !== null}
         title={t('conversation.creativeStudio.jobs.retryChargeTitle')}

@@ -65,6 +65,45 @@ describe('createStudioProviderResolver', () => {
     expect(JSON.stringify(catalog)).not.toContain('example.invalid');
   });
 
+  it('keeps generation routes available when planning readiness cannot be loaded', async () => {
+    const resolver = createStudioProviderResolver({
+      listProviders: async () => [provider({ models: ['media-model'], platform: 'custom' })],
+      getClientSettings: async () => ({}),
+      getPlanningReadiness: async () => {
+        throw new Error('planning backend unavailable');
+      },
+      listConnections: async () => [
+        {
+          schemaVersion: 1,
+          id: 'binding_1',
+          providerId: 'provider_1',
+          adapterId: 'weprompt-media-gateway-v1',
+          model: 'media-model',
+          capabilities: gatewayCapabilities(),
+          validatedAt: '2026-07-30T00:00:00.000Z',
+        },
+      ],
+    });
+
+    await expect(resolver.listRoutes()).resolves.toMatchObject({
+      planning: { health: 'unavailable' },
+      automatic: [
+        expect.objectContaining({
+          providerId: 'provider_1',
+          adapterId: 'weprompt-media-gateway-v1',
+          model: 'media-model',
+          kind: 'video',
+        }),
+      ],
+      suggestions: {
+        video: {
+          reason: 'sole_compatible',
+          route: expect.objectContaining({ model: 'media-model' }),
+        },
+      },
+    });
+  });
+
   it('does not use disabled or unhealthy models and has a stable version without timestamps', async () => {
     const make = () =>
       createStudioProviderResolver({
