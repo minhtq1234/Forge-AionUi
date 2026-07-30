@@ -44,6 +44,7 @@ const STORAGE_PATH = {
   skills: 'skills',
   cronSkills: 'cron-skills',
   projectKb: 'project-kb',
+  creativeStudio: 'creative-studio',
 };
 
 /** Legacy builtin-skills cache directory, cleaned up at startup after the
@@ -315,6 +316,11 @@ const getProjectKbRootDir = () => {
   return path.join(cacheDir, STORAGE_PATH.projectKb);
 };
 
+/** Root directory for durable Creative Studio manifests and managed assets. */
+const getCreativeStudioRootDir = () => {
+  return path.join(cacheDir, STORAGE_PATH.creativeStudio);
+};
+
 /**
  * Best-effort cleanup of the legacy `{cacheDir}/builtin-skills/` directory
  * left behind by versions prior to the backend taking ownership of the skill
@@ -465,6 +471,7 @@ export {
   getSkillsDir,
   getCronSkillsDir,
   getProjectKbRootDir,
+  getCreativeStudioRootDir,
   BUILTIN_IMAGE_GEN_ID,
   getBuiltinMcpScriptPath,
 };
