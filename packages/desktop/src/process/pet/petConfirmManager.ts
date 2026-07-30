@@ -9,7 +9,7 @@ import { app, BrowserWindow, ipcMain, screen } from 'electron';
 import type { IConfirmation } from '@/common/chat/chatLib';
 import { ipcBridge } from '@/common';
 import i18n from '@process/services/i18n';
-import { getCachedTheme, onThemeChanged } from '@process/bridge/themeBridge';
+import { getCachedTheme, onThemeChanged } from '@process/bridge/native/themeBridge';
 
 // petConfirmManager is dynamically imported → rollup places it in out/main/chunks/,
 // so __dirname is out/main/chunks/ and we need '../..' to reach out/.

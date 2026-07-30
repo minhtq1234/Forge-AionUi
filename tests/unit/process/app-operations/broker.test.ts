@@ -1,15 +1,15 @@
 import { z } from 'zod';
 import type { IProvider } from '@/common/config/storage';
 import type { AppOperationResult, AppOperationsModelResponse } from '@/common/types/appOperations';
-import { AppOperationsBroker } from '@/process/services/appOperations/broker';
-import { createTaskRegistry } from '@/process/services/appOperations/taskRegistry';
+import { AppOperationsBroker } from '@/process/services/app-operations/broker';
+import { createTaskRegistry } from '@/process/services/app-operations/taskRegistry';
 import type {
   AppOperationTaskDefinition,
   AppOperationsAuditEvent,
   AppOperationsBrokerDependencies,
   AppOperationsClient,
   AppOperationsCompletion,
-} from '@/process/services/appOperations/types';
+} from '@/process/services/app-operations/types';
 
 type EchoInput = { value: string };
 

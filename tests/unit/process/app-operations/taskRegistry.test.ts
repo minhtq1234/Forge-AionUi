@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { createTaskRegistry } from '@/process/services/appOperations/taskRegistry';
-import type { AppOperationTaskDefinition } from '@/process/services/appOperations/types';
+import { createTaskRegistry } from '@/process/services/app-operations/taskRegistry';
+import type { AppOperationTaskDefinition } from '@/process/services/app-operations/types';
 
 const fakeTask: AppOperationTaskDefinition<{ value: string }, { value: string }, string> = {
   id: 'test.echo',

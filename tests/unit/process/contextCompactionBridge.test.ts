@@ -35,16 +35,18 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@process/bridge/applicationBridge', () => ({ initApplicationBridge: mocks.initApplicationBridge }));
-vi.mock('@process/bridge/dialogBridge', () => ({ initDialogBridge: mocks.initDialogBridge }));
-vi.mock('@process/bridge/notificationBridge', () => ({ initNotificationBridge: mocks.initNotificationBridge }));
+vi.mock('@process/bridge/native/dialogBridge', () => ({ initDialogBridge: mocks.initDialogBridge }));
+vi.mock('@process/bridge/native/notificationBridge', () => ({ initNotificationBridge: mocks.initNotificationBridge }));
 vi.mock('@process/bridge/projectKnowledgeBridge', () => ({
   initProjectKnowledgeBridge: mocks.initProjectKnowledgeBridge,
 }));
-vi.mock('@process/bridge/systemSettingsBridge', () => ({ initSystemSettingsBridge: mocks.initSystemSettingsBridge }));
-vi.mock('@process/bridge/themeBridge', () => ({ initThemeBridge: mocks.initThemeBridge }));
+vi.mock('@process/bridge/native/systemSettingsBridge', () => ({
+  initSystemSettingsBridge: mocks.initSystemSettingsBridge,
+}));
+vi.mock('@process/bridge/native/themeBridge', () => ({ initThemeBridge: mocks.initThemeBridge }));
 vi.mock('@process/bridge/updateBridge', () => ({ initUpdateBridge: mocks.initUpdateBridge }));
 vi.mock('@process/bridge/webuiBridge', () => ({ initWebuiBridge: mocks.initWebuiBridge }));
-vi.mock('@process/bridge/windowControlsBridge', () => ({
+vi.mock('@process/bridge/native/windowControlsBridge', () => ({
   initWindowControlsBridge: mocks.initWindowControlsBridge,
   registerWindowMaximizeListeners: vi.fn(),
 }));
@@ -58,7 +60,7 @@ vi.mock('@/common', () => ({
   },
 }));
 
-vi.mock('@process/services/appOperations', () => ({
+vi.mock('@process/services/app-operations', () => ({
   runContextCompact: mocks.runContextCompact,
 }));
 

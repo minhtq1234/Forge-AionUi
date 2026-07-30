@@ -116,7 +116,7 @@ describe('AutoUpdaterService', () => {
       },
     });
 
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
 
     autoUpdaterService.initialize();
     autoUpdaterService.setAllowPrerelease(true);
@@ -128,8 +128,8 @@ describe('AutoUpdaterService', () => {
   });
 
   it('configures electron-updater to read stable metadata from the CDN', async () => {
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
-    const { CdnGenericProvider } = await import('@/process/services/cdnGenericProvider');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
+    const { CdnGenericProvider } = await import('@/process/services/update/cdnGenericProvider');
 
     autoUpdaterService.resetForTest();
 
@@ -143,7 +143,7 @@ describe('AutoUpdaterService', () => {
   it('enables forced updater checks in unpacked dev builds when requested', async () => {
     process.env.AIONUI_FORCE_DEV_AUTO_UPDATE = '1';
 
-    await import('@/process/services/autoUpdaterService');
+    await import('@/process/services/update/autoUpdaterService');
 
     expect(autoUpdaterMock.forceDevUpdateConfig).toBe(true);
   });
@@ -152,7 +152,7 @@ describe('AutoUpdaterService', () => {
     process.env.AIONUI_FORCE_DEV_AUTO_UPDATE = '1';
     process.env.AIONUI_DEBUG_AUTO_UPDATE_CURRENT_VERSION = '2.1.12';
 
-    await import('@/process/services/autoUpdaterService');
+    await import('@/process/services/update/autoUpdaterService');
 
     expect(autoUpdaterMock.currentVersion.version).toBe('2.1.12');
   });
@@ -162,7 +162,7 @@ describe('AutoUpdaterService', () => {
     process.env.AIONUI_FORCE_DEV_AUTO_UPDATE = '1';
     process.env.AIONUI_DEBUG_AUTO_UPDATE_CURRENT_VERSION = '2.1.12';
 
-    await import('@/process/services/autoUpdaterService');
+    await import('@/process/services/update/autoUpdaterService');
 
     expect(autoUpdaterMock.forceDevUpdateConfig).toBe(false);
     expect(autoUpdaterMock.currentVersion.version).toBe('2.1.13');
@@ -200,7 +200,7 @@ describe('AutoUpdaterService', () => {
 
   it('clarifies the Squirrel bundle error in dev mode', async () => {
     appMock.isPackaged = false;
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
     autoUpdaterService.initialize();
 
     const statuses: Array<{ status: string; error?: string }> = [];
@@ -215,7 +215,7 @@ describe('AutoUpdaterService', () => {
 
   it('passes through unrelated auto-updater errors verbatim', async () => {
     appMock.isPackaged = false;
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
     autoUpdaterService.initialize();
 
     const statuses: Array<{ status: string; error?: string }> = [];
@@ -236,7 +236,7 @@ describe('AutoUpdaterService', () => {
         })
     );
 
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
     autoUpdaterService.initialize();
 
     const first = autoUpdaterService.downloadUpdate();
@@ -252,7 +252,7 @@ describe('AutoUpdaterService', () => {
   it('allows a new auto-update download after a terminal updater event', async () => {
     autoUpdaterMock.downloadUpdate.mockResolvedValue(undefined);
 
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
     autoUpdaterService.initialize();
 
     await expect(autoUpdaterService.downloadUpdate()).resolves.toEqual({ success: true });
@@ -271,7 +271,7 @@ describe('AutoUpdaterService', () => {
         })
     );
 
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
     autoUpdaterService.initialize();
 
     const download = autoUpdaterService.downloadUpdate();
@@ -318,7 +318,7 @@ describe('AutoUpdaterService', () => {
     });
     autoUpdaterMock.downloadUpdate.mockResolvedValue(undefined);
 
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
     autoUpdaterService.initialize();
 
     await expect(autoUpdaterService.restoreDownloadedUpdateIfAvailable()).resolves.toEqual({
@@ -360,7 +360,7 @@ describe('AutoUpdaterService', () => {
       validateDownloadedPath,
     });
 
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
     autoUpdaterService.initialize();
 
     await expect(autoUpdaterService.restoreDownloadedUpdateIfAvailable()).resolves.toEqual({
@@ -374,7 +374,7 @@ describe('AutoUpdaterService', () => {
     setPlatform('darwin');
     const cleanup = vi.fn();
     const statuses: Array<{ status: string; error?: string }> = [];
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
 
     autoUpdaterService.initialize();
     autoUpdaterService.setBeforeQuitAndInstall(cleanup);
@@ -398,7 +398,7 @@ describe('AutoUpdaterService', () => {
   it('does not quit on macOS when native updater reports readiness error first', async () => {
     setPlatform('darwin');
     const statuses: Array<{ status: string; error?: string }> = [];
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
 
     autoUpdaterService.initialize();
     autoUpdaterService.on('update-status', (status: { status: string; error?: string }) => statuses.push(status));
@@ -420,7 +420,7 @@ describe('AutoUpdaterService', () => {
     setPlatform('darwin');
     vi.useFakeTimers();
     const statuses: Array<{ status: string; error?: string }> = [];
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
 
     autoUpdaterService.initialize();
     autoUpdaterService.on('update-status', (status: { status: string; error?: string }) => statuses.push(status));
@@ -442,7 +442,7 @@ describe('AutoUpdaterService', () => {
   it('resets macOS native readiness when a new update check starts', async () => {
     setPlatform('darwin');
     const cleanup = vi.fn();
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
 
     autoUpdaterService.initialize();
     autoUpdaterService.setBeforeQuitAndInstall(cleanup);
@@ -466,7 +466,7 @@ describe('AutoUpdaterService', () => {
 
   it('rejects a pending macOS install wait when a new update check starts', async () => {
     setPlatform('darwin');
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
 
     autoUpdaterService.initialize();
     getUpdateDownloadedHandler()({ version: '2.2.0' });
@@ -485,7 +485,7 @@ describe('AutoUpdaterService', () => {
     setPlatform('darwin');
     const cleanupError = new Error('cleanup failed');
     const statuses: Array<{ status: string; error?: string }> = [];
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
 
     autoUpdaterService.initialize();
     autoUpdaterService.setBeforeQuitAndInstall(async () => {
@@ -509,7 +509,7 @@ describe('AutoUpdaterService', () => {
   it('does not force exit when quitAndInstall handoff throws', async () => {
     setPlatform('darwin');
     const statuses: Array<{ status: string; error?: string }> = [];
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
 
     autoUpdaterMock.quitAndInstall.mockImplementationOnce(() => {
       throw new Error('handoff failed');
@@ -531,7 +531,7 @@ describe('AutoUpdaterService', () => {
   it('keeps non-macOS quitAndInstall behavior immediate', async () => {
     setPlatform('win32');
     const cleanup = vi.fn();
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
 
     autoUpdaterService.initialize();
     autoUpdaterService.setBeforeQuitAndInstall(cleanup);
@@ -546,7 +546,7 @@ describe('AutoUpdaterService', () => {
   it('uses a non-silent handoff for user-initiated Windows installs without changing app-quit installs', async () => {
     setPlatform('win32');
     const cleanup = vi.fn();
-    const { autoUpdaterService } = await import('@/process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@/process/services/update/autoUpdaterService');
 
     autoUpdaterService.initialize();
     autoUpdaterService.setBeforeQuitAndInstall(cleanup);

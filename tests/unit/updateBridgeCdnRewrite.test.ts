@@ -285,7 +285,7 @@ describe('autoUpdate quitAndInstall lifecycle', () => {
 
   it('waits for the pre-install cleanup before starting the installer', async () => {
     const cleanup = makeDeferred();
-    const { autoUpdaterService } = await import('@process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@process/services/update/autoUpdaterService');
     const { autoUpdater } = await import('electron-updater');
 
     autoUpdaterService.resetForTest();
@@ -304,7 +304,7 @@ describe('autoUpdate quitAndInstall lifecycle', () => {
 
   it('does not start the installer when the pre-install cleanup fails', async () => {
     const cleanupError = new Error('backend did not stop');
-    const { autoUpdaterService } = await import('@process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@process/services/update/autoUpdaterService');
     const { autoUpdater } = await import('electron-updater');
 
     autoUpdaterService.resetForTest();
@@ -318,7 +318,7 @@ describe('autoUpdate quitAndInstall lifecycle', () => {
 
   it('keeps the IPC request pending until quitAndInstall cleanup completes', async () => {
     const cleanup = makeDeferred();
-    const { autoUpdaterService } = await import('@process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@process/services/update/autoUpdaterService');
 
     autoUpdaterService.resetForTest();
     autoUpdaterService.setBeforeQuitAndInstall(async () => cleanup.promise);
@@ -341,7 +341,7 @@ describe('autoUpdate quitAndInstall lifecycle', () => {
 
   it('propagates quitAndInstall failures through IPC', async () => {
     const cleanupError = new Error('native readiness failed');
-    const { autoUpdaterService } = await import('@process/services/autoUpdaterService');
+    const { autoUpdaterService } = await import('@process/services/update/autoUpdaterService');
 
     autoUpdaterService.resetForTest();
     autoUpdaterService.setBeforeQuitAndInstall(async () => {

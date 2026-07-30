@@ -22,8 +22,8 @@ import log from 'electron-log';
 import * as fs from 'fs';
 import * as path from 'path';
 import semver from 'semver';
-import { autoUpdaterService } from '../services/autoUpdaterService';
-import { consumeInstallerLastFailure } from '../services/installerLastFailure';
+import { autoUpdaterService } from '../services/update/autoUpdaterService';
+import { consumeInstallerLastFailure } from '../services/update/installerLastFailure';
 
 /** Lazily loads i18n to avoid pulling in initStorage chain at module load time */
 let _i18nCache: Promise<typeof import('../services/i18n')> | null = null;
@@ -545,7 +545,7 @@ const startDownloadInBackground = async (
  * The ipcBridge channel broadcasts to all renderer listeners, so no window guard is needed here.
  */
 export function createAutoUpdateStatusBroadcast(): (
-  status: import('../services/autoUpdaterService').AutoUpdateStatus
+  status: import('../services/update/autoUpdaterService').AutoUpdateStatus
 ) => void {
   return (status) => {
     ipcBridge.autoUpdate.status.emit(status);

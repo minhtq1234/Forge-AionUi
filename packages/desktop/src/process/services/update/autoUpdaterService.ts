@@ -482,7 +482,7 @@ class AutoUpdaterService extends EventEmitter {
     const wait = this._nativeInstallReadyWait;
     if (!wait) return;
     this.clearNativeInstallReadyWait();
-    const { default: i18n } = await import('./i18n');
+    const { default: i18n } = await import('../i18n');
     wait.reject(new Error(i18n.t(i18nKey)));
   }
 
@@ -516,7 +516,7 @@ class AutoUpdaterService extends EventEmitter {
       { elapsedMs, error: message, version: this._downloadedUpdateVersion },
       this.getAutoUpdateDiagnosticOptions()
     );
-    const { default: i18n } = await import('./i18n');
+    const { default: i18n } = await import('../i18n');
     const userMessage = i18n.t('update.errors.prepareInstallFailed');
     this.broadcastStatus({
       status: 'error',
@@ -556,7 +556,7 @@ class AutoUpdaterService extends EventEmitter {
         { elapsedMs, version: this._downloadedUpdateVersion },
         this.getAutoUpdateDiagnosticOptions()
       );
-      const { default: i18n } = await import('./i18n');
+      const { default: i18n } = await import('../i18n');
       const userMessage = i18n.t('update.errors.prepareInstallTimeout');
       this.broadcastStatus({
         status: 'error',
@@ -607,7 +607,7 @@ class AutoUpdaterService extends EventEmitter {
 
       const result = await autoUpdater.checkForUpdates();
       if (!result) {
-        const { default: i18n } = await import('./i18n');
+        const { default: i18n } = await import('../i18n');
         log.debug('[auto-update] checkForUpdates returned null');
         return { success: false, error: i18n.t('update.errors.checkReturnedNull') };
       }
@@ -825,7 +825,7 @@ class AutoUpdaterService extends EventEmitter {
           version: this._downloadedUpdateVersion,
         });
         if (process.platform === 'darwin') {
-          const { default: i18n } = await import('./i18n');
+          const { default: i18n } = await import('../i18n');
           this.broadcastStatus({
             status: 'error',
             error: i18n.t('update.errors.prepareInstallFailed'),
@@ -849,7 +849,7 @@ class AutoUpdaterService extends EventEmitter {
         platform: process.platform,
         version: this._downloadedUpdateVersion,
       });
-      const { default: i18n } = await import('./i18n');
+      const { default: i18n } = await import('../i18n');
       const userMessage = i18n.t('update.errors.prepareInstallFailed');
       this.broadcastStatus({
         status: 'error',

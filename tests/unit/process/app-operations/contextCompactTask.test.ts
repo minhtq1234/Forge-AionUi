@@ -1,19 +1,19 @@
 import type { TMessage } from '@/common/chat/chatLib';
 import type { IProvider } from '@/common/config/storage';
 import type { AppOperationResult, AppOperationsModelResponse } from '@/common/types/appOperations';
-import { AppOperationsBroker } from '@process/services/appOperations/broker';
-import { appOperationsBroker, runContextCompact } from '@process/services/appOperations';
+import { AppOperationsBroker } from '@process/services/app-operations/broker';
+import { appOperationsBroker, runContextCompact } from '@process/services/app-operations';
 import {
   buildSystemPrompt,
   contextCompactTask,
   type ContextCompactInput,
-} from '@process/services/appOperations/contextCompactTask';
-import { createTaskRegistry } from '@process/services/appOperations/taskRegistry';
+} from '@process/services/app-operations/contextCompactTask';
+import { createTaskRegistry } from '@process/services/app-operations/taskRegistry';
 import type {
   AppOperationsBrokerDependencies,
   AppOperationsClient,
   AppOperationsCompletion,
-} from '@process/services/appOperations/types';
+} from '@process/services/app-operations/types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({

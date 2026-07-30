@@ -8,8 +8,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { UpdateInfo } from 'electron-updater';
 import type { AppUpdater } from 'electron-updater/out/AppUpdater';
 import type { ProviderRuntimeOptions } from 'electron-updater/out/providers/Provider';
-import { CdnGenericProvider } from '@/process/services/cdnGenericProvider';
-import { buildCdnFeedOptions, CDN_UPDATE_BASE_URL } from '@/process/services/updateFeed';
+import { CdnGenericProvider } from '@/process/services/update/cdnGenericProvider';
+import { buildCdnFeedOptions, CDN_UPDATE_BASE_URL } from '@/process/services/update/updateFeed';
 
 const makeRuntimeOptions = (): ProviderRuntimeOptions => ({
   isUseMultipleRangeRequest: true,

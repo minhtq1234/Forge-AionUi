@@ -50,7 +50,7 @@ const autoUpdateDiagnosticsMock = vi.hoisted(() => ({
   readAutoUpdateDiagnostics: vi.fn(),
 }));
 
-vi.mock('@/process/services/autoUpdateDiagnostics', () => ({
+vi.mock('@/process/services/update/autoUpdateDiagnostics', () => ({
   readAutoUpdateDiagnostics: autoUpdateDiagnosticsMock.readAutoUpdateDiagnostics,
 }));
 

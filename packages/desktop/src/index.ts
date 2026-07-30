@@ -32,9 +32,9 @@ import { BackendLifecycleManager } from '@aionui/web-host';
 import { resolveBinaryPath } from '@process/backend';
 import './process/bridge/feedbackBridge';
 import { wasLaunchedAtLogin } from '@process/bridge/applicationBridge';
-import { onLanguageChanged } from './process/bridge/systemSettingsBridge';
+import { onLanguageChanged } from './process/bridge/native/systemSettingsBridge';
 import { setInitialLanguage } from '@process/services/i18n';
-import { appOperationsBroker } from '@process/services/appOperations';
+import { appOperationsBroker } from '@process/services/app-operations';
 import { installOfficePreviewSession } from '@process/services/office-artifact/officePreviewSession';
 import { disposeOfficeArtifactService } from '@process/services/office-artifact';
 import { setupApplicationMenu } from './process/utils/appMenu';
@@ -682,7 +682,7 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
   const disableAutoUpdater =
     process.env.AIONUI_DISABLE_AUTO_UPDATE === '1' || process.env.AIONUI_E2E_TEST === '1' || isCiRuntime;
   if (!disableAutoUpdater) {
-    Promise.all([import('./process/services/autoUpdaterService'), import('./process/bridge/updateBridge')])
+    Promise.all([import('./process/services/update/autoUpdaterService'), import('./process/bridge/updateBridge')])
       .then(([{ autoUpdaterService }, { createAutoUpdateStatusBroadcast }]) => {
         // Create status broadcast callback that emits via ipcBridge (pure emitter, no window binding)
         const statusBroadcast = createAutoUpdateStatusBroadcast();
