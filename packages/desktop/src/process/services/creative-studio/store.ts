@@ -31,7 +31,6 @@ const JOB_STATUSES = new Set([
   'failed',
   'cancelled',
 ]);
-const TERMINAL_JOB_STATUSES = new Set(['succeeded', 'failed', 'cancelled']);
 const ADAPTER_IDS = new Set(['weprompt-image-v1', 'byteplus-seedance-v1', 'weprompt-media-gateway-v1']);
 const JOB_ERROR_CODES = new Set([
   'invalid_request',
@@ -309,25 +308,6 @@ const compareSummaries = (left: StudioProjectSummary, right: StudioProjectSummar
 
 const sameJson = (left: unknown, right: unknown): boolean => JSON.stringify(left) === JSON.stringify(right);
 
-const terminalJobsRemainImmutable = (current: StudioProject, next: StudioProject): boolean =>
-  Object.values(current.jobs).every((previousJob) => {
-    if (!TERMINAL_JOB_STATUSES.has(previousJob.status)) return true;
-    const nextJob = next.jobs[previousJob.id];
-    if (nextJob === undefined || nextJob.status !== previousJob.status) return false;
-    if (previousJob.status !== 'succeeded') return sameJson(nextJob, previousJob);
-
-    const {
-      outputAssetIds: previousOutputAssetIds,
-      updatedAt: _previousUpdatedAt,
-      ...previousStableFields
-    } = previousJob;
-    const { outputAssetIds: nextOutputAssetIds, updatedAt: _nextUpdatedAt, ...nextStableFields } = nextJob;
-    return (
-      sameJson(previousStableFields, nextStableFields) &&
-      previousOutputAssetIds.every((assetId) => nextOutputAssetIds.includes(assetId))
-    );
-  });
-
 const createProjectFromInput = (input: CreateStudioProjectInput, id: string, timestamp: string): StudioProject => ({
   schemaVersion: 1,
   revision: 1,
@@ -355,23 +335,118 @@ export const createCreativeStudioStore = (deps: CreativeStudioStoreDeps): Creati
   const queues = new Map<string, Promise<unknown>>();
   let summaryQueue: Promise<unknown> = Promise.resolve();
 
-  const projectDir = (projectId: string): string => {
+  const requireSafeId = (projectId: string): void => {
     if (!isSafeId(projectId)) throw new CreativeStudioStoreError('invalid_payload', 'Invalid Studio project id');
-    const resolved = path.resolve(rootDir, projectId);
-    if (!resolved.startsWith(rootDir + path.sep)) {
-      throw new CreativeStudioStoreError('invalid_payload', 'Invalid Studio project path');
+  };
+
+  const isInsideRoot = (canonicalRoot: string, target: string): boolean =>
+    target === canonicalRoot || target.startsWith(canonicalRoot + path.sep);
+
+  const storageError = (error: unknown, fallback: string): CreativeStudioStoreError =>
+    new CreativeStudioStoreError('storage_error', error instanceof Error ? error.message : fallback);
+
+  const canonicalRoot = async (): Promise<string> => {
+    try {
+      await fs.mkdir(rootDir, { recursive: true });
+      const stats = await fs.lstat(rootDir);
+      if (!stats.isDirectory() || stats.isSymbolicLink()) {
+        throw new CreativeStudioStoreError('storage_error', 'Creative Studio root must be a directory');
+      }
+      return await fs.realpath(rootDir);
+    } catch (error) {
+      if (error instanceof CreativeStudioStoreError) throw error;
+      throw storageError(error, 'Creative Studio root is unavailable');
+    }
+  };
+
+  const resolveRootChild = (root: string, child: string): string => {
+    const resolved = path.resolve(root, child);
+    if (!isInsideRoot(root, resolved)) {
+      throw new CreativeStudioStoreError('storage_error', 'Creative Studio storage target escaped its root');
     }
     return resolved;
   };
 
-  const projectFile = (projectId: string): string => path.join(projectDir(projectId), 'project.json');
-  const summariesFile = (): string => path.join(rootDir, 'projects.json');
+  const assertRegularFileOrMissing = async (file: string): Promise<void> => {
+    try {
+      const stats = await fs.lstat(file);
+      if (stats.isSymbolicLink() || !stats.isFile()) {
+        throw new CreativeStudioStoreError('storage_error', 'Creative Studio storage file is not a regular file');
+      }
+    } catch (error) {
+      if (error instanceof CreativeStudioStoreError) throw error;
+      if (isRecord(error) && error.code === 'ENOENT') return;
+      throw storageError(error, 'Creative Studio storage file is unavailable');
+    }
+  };
 
-  const writeJsonAtomic = async (file: string, value: unknown): Promise<void> => {
-    await fs.mkdir(path.dirname(file), { recursive: true });
+  const projectDirectory = async (
+    root: string,
+    projectId: string,
+    createIfMissing: boolean
+  ): Promise<string | null> => {
+    requireSafeId(projectId);
+    const directory = resolveRootChild(root, projectId);
+    try {
+      const stats = await fs.lstat(directory);
+      if (!stats.isDirectory() || stats.isSymbolicLink()) {
+        throw new CreativeStudioStoreError('storage_error', 'Creative Studio project directory is unsafe');
+      }
+    } catch (error) {
+      if (error instanceof CreativeStudioStoreError) throw error;
+      if (!isRecord(error) || error.code !== 'ENOENT')
+        throw storageError(error, 'Creative Studio project directory is unavailable');
+      if (!createIfMissing) return null;
+      try {
+        await fs.mkdir(directory);
+      } catch (mkdirError) {
+        throw storageError(mkdirError, 'Creative Studio project directory could not be created');
+      }
+      const createdStats = await fs.lstat(directory);
+      if (!createdStats.isDirectory() || createdStats.isSymbolicLink()) {
+        throw new CreativeStudioStoreError('storage_error', 'Creative Studio project directory is unsafe');
+      }
+    }
+
+    try {
+      const canonicalDirectory = await fs.realpath(directory);
+      if (!isInsideRoot(root, canonicalDirectory) || canonicalDirectory === root) {
+        throw new CreativeStudioStoreError('storage_error', 'Creative Studio project directory escaped its root');
+      }
+      return canonicalDirectory;
+    } catch (error) {
+      if (error instanceof CreativeStudioStoreError) throw error;
+      throw storageError(error, 'Creative Studio project directory is unavailable');
+    }
+  };
+
+  const projectFile = async (root: string, projectId: string, createDirectory: boolean): Promise<string | null> => {
+    const directory = await projectDirectory(root, projectId, createDirectory);
+    if (directory === null) return null;
+    const file = resolveRootChild(directory, 'project.json');
+    await assertRegularFileOrMissing(file);
+    return file;
+  };
+
+  const summariesFile = async (root: string): Promise<string> => {
+    const file = resolveRootChild(root, 'projects.json');
+    await assertRegularFileOrMissing(file);
+    return file;
+  };
+
+  const writeJsonAtomic = async (root: string, file: string, value: unknown): Promise<void> => {
+    const parent = path.dirname(file);
+    if (!isInsideRoot(root, parent)) {
+      throw new CreativeStudioStoreError('storage_error', 'Creative Studio storage target escaped its root');
+    }
+    const parentStats = await fs.lstat(parent);
+    if (!parentStats.isDirectory() || parentStats.isSymbolicLink() || (await fs.realpath(parent)) !== parent) {
+      throw new CreativeStudioStoreError('storage_error', 'Creative Studio storage parent is unsafe');
+    }
+    await assertRegularFileOrMissing(file);
     const temporaryFile = `${file}.${process.pid}.${++temporaryFileCounter}.tmp`;
     try {
-      await fs.writeFile(temporaryFile, JSON.stringify(value, null, 2), 'utf8');
+      await fs.writeFile(temporaryFile, JSON.stringify(value, null, 2), { encoding: 'utf8', flag: 'wx' });
       await fs.rename(temporaryFile, file);
     } catch (error) {
       await fs.rm(temporaryFile, { force: true }).catch((): undefined => undefined);
@@ -382,9 +457,11 @@ export const createCreativeStudioStore = (deps: CreativeStudioStoreDeps): Creati
     }
   };
 
-  const readProject = async (projectId: string): Promise<StudioProject | null> => {
+  const readProject = async (root: string, projectId: string): Promise<StudioProject | null> => {
     try {
-      const raw = JSON.parse(await fs.readFile(projectFile(projectId), 'utf8')) as unknown;
+      const file = await projectFile(root, projectId, false);
+      if (file === null) return null;
+      const raw = JSON.parse(await fs.readFile(file, 'utf8')) as unknown;
       if (validateProject(raw) && raw.id === projectId) return raw;
       throw new CreativeStudioStoreError('storage_error', 'Malformed Studio project manifest');
     } catch (error) {
@@ -397,10 +474,10 @@ export const createCreativeStudioStore = (deps: CreativeStudioStoreDeps): Creati
     }
   };
 
-  const readAllProjects = async (): Promise<StudioProject[]> => {
+  const readAllProjects = async (root: string): Promise<StudioProject[]> => {
     let entries: import('node:fs').Dirent[];
     try {
-      entries = await fs.readdir(rootDir, { withFileTypes: true });
+      entries = await fs.readdir(root, { withFileTypes: true });
     } catch (error) {
       if (isRecord(error) && error.code === 'ENOENT') return [];
       throw new CreativeStudioStoreError(
@@ -408,23 +485,31 @@ export const createCreativeStudioStore = (deps: CreativeStudioStoreDeps): Creati
         error instanceof Error ? error.message : 'Studio storage read failed'
       );
     }
+    const unsafeProjectEntry = entries.find((entry) => isSafeId(entry.name) && entry.isSymbolicLink());
+    if (unsafeProjectEntry !== undefined) {
+      throw new CreativeStudioStoreError('storage_error', 'Creative Studio project directory is unsafe');
+    }
     const projects = await Promise.all(
-      entries.filter((entry) => entry.isDirectory() && isSafeId(entry.name)).map((entry) => readProject(entry.name))
+      entries
+        .filter((entry) => entry.isDirectory() && isSafeId(entry.name))
+        .map((entry) => readProject(root, entry.name))
     );
     return projects.filter((project): project is StudioProject => project !== null);
   };
 
   const repairSummaryIndex = (): Promise<StudioProjectSummary[]> => {
     const rebuild = async (): Promise<StudioProjectSummary[]> => {
-      const summaries = (await readAllProjects()).map(toSummary).toSorted(compareSummaries);
+      const root = await canonicalRoot();
+      const indexFile = await summariesFile(root);
+      const summaries = (await readAllProjects(root)).map(toSummary).toSorted(compareSummaries);
       let existing: unknown = null;
       try {
-        existing = JSON.parse(await fs.readFile(summariesFile(), 'utf8')) as unknown;
+        existing = JSON.parse(await fs.readFile(indexFile, 'utf8')) as unknown;
       } catch {
         // A missing or malformed summary is repaired from the per-project source of truth below.
       }
       const next = { schemaVersion: 1, projects: summaries };
-      if (!sameJson(existing, next)) await writeJsonAtomic(summariesFile(), next);
+      if (!sameJson(existing, next)) await writeJsonAtomic(root, indexFile, next);
       return summaries;
     };
     const next = summaryQueue.catch((): undefined => undefined).then(() => rebuild());
@@ -453,12 +538,17 @@ export const createCreativeStudioStore = (deps: CreativeStudioStoreDeps): Creati
       const projectId = input.id ?? createId();
       if (!isSafeId(projectId)) throw new CreativeStudioStoreError('invalid_payload', 'Invalid Studio project id');
       return enqueue(projectId, async () => {
+        const root = await canonicalRoot();
+        await summariesFile(root);
         const candidate = createProjectFromInput(input, projectId, now());
         if (!validateProject(candidate))
           throw new CreativeStudioStoreError('invalid_payload', 'Invalid Studio project payload');
-        if (await readProject(projectId))
+        if (await readProject(root, projectId))
           throw new CreativeStudioStoreError('invalid_payload', 'Studio project already exists');
-        await writeJsonAtomic(projectFile(projectId), candidate);
+        const file = await projectFile(root, projectId, true);
+        if (file === null)
+          throw new CreativeStudioStoreError('storage_error', 'Creative Studio project storage is unavailable');
+        await writeJsonAtomic(root, file, candidate);
         await repairSummaryIndex();
         return candidate;
       });
@@ -466,7 +556,7 @@ export const createCreativeStudioStore = (deps: CreativeStudioStoreDeps): Creati
 
     async getProject(projectId: string): Promise<StudioProject | null> {
       if (!isSafeId(projectId)) return null;
-      return readProject(projectId);
+      return readProject(await canonicalRoot(), projectId);
     },
 
     async updateProject(
@@ -479,7 +569,9 @@ export const createCreativeStudioStore = (deps: CreativeStudioStoreDeps): Creati
         throw new CreativeStudioStoreError('invalid_payload', 'Invalid Studio project revision');
       }
       return enqueue(projectId, async () => {
-        const current = await readProject(projectId);
+        const root = await canonicalRoot();
+        await summariesFile(root);
+        const current = await readProject(root, projectId);
         if (current === null) throw new CreativeStudioStoreError('not_found', 'Studio project not found');
         if (expectedRevision !== undefined && expectedRevision !== current.revision) {
           throw new CreativeStudioStoreError('stale_project', 'Studio project has changed');
@@ -496,10 +588,10 @@ export const createCreativeStudioStore = (deps: CreativeStudioStoreDeps): Creati
         };
         if (!validateProject(next))
           throw new CreativeStudioStoreError('invalid_payload', 'Invalid Studio project payload');
-        if (!terminalJobsRemainImmutable(current, next)) {
-          throw new CreativeStudioStoreError('invalid_payload', 'Terminal Studio jobs are immutable');
-        }
-        await writeJsonAtomic(projectFile(projectId), next);
+        const file = await projectFile(root, projectId, false);
+        if (file === null)
+          throw new CreativeStudioStoreError('storage_error', 'Creative Studio project storage is unavailable');
+        await writeJsonAtomic(root, file, next);
         await repairSummaryIndex();
         return next;
       });
@@ -508,13 +600,12 @@ export const createCreativeStudioStore = (deps: CreativeStudioStoreDeps): Creati
     async deleteProject(projectId: string): Promise<boolean> {
       if (!isSafeId(projectId)) return false;
       return enqueue(projectId, async () => {
-        if ((await readProject(projectId)) === null) return false;
-        const targetDir = projectDir(projectId);
+        const root = await canonicalRoot();
+        await summariesFile(root);
+        if ((await readProject(root, projectId)) === null) return false;
         try {
-          const [canonicalRoot, targetStats] = await Promise.all([fs.realpath(rootDir), fs.lstat(targetDir)]);
-          if (!targetStats.isDirectory() || targetStats.isSymbolicLink()) return false;
-          const canonicalTarget = await fs.realpath(targetDir);
-          if (!canonicalTarget.startsWith(canonicalRoot + path.sep)) return false;
+          const targetDir = await projectDirectory(root, projectId, false);
+          if (targetDir === null) return false;
           await fs.rm(targetDir, { recursive: true, force: false });
         } catch (error) {
           throw new CreativeStudioStoreError(

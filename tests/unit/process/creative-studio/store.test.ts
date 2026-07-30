@@ -275,30 +275,22 @@ describe('creative studio project store', () => {
     });
   });
 
-  it('rejects a terminal job-state rewrite instead of changing a completed provider result', async () => {
+  it('persists structurally valid terminal-job metadata corrections instead of owning job lifecycle policy', async () => {
     const project = await store.createProject(makeInput());
-    const withSucceededJob = await store.updateProject(project.id, addSucceededJob);
-
-    await expect(
-      store.updateProject(withSucceededJob.id, (current) => {
-        const next = cloneProject(current);
-        next.jobs.job_1.status = 'failed';
-        return next;
-      })
-    ).rejects.toMatchObject({ code: 'invalid_payload' });
-  });
-
-  it('allows attaching a downloaded asset to a succeeded job without reopening the provider result', async () => {
-    const project = await store.createProject(makeInput());
-    const withSucceededJob = await store.updateProject(project.id, addSucceededJob);
-
-    const attached = await store.updateProject(withSucceededJob.id, (current) => {
-      const next = cloneProject(current);
-      next.jobs.job_1.outputAssetIds = ['asset_1'];
+    const withTerminalJob = await store.updateProject(project.id, (current) => {
+      const next = addSucceededJob(current);
+      next.jobs.job_1.status = 'failed';
+      next.jobs.job_1.error = { code: 'provider_unavailable', messageKey: 'creativeStudio.errors.providerUnavailable' };
       return next;
     });
 
-    expect(attached.jobs.job_1).toMatchObject({ status: 'succeeded', outputAssetIds: ['asset_1'] });
+    const corrected = await store.updateProject(withTerminalJob.id, (current) => {
+      const next = cloneProject(current);
+      next.jobs.job_1.error = { code: 'timeout', messageKey: 'creativeStudio.errors.timeout' };
+      return next;
+    });
+
+    expect(corrected.jobs.job_1.error).toEqual({ code: 'timeout', messageKey: 'creativeStudio.errors.timeout' });
   });
 
   it('serializes concurrent index rebuilds instead of dropping a different-project summary', async () => {
@@ -341,11 +333,134 @@ describe('creative studio project store', () => {
     symlinkSync(outsideDir, path.join(rootDir, 'project_link'));
 
     try {
-      await expect(store.deleteProject('project_link')).resolves.toBe(false);
+      await expect(store.deleteProject('project_link')).rejects.toMatchObject({ code: 'storage_error' });
       expect(existsSync(marker)).toBe(true);
     } finally {
       await rm(outsideDir, { recursive: true, force: true });
     }
+  });
+
+  describe('symlink confinement', () => {
+    it('rejects a symlinked project directory before getProject can read an external manifest', async () => {
+      const project = await store.createProject(makeInput());
+      const outsideDir = mkdtempSync(path.join(tmpdir(), 'creative-studio-get-target-'));
+      const manifest = readFileSync(path.join(rootDir, project.id, 'project.json'));
+      writeFileSync(path.join(outsideDir, 'project.json'), manifest);
+      rmSync(path.join(rootDir, project.id), { recursive: true, force: true });
+      symlinkSync(outsideDir, path.join(rootDir, project.id));
+
+      try {
+        await expect(store.getProject(project.id)).rejects.toMatchObject({ code: 'storage_error' });
+        expect(readFileSync(path.join(outsideDir, 'project.json'))).toEqual(manifest);
+      } finally {
+        await rm(outsideDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects a symlinked project directory before updateProject can overwrite an external manifest', async () => {
+      const project = await store.createProject(makeInput());
+      const outsideDir = mkdtempSync(path.join(tmpdir(), 'creative-studio-update-target-'));
+      const manifest = readFileSync(path.join(rootDir, project.id, 'project.json'));
+      writeFileSync(path.join(outsideDir, 'project.json'), manifest);
+      rmSync(path.join(rootDir, project.id), { recursive: true, force: true });
+      symlinkSync(outsideDir, path.join(rootDir, project.id));
+
+      try {
+        await expect(
+          store.updateProject(project.id, (current) => ({ ...current, name: 'Escaped write' }))
+        ).rejects.toMatchObject({
+          code: 'storage_error',
+        });
+        expect(readFileSync(path.join(outsideDir, 'project.json'))).toEqual(manifest);
+      } finally {
+        await rm(outsideDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects project creation when the new project directory is a symlink instead of writing through it', async () => {
+      const outsideDir = mkdtempSync(path.join(tmpdir(), 'creative-studio-create-target-'));
+      const marker = path.join(outsideDir, 'do-not-create-project.json');
+      writeFileSync(marker, 'must survive');
+      symlinkSync(outsideDir, path.join(rootDir, 'project_1'));
+
+      try {
+        await expect(store.createProject(makeInput())).rejects.toMatchObject({ code: 'storage_error' });
+        expect(existsSync(path.join(outsideDir, 'project.json'))).toBe(false);
+        expect(readFileSync(marker, 'utf8')).toBe('must survive');
+      } finally {
+        await rm(outsideDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects a symlinked project directory during summary repair instead of silently accepting it', async () => {
+      const outsideDir = mkdtempSync(path.join(tmpdir(), 'creative-studio-summary-project-target-'));
+      const marker = path.join(outsideDir, 'do-not-read-project.json');
+      writeFileSync(marker, 'must survive');
+      symlinkSync(outsideDir, path.join(rootDir, 'project_escape'));
+
+      try {
+        await expect(store.listProjects()).rejects.toMatchObject({ code: 'storage_error' });
+        expect(readFileSync(marker, 'utf8')).toBe('must survive');
+      } finally {
+        await rm(outsideDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects a symlinked summary index instead of repairing it through an external file', async () => {
+      const project = await store.createProject(makeInput());
+      const outsideDir = mkdtempSync(path.join(tmpdir(), 'creative-studio-summary-index-target-'));
+      const outsideIndex = path.join(outsideDir, 'projects.json');
+      const sentinel = '{"sentinel":"must survive"}';
+      writeFileSync(outsideIndex, sentinel);
+      rmSync(path.join(rootDir, 'projects.json'));
+      symlinkSync(outsideIndex, path.join(rootDir, 'projects.json'));
+
+      try {
+        await expect(store.listProjects()).rejects.toMatchObject({ code: 'storage_error' });
+        expect(readFileSync(outsideIndex, 'utf8')).toBe(sentinel);
+        expect(await store.getProject(project.id)).toMatchObject({ id: project.id });
+      } finally {
+        await rm(outsideDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects project creation when the summary index is a symlink before creating a manifest', async () => {
+      const outsideDir = mkdtempSync(path.join(tmpdir(), 'creative-studio-create-index-target-'));
+      const outsideIndex = path.join(outsideDir, 'projects.json');
+      const sentinel = '{"sentinel":"must survive"}';
+      writeFileSync(outsideIndex, sentinel);
+      symlinkSync(outsideIndex, path.join(rootDir, 'projects.json'));
+
+      try {
+        await expect(store.createProject(makeInput())).rejects.toMatchObject({ code: 'storage_error' });
+        expect(existsSync(path.join(rootDir, 'project_1'))).toBe(false);
+        expect(readFileSync(outsideIndex, 'utf8')).toBe(sentinel);
+      } finally {
+        await rm(outsideDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects updates when the summary index is a symlink before changing a project manifest', async () => {
+      const project = await store.createProject(makeInput());
+      const outsideDir = mkdtempSync(path.join(tmpdir(), 'creative-studio-update-index-target-'));
+      const outsideIndex = path.join(outsideDir, 'projects.json');
+      const sentinel = '{"sentinel":"must survive"}';
+      writeFileSync(outsideIndex, sentinel);
+      rmSync(path.join(rootDir, 'projects.json'));
+      symlinkSync(outsideIndex, path.join(rootDir, 'projects.json'));
+
+      try {
+        await expect(
+          store.updateProject(project.id, (current) => ({ ...current, name: 'Blocked update' }))
+        ).rejects.toMatchObject({
+          code: 'storage_error',
+        });
+        expect((await store.getProject(project.id))?.name).toBe(project.name);
+        expect(readFileSync(outsideIndex, 'utf8')).toBe(sentinel);
+      } finally {
+        await rm(outsideDir, { recursive: true, force: true });
+      }
+    });
   });
 });
 
