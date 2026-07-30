@@ -23,6 +23,12 @@ const mocks = vi.hoisted(() => ({
   selectAssetProvider: vi.fn(),
   chooseAndImportReferenceProvider: vi.fn(),
   chooseAndExportAssetsProvider: vi.fn(),
+  listConnectionCandidatesProvider: vi.fn(),
+  listConnectionsProvider: vi.fn(),
+  validateConnectionProvider: vi.fn(),
+  saveConnectionProvider: vi.fn(),
+  removeConnectionProvider: vi.fn(),
+  listRoutesProvider: vi.fn(),
   projectUpdatedEmit: vi.fn(),
 }));
 
@@ -40,6 +46,12 @@ vi.mock('@/common', () => ({
       selectAsset: { provider: mocks.selectAssetProvider },
       chooseAndImportReference: { provider: mocks.chooseAndImportReferenceProvider },
       chooseAndExportAssets: { provider: mocks.chooseAndExportAssetsProvider },
+      listConnectionCandidates: { provider: mocks.listConnectionCandidatesProvider },
+      listConnections: { provider: mocks.listConnectionsProvider },
+      validateConnection: { provider: mocks.validateConnectionProvider },
+      saveConnection: { provider: mocks.saveConnectionProvider },
+      removeConnection: { provider: mocks.removeConnectionProvider },
+      listRoutes: { provider: mocks.listRoutesProvider },
       projectUpdated: { emit: mocks.projectUpdatedEmit },
     },
   },
@@ -90,6 +102,12 @@ describe('initCreativeStudioBridge', () => {
         selectAsset: vi.fn(async () => project),
         importReferenceFromPath: vi.fn(),
         exportAssetsToDirectory: vi.fn(),
+        listConnectionCandidates: vi.fn(async () => []),
+        listConnections: vi.fn(async () => []),
+        validateConnection: vi.fn(),
+        saveConnection: vi.fn(),
+        removeConnection: vi.fn(),
+        listRoutes: vi.fn(),
       }),
     };
   });
@@ -108,6 +126,55 @@ describe('initCreativeStudioBridge', () => {
     expect(mocks.selectAssetProvider).toHaveBeenCalledOnce();
     expect(mocks.chooseAndImportReferenceProvider).toHaveBeenCalledOnce();
     expect(mocks.chooseAndExportAssetsProvider).toHaveBeenCalledOnce();
+    expect(mocks.listConnectionCandidatesProvider).toHaveBeenCalledOnce();
+    expect(mocks.listConnectionsProvider).toHaveBeenCalledOnce();
+    expect(mocks.validateConnectionProvider).toHaveBeenCalledOnce();
+    expect(mocks.saveConnectionProvider).toHaveBeenCalledOnce();
+    expect(mocks.removeConnectionProvider).toHaveBeenCalledOnce();
+    expect(mocks.listRoutesProvider).toHaveBeenCalledOnce();
+  });
+
+  it('delegates connection and route commands through the same redacted command envelope', async () => {
+    const service = {
+      ...dependencies.getService(),
+      listConnectionCandidates: vi.fn(async () => [
+        {
+          providerId: 'provider_1',
+          providerName: 'Gateway',
+          models: [{ model: 'open-sora', health: 'available' as const }],
+        },
+      ]),
+      listConnections: vi.fn(async () => [
+        {
+          schemaVersion: 1 as const,
+          id: 'binding_1',
+          providerId: 'provider_1',
+          adapterId: 'weprompt-media-gateway-v1' as const,
+          model: 'open-sora',
+          capabilities: { mediaKinds: ['video' as const], audioModes: ['none'] },
+          validatedAt: '2026-07-30T00:00:00.000Z',
+        },
+      ]),
+      validateConnection: vi.fn(async () => {
+        throw new CreativeStudioServiceError('provider_error');
+      }),
+      saveConnection: vi.fn(),
+      removeConnection: vi.fn(),
+      listRoutes: vi.fn(),
+    };
+    initCreativeStudioBridge({ getService: () => service });
+    const candidates = mocks.listConnectionCandidatesProvider.mock.calls[0]?.[0] as ProviderHandler;
+    const connections = mocks.listConnectionsProvider.mock.calls[0]?.[0] as ProviderHandler;
+    const validate = mocks.validateConnectionProvider.mock.calls[0]?.[0] as ProviderHandler;
+
+    await expect(candidates(undefined)).resolves.toEqual({ ok: true, data: await service.listConnectionCandidates() });
+    await expect(connections(undefined)).resolves.toEqual({ ok: true, data: await service.listConnections() });
+    await expect(
+      validate({ providerId: 'provider_1', adapterId: 'weprompt-media-gateway-v1', model: 'open-sora' })
+    ).resolves.toEqual({
+      ok: false,
+      error: { code: 'provider_error', messageKey: 'creativeStudio.errors.provider' },
+    });
   });
 
   it('returns explicit cancellation outcomes without handing a path to either service operation', async () => {

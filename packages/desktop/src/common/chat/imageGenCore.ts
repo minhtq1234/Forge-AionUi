@@ -12,6 +12,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomUUID } from 'node:crypto';
 import { jsonrepair } from 'jsonrepair';
 import type OpenAI from 'openai';
 import { ClientFactory, type RotatingClient } from '@/common/api/ClientFactory';
@@ -85,23 +86,112 @@ export function getFileExtensionFromDataUrl(dataUrl: string): string {
   return DEFAULT_IMAGE_EXTENSION;
 }
 
-export async function saveGeneratedImage(base64Data: string, workspaceDir: string): Promise<string> {
-  const timestamp = Date.now();
-  const fileExtension = getFileExtensionFromDataUrl(base64Data);
-  const file_name = `img-${timestamp}${fileExtension}`;
-  const file_path = path.join(workspaceDir, file_name);
+/**
+ * The only remote-image seam in this common module. Main-process callers must
+ * supply the Task 4 policy-enforcing downloader; this module never fetches a
+ * hosted URL itself.
+ */
+export type HostedImageDownloader = (input: {
+  url: string;
+  maxBytes: number;
+  signal?: AbortSignal;
+  write: (chunk: Buffer) => Promise<void>;
+}) => Promise<void>;
 
-  const base64WithoutPrefix = base64Data.replace(/^data:image\/[^;]+;base64,/, '');
-  const imageBuffer = Buffer.from(base64WithoutPrefix, 'base64');
+export type ImageGenerationDeps = { hostedImageDownloader?: HostedImageDownloader };
+
+const HOSTED_IMAGE_MAX_BYTES = 50 * 1024 * 1024;
+
+const sniffGeneratedImageExtension = (bytes: Buffer): '.png' | '.jpg' | '.webp' | null => {
+  if (bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return '.png';
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return '.jpg';
+  if (bytes.subarray(0, 4).toString() === 'RIFF' && bytes.subarray(8, 12).toString() === 'WEBP') return '.webp';
+  return null;
+};
+
+const decodeImageDataUrl = (value: string, maxBytes: number): Buffer => {
+  const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+  if (!match?.[2] || match[2].length % 4 === 1 || match[2].length > Math.ceil(maxBytes / 3) * 4)
+    throw new Error('Invalid image data URL');
+  const decoded = Buffer.from(match[2], 'base64');
+  const detected = sniffGeneratedImageExtension(decoded);
+  const declared = match[1] === 'jpeg' ? '.jpg' : `.${match[1]}`;
+  if (decoded.byteLength === 0 || decoded.byteLength > maxBytes || !detected || detected !== declared) {
+    throw new Error('Invalid image data URL');
+  }
+  const canonicalInput = match[2].replace(/=+$/, '');
+  if (decoded.toString('base64').replace(/=+$/, '') !== canonicalInput) throw new Error('Invalid image data URL');
+  return decoded;
+};
+
+export async function saveGeneratedImage(
+  imageData: string,
+  workspaceDir: string,
+  hostedImageDownloader?: HostedImageDownloader,
+  signal?: AbortSignal,
+  maxBytes = HOSTED_IMAGE_MAX_BYTES
+): Promise<string> {
+  const timestamp = Date.now();
+  const base_name = `img-${timestamp}-${randomUUID()}`;
+  const fileExtension = isHttpUrl(imageData) ? DEFAULT_IMAGE_EXTENSION : getFileExtensionFromDataUrl(imageData);
+  const file_name = `${base_name}${fileExtension}`;
+  const file_path = path.join(workspaceDir, file_name);
+  const temp_path = `${file_path}.part`;
 
   try {
-    await fs.promises.writeFile(file_path, imageBuffer);
+    await fs.promises.mkdir(workspaceDir, { recursive: true });
+    if (isHttpUrl(imageData)) {
+      if (!hostedImageDownloader) throw new Error('Hosted image downloader is not configured');
+      let byteSize = 0;
+      const header = Buffer.alloc(12);
+      const handle = await fs.promises.open(temp_path, 'wx+');
+      try {
+        await hostedImageDownloader({
+          url: imageData,
+          maxBytes,
+          signal,
+          write: async (chunk) => {
+            byteSize += chunk.byteLength;
+            if (byteSize > maxBytes) throw new Error('Hosted image exceeds the allowed size');
+            await handle.write(chunk);
+          },
+        });
+        if (byteSize === 0) throw new Error('Hosted image did not contain data');
+        await handle.read(header, 0, header.byteLength, 0);
+      } finally {
+        await handle.close();
+      }
+      const detectedExtension = sniffGeneratedImageExtension(header);
+      if (!detectedExtension) throw new Error('Hosted output is not a supported image');
+      const detectedPath = path.join(workspaceDir, `${base_name}${detectedExtension}`);
+      await fs.promises.rename(temp_path, detectedPath);
+      return detectedPath;
+    }
+    const imageBuffer = decodeImageDataUrl(imageData, maxBytes);
+    await fs.promises.writeFile(temp_path, imageBuffer, { flag: 'wx' });
+    await fs.promises.rename(temp_path, file_path);
     return file_path;
   } catch (error) {
-    console.error('[ImageGen] Failed to save image file:', error);
-    throw new Error(`Failed to save image: ${error instanceof Error ? error.message : String(error)}`, {
-      cause: error,
-    });
+    await fs.promises.rm(temp_path, { force: true }).catch((): undefined => undefined);
+    console.error('[ImageGen] Failed to save image file');
+    const stableCode =
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      typeof error.code === 'string' &&
+      /^[a-z_]{1,64}$/.test(error.code)
+        ? error.code
+        : error instanceof Error &&
+            [
+              'Hosted image downloader is not configured',
+              'Hosted image exceeds the allowed size',
+              'Hosted image did not contain data',
+              'Hosted output is not a supported image',
+              'Invalid image data URL',
+            ].includes(error.message)
+          ? error.message
+          : 'hosted_image_download_failed';
+    throw new Error(`Failed to save image: ${stableCode}`, { cause: error });
   }
 }
 
@@ -199,7 +289,8 @@ async function generateViaImagesApi(
   provider: TProviderWithModel,
   workspaceDir: string,
   proxy?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  deps?: ImageGenerationDeps
 ): Promise<ImageGenResult> {
   const hasInputImages = Array.isArray(params.image_uris) ? params.image_uris.length > 0 : !!params.image_uris;
   if (hasInputImages) {
@@ -232,10 +323,10 @@ async function generateViaImagesApi(
 
   const dataUrl = extractImagesApiDataUrl(response);
   if (!dataUrl) {
-    return { success: false, text: 'Image generation did not return any image data.', error: 'no_image_data' };
+    return { success: false, text: 'Image generation did not return any image data.', error: 'no_output' };
   }
 
-  const imagePath = await saveGeneratedImage(dataUrl, workspaceDir);
+  const imagePath = await saveGeneratedImage(dataUrl, workspaceDir, deps?.hostedImageDownloader, signal);
   const relativeImagePath = path.relative(workspaceDir, imagePath);
   return {
     success: true,
@@ -253,7 +344,8 @@ export async function executeImageGeneration(
   provider: TProviderWithModel,
   workspaceDir: string,
   proxy?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  deps?: ImageGenerationDeps
 ): Promise<ImageGenResult> {
   if (signal?.aborted) {
     return { success: false, text: 'Image generation was cancelled.', error: 'cancelled' };
@@ -262,7 +354,7 @@ export async function executeImageGeneration(
   try {
     // Form-A models (gpt-image-1, dall-e-*) use the images endpoint, not chat.
     if (isImagesApiModel(provider.use_model)) {
-      return await generateViaImagesApi(params, provider, workspaceDir, proxy, signal);
+      return await generateViaImagesApi(params, provider, workspaceDir, proxy, signal, deps);
     }
 
     // Parse image URIs
@@ -373,12 +465,17 @@ export async function executeImageGeneration(
 
     if (!images || images.length === 0) {
       const warningMessage = `Image generation did not produce any images.\n\nModel response: ${responseText}\n\nTip: Make sure your image generation model supports this type of request. Current model: ${provider.use_model}`;
-      return { success: true, text: warningMessage };
+      return { success: false, text: warningMessage, error: 'no_output' };
     }
 
     const firstImage = images[0];
     if (firstImage.type === 'image_url' && firstImage.image_url?.url) {
-      const imagePath = await saveGeneratedImage(firstImage.image_url.url, workspaceDir);
+      const imagePath = await saveGeneratedImage(
+        firstImage.image_url.url,
+        workspaceDir,
+        deps?.hostedImageDownloader,
+        signal
+      );
       const relativeImagePath = path.relative(workspaceDir, imagePath);
 
       // Strip any inline base64 data URLs from the human-readable text before
@@ -399,13 +496,13 @@ export async function executeImageGeneration(
       };
     }
 
-    return { success: true, text: responseText };
+    return { success: false, text: responseText, error: 'no_output' };
   } catch (error) {
     if (signal?.aborted) {
       return { success: false, text: 'Image generation was cancelled.', error: 'cancelled' };
     }
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`[ImageGen] API call failed:`, error);
+    console.error('[ImageGen] API call failed');
     return { success: false, text: `Error generating image: ${errorMessage}`, error: errorMessage };
   }
 }

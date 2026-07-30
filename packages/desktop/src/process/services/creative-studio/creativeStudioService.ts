@@ -16,7 +16,14 @@ import type {
   StudioReorderScenesRequest,
   StudioDeleteProjectRequest,
   StudioAsset,
+  StudioConnectionBinding,
+  StudioConnectionCandidate,
   StudioExportItem,
+  StudioListRoutesRequest,
+  StudioRemoveConnectionRequest,
+  StudioRouteCatalog,
+  StudioSaveConnectionRequest,
+  StudioValidateConnectionRequest,
 } from '@/common/types/project/creativeStudioTypes';
 import type { AppOperationResult } from '@/common/types/appOperations';
 import { runStudioStoryboardDraft } from '@process/services/app-operations';
@@ -25,7 +32,11 @@ import type {
   StudioStoryboardDraftOutput,
 } from '@process/services/app-operations/storyboardDraftTask';
 import { CreativeStudioStoreError, type CreativeStudioStore } from '@process/services/creative-studio/store';
+import type { StudioProviderResolver } from '@process/services/creative-studio/providerResolver';
+import type { GenerationProviderAdapterRegistry } from '@process/services/creative-studio/adapters';
+import type { IProvider } from '@/common/config/storage';
 import { randomUUID } from 'node:crypto';
+import { isImagesApiModel } from '@/common/utils/imageModelAllowlist';
 
 const SAFE_ID = /^[A-Za-z0-9_-]{1,256}$/;
 const ASPECT_RATIOS = new Set(['16:9', '9:16', '1:1', '4:3', '3:4']);
@@ -54,6 +65,12 @@ export type CreativeStudioService = {
     destinationDirectory: string;
     includeReferences: boolean;
   }): Promise<{ folderName: string; exported: StudioExportItem[]; missingSceneIds: string[] }>;
+  listConnectionCandidates(): Promise<StudioConnectionCandidate[]>;
+  listConnections(): Promise<StudioConnectionBinding[]>;
+  validateConnection(input: StudioValidateConnectionRequest): Promise<StudioConnectionBinding>;
+  saveConnection(input: StudioSaveConnectionRequest): Promise<StudioConnectionBinding>;
+  removeConnection(input: StudioRemoveConnectionRequest): Promise<boolean>;
+  listRoutes(input?: StudioListRoutesRequest): Promise<StudioRouteCatalog>;
 };
 
 export type CreativeStudioServiceDeps = {
@@ -63,6 +80,11 @@ export type CreativeStudioServiceDeps = {
     input: StudioStoryboardDraftTaskInput
   ) => Promise<AppOperationResult<StudioStoryboardDraftOutput>>;
   createSceneId?: () => string;
+  createConnectionId?: () => string;
+  providerResolver?: StudioProviderResolver;
+  validateConnection?: (input: StudioValidateConnectionRequest) => Promise<StudioConnectionBinding>;
+  listProviders?: () => Promise<IProvider[]>;
+  adapterRegistry?: GenerationProviderAdapterRegistry;
   mediaStore?: {
     importReferenceFromPath(input: {
       projectId: string;
@@ -80,7 +102,7 @@ export type CreativeStudioServiceDeps = {
 
 /** A safe, stable service error that can cross only through the bridge error mapper. */
 export class CreativeStudioServiceError extends Error {
-  readonly code: 'storyboard_exists' | 'planning_unavailable' | 'busy' | 'provider_error';
+  readonly code: 'storyboard_exists' | 'planning_unavailable' | 'busy' | 'provider_error' | 'invalid_route';
 
   constructor(code: CreativeStudioServiceError['code']) {
     super(code);
@@ -117,6 +139,77 @@ const assertText: (value: unknown, maximum: number, label: string, required?: bo
 
 const assertExpectedRevision: (value: unknown) => asserts value is number = (value) => {
   if (!isIntegerInRange(value, 1, Number.MAX_SAFE_INTEGER)) throw invalid('Invalid Studio project revision');
+};
+
+const providerIsAvailable = (provider: IProvider, model: string, requireListedModel = true): boolean =>
+  provider.enabled !== false &&
+  provider.model_enabled?.[model] !== false &&
+  provider.model_health?.[model]?.status !== 'unhealthy' &&
+  provider.api_key.trim().length > 0 &&
+  (!requireListedModel || provider.models.includes(model));
+
+const sanitizedCapabilities = (
+  adapterId: StudioValidateConnectionRequest['adapterId'],
+  model: string,
+  capabilities: Record<string, unknown> | undefined
+): StudioConnectionBinding['capabilities'] => {
+  if (adapterId === 'weprompt-image-v1') {
+    return { mediaKinds: ['image'], supportsFirstFrame: !isImagesApiModel(model) };
+  }
+  if (adapterId === 'byteplus-seedance-v1') {
+    const constraints =
+      model === 'seedance-1-0-pro-250528'
+        ? {
+            minDurationSeconds: 2,
+            maxDurationSeconds: 12,
+            resolutions: ['720p' as const, '1080p' as const],
+            aspectRatios: ['16:9' as const, '9:16' as const, '1:1' as const, '4:3' as const, '3:4' as const],
+          }
+        : model === 'seedance-1-5-pro-251215'
+          ? {
+              minDurationSeconds: 4,
+              maxDurationSeconds: 12,
+              resolutions: ['720p' as const, '1080p' as const],
+              aspectRatios: ['16:9' as const, '9:16' as const, '1:1' as const, '4:3' as const, '3:4' as const],
+            }
+          : {
+              minDurationSeconds: 4,
+              maxDurationSeconds: 15,
+              resolutions: ['720p' as const, '1080p' as const],
+              aspectRatios: ['16:9' as const, '9:16' as const, '1:1' as const, '4:3' as const, '3:4' as const],
+            };
+    return {
+      mediaKinds: ['video'],
+      audioModes: ['none'],
+      supportsFirstFrame: true,
+      cancellation: true,
+      ...constraints,
+    };
+  }
+  const ratios = Array.isArray(capabilities?.aspectRatios)
+    ? capabilities.aspectRatios.filter(
+        (value): value is StudioConnectionBinding['capabilities']['aspectRatios'][number] =>
+          typeof value === 'string' && ASPECT_RATIOS.has(value)
+      )
+    : undefined;
+  const resolutions = Array.isArray(capabilities?.resolutions)
+    ? capabilities.resolutions.filter(
+        (value): value is StudioConnectionBinding['capabilities']['resolutions'][number] =>
+          typeof value === 'string' && RESOLUTIONS.has(value)
+      )
+    : undefined;
+  const minimum = capabilities?.minDurationSeconds;
+  const maximum = capabilities?.maxDurationSeconds;
+  return {
+    mediaKinds: ['video'],
+    audioModes: ['none'],
+    ...(ratios && ratios.length > 0 ? { aspectRatios: ratios } : {}),
+    ...(resolutions && resolutions.length > 0 ? { resolutions } : {}),
+    ...(isIntegerInRange(minimum, 1, 60) ? { minDurationSeconds: minimum } : {}),
+    ...(isIntegerInRange(maximum, 1, 60) ? { maxDurationSeconds: maximum } : {}),
+    supportsFirstFrame: capabilities?.supportsFirstFrame === true,
+    cancellation: capabilities?.cancellation === true,
+  };
 };
 
 const plannerError = (result: AppOperationResult<StudioStoryboardDraftOutput>): CreativeStudioServiceError => {
@@ -169,6 +262,7 @@ const assertScene = (sceneId: string, scene: StudioScene): void => {
 export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): CreativeStudioService => {
   const runStoryboardDraft = deps.runStoryboardDraft ?? runStudioStoryboardDraft;
   const createSceneId = deps.createSceneId ?? randomUUID;
+  const createConnectionId = deps.createConnectionId ?? randomUUID;
   const notify = <T extends StudioProject>(project: T): T => {
     deps.onProjectUpdated(project.id);
     return project;
@@ -392,6 +486,91 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
       }
       if (!deps.mediaStore) throw new CreativeStudioStoreError('storage_error', 'Studio media storage is unavailable');
       return deps.mediaStore.exportAssetsToDirectory(input);
+    },
+
+    async listConnectionCandidates(): Promise<StudioConnectionCandidate[]> {
+      if (!deps.providerResolver) return [];
+      try {
+        return await deps.providerResolver.listConnectionCandidates();
+      } catch {
+        throw new CreativeStudioServiceError('provider_error');
+      }
+    },
+
+    async listConnections(): Promise<StudioConnectionBinding[]> {
+      return deps.store.listConnections();
+    },
+
+    async validateConnection(input: StudioValidateConnectionRequest): Promise<StudioConnectionBinding> {
+      assertSafeId(input.providerId, 'provider id');
+      assertText(input.model, 256, 'connection model', true);
+      const normalizedInput = { ...input, model: input.model.trim() };
+      if (!['weprompt-image-v1', 'byteplus-seedance-v1', 'weprompt-media-gateway-v1'].includes(input.adapterId)) {
+        throw invalid('Invalid Studio adapter');
+      }
+      if (deps.validateConnection) {
+        const validated = await deps.validateConnection(normalizedInput);
+        return { ...validated, model: normalizedInput.model };
+      }
+      if (!deps.listProviders || !deps.adapterRegistry) throw new CreativeStudioServiceError('invalid_route');
+      let providers: IProvider[];
+      try {
+        providers = await deps.listProviders();
+      } catch {
+        throw new CreativeStudioServiceError('provider_error');
+      }
+      const provider = providers.find((candidate) => candidate.id === normalizedInput.providerId);
+      if (!provider || !providerIsAvailable(provider, normalizedInput.model, false))
+        throw new CreativeStudioServiceError('invalid_route');
+      const adapter = deps.adapterRegistry.get(input.adapterId);
+      if (!adapter) throw new CreativeStudioServiceError('invalid_route');
+      const validation = await adapter.validateConnection(
+        { model: normalizedInput.model },
+        provider,
+        new AbortController().signal
+      );
+      if (!validation.ok) throw new CreativeStudioServiceError('provider_error');
+      return {
+        schemaVersion: 1,
+        id: 'validation_only',
+        providerId: provider.id,
+        adapterId: adapter.id,
+        model: normalizedInput.model,
+        capabilities: sanitizedCapabilities(adapter.id, normalizedInput.model, validation.capabilities),
+        validatedAt: new Date().toISOString(),
+      };
+    },
+
+    async saveConnection(input: StudioSaveConnectionRequest): Promise<StudioConnectionBinding> {
+      const validated = await this.validateConnection(input);
+      const binding: StudioConnectionBinding = {
+        ...validated,
+        schemaVersion: 1,
+        id: createConnectionId(),
+      };
+      if (!isSafeId(binding.id)) {
+        throw new CreativeStudioStoreError('storage_error', 'Unable to allocate Studio connection identity');
+      }
+      return deps.store.saveConnection(binding);
+    },
+
+    async removeConnection(input: StudioRemoveConnectionRequest): Promise<boolean> {
+      assertSafeId(input.connectionId, 'connection id');
+      return deps.store.removeConnection(input.connectionId);
+    },
+
+    async listRoutes(input: StudioListRoutesRequest = {}): Promise<StudioRouteCatalog> {
+      if (input.projectId !== undefined) assertSafeId(input.projectId, 'project id');
+      if (!deps.providerResolver) throw new CreativeStudioServiceError('invalid_route');
+      const project = input.projectId === undefined ? null : await deps.store.getProject(input.projectId);
+      if (input.projectId !== undefined && project === null) {
+        throw new CreativeStudioStoreError('not_found', 'Studio project not found');
+      }
+      try {
+        return await deps.providerResolver.listRoutes({ routing: project?.routing });
+      } catch {
+        throw new CreativeStudioServiceError('provider_error');
+      }
     },
   };
 };

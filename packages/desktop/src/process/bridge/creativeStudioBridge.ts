@@ -5,6 +5,9 @@
  */
 
 import { ipcBridge } from '@/common';
+import { httpRequest } from '@/common/adapter/httpBridge';
+import { appOperationsModel } from '@/common/adapter/ipcBridge';
+import type { IProvider } from '@/common/config/storage';
 import type { StudioCommandErrorCode, StudioCommandResult } from '@/common/types/project/creativeStudioTypes';
 import {
   createCreativeStudioService,
@@ -13,6 +16,8 @@ import {
   type CreativeStudioServiceDeps,
 } from '@process/services/creative-studio/creativeStudioService';
 import { CreativeStudioStoreError, createCreativeStudioStore } from '@process/services/creative-studio/store';
+import { createStudioProviderResolver } from '@process/services/creative-studio/providerResolver';
+import { createGenerationProviderAdapterRegistry } from '@process/services/creative-studio/adapters';
 import { getCreativeStudioRootDir } from '@process/utils/initStorage';
 import {
   createStudioMediaStore,
@@ -63,6 +68,18 @@ export const buildCreativeStudioServiceDeps = (): CreativeStudioServiceDeps => {
   const store = createCreativeStudioStore({ rootDir: getCreativeStudioRootDir() });
   return {
     store,
+    providerResolver: createStudioProviderResolver({
+      listProviders: () => httpRequest<IProvider[]>('GET', '/api/providers'),
+      getClientSettings: async () => (await httpRequest<Record<string, unknown>>('GET', '/api/settings/client')) ?? {},
+      getPlanningReadiness: async () => {
+        return appOperationsModel.get.invoke();
+      },
+      listConnections: () => store.listConnections(),
+    }),
+    listProviders: () => httpRequest<IProvider[]>('GET', '/api/providers'),
+    adapterRegistry: createGenerationProviderAdapterRegistry({
+      image: { workspaceDir: getCreativeStudioRootDir() },
+    }),
     mediaStore: createStudioMediaStore({ store, getAvailableDiskBytes: getAvailableStudioDiskBytes }),
     onProjectUpdated: (projectId) => ipcBridge.creativeStudio.projectUpdated.emit({ projectId }),
   };
@@ -148,4 +165,18 @@ export function initCreativeStudioBridge(dependencies: CreativeStudioBridgeDepen
       return toCommandError(error);
     }
   });
+  ipcBridge.creativeStudio.listConnectionCandidates.provider(() =>
+    command(() => dependencies.getService().listConnectionCandidates())
+  );
+  ipcBridge.creativeStudio.listConnections.provider(() => command(() => dependencies.getService().listConnections()));
+  ipcBridge.creativeStudio.validateConnection.provider((input) =>
+    command(() => dependencies.getService().validateConnection(input))
+  );
+  ipcBridge.creativeStudio.saveConnection.provider((input) =>
+    command(() => dependencies.getService().saveConnection(input))
+  );
+  ipcBridge.creativeStudio.removeConnection.provider((input) =>
+    command(() => dependencies.getService().removeConnection(input))
+  );
+  ipcBridge.creativeStudio.listRoutes.provider((input) => command(() => dependencies.getService().listRoutes(input)));
 }

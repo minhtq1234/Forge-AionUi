@@ -21,6 +21,8 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from 'vites
 import type {
   CreateStudioProjectInput,
   StudioAsset,
+  StudioConnectionBinding,
+  StudioConnectionCandidate,
   StudioCommandResult,
   StudioDesktopApi,
   StudioJob,
@@ -28,6 +30,7 @@ import type {
   StudioProjectSummary,
   StudioProviderRef,
   StudioRouteCatalog,
+  StudioRouteSuggestion,
 } from '@/common/types/project/creativeStudioTypes';
 import { createCreativeStudioStore, type CreativeStudioStore } from '@process/services/creative-studio/store';
 
@@ -93,6 +96,16 @@ const addSucceededJob = (project: StudioProject): StudioProject => {
   next.scenes.scene_1.jobIds = ['job_1'];
   return next;
 };
+
+const validConnectionBinding = (): StudioConnectionBinding => ({
+  schemaVersion: 1,
+  id: 'binding_1',
+  providerId: 'provider_1',
+  adapterId: 'weprompt-media-gateway-v1',
+  model: 'open-sora',
+  capabilities: { mediaKinds: ['video'], audioModes: ['none'] },
+  validatedAt: '2026-07-30T00:00:00.000Z',
+});
 
 describe('creative studio project store', () => {
   let rootDir: string;
@@ -483,7 +496,10 @@ describe('creative studio renderer DTO contract', () => {
       | StudioAsset
       | StudioJob
       | StudioProviderRef
-      | StudioRouteCatalog;
+      | StudioRouteCatalog
+      | StudioConnectionBinding
+      | StudioConnectionCandidate
+      | StudioRouteSuggestion;
     type RendererProjectKeys = KeysOfUnion<RendererDto>;
     type NoForbiddenRendererFields = Extract<RendererProjectKeys, ForbiddenRendererField>;
     const result: StudioCommandResult<StudioProjectSummary[]> = { ok: true, data: [] };
@@ -508,5 +524,179 @@ describe('creative studio renderer DTO contract', () => {
     type AllOperationsAreTyped = IsTypedCommand<StudioDesktopApi[keyof StudioDesktopApi]>;
 
     expectTypeOf<AllOperationsAreTyped>().toEqualTypeOf<true>();
+  });
+});
+
+describe('CreativeStudioStore connections', () => {
+  it('persists only a secret-free validated binding in the separately atomic connection file', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'creative-studio-connections-'));
+    const connectionStore = createCreativeStudioStore({ rootDir: root });
+    try {
+      const saved = await connectionStore.saveConnection(validConnectionBinding());
+
+      expect(saved.id).toBe('binding_1');
+      expect(await connectionStore.listConnections()).toEqual([saved]);
+      const raw = readFileSync(path.join(root, 'connections.json'), 'utf8');
+      expect(raw).not.toContain('api_key');
+      expect(raw).not.toContain('https://');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    'unknown',
+    'api_key',
+    'base_url',
+    'file_path',
+    'token',
+    'secret',
+    'accessToken',
+    'client-secret',
+    'payloadBase64',
+    'response_bytes',
+    'raw-metadata',
+  ])('rejects an unsafe or unknown top-level binding field on save: %s', async (field) => {
+    const root = mkdtempSync(path.join(tmpdir(), 'creative-studio-connections-save-keys-'));
+    const connectionStore = createCreativeStudioStore({ rootDir: root });
+    try {
+      await expect(
+        connectionStore.saveConnection({ ...validConnectionBinding(), [field]: 'must-not-persist' } as never)
+      ).rejects.toMatchObject({ code: 'invalid_payload' });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['unknown', 'api_key', 'base_url', 'file_path', 'token', 'secret'])(
+    'rejects an unsafe or unknown top-level binding field while reading: %s',
+    async (field) => {
+      const root = mkdtempSync(path.join(tmpdir(), 'creative-studio-connections-read-keys-'));
+      const connectionStore = createCreativeStudioStore({ rootDir: root });
+      try {
+        writeFileSync(
+          path.join(root, 'connections.json'),
+          JSON.stringify({
+            schemaVersion: 1,
+            connections: [{ ...validConnectionBinding(), [field]: 'must-not-load' }],
+          })
+        );
+
+        await expect(connectionStore.listConnections()).rejects.toMatchObject({ code: 'storage_error' });
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  );
+
+  it.each([
+    { label: 'oversized connection id', override: { id: 'i'.repeat(257) } },
+    { label: 'oversized provider id', override: { providerId: 'p'.repeat(257) } },
+    { label: 'leading model whitespace', override: { model: ' open-sora' } },
+    { label: 'trailing model whitespace', override: { model: 'open-sora ' } },
+    { label: 'model control characters', override: { model: 'open\nsora' } },
+    { label: 'oversized model', override: { model: 'm'.repeat(257) } },
+    { label: 'non-ISO validation time', override: { validatedAt: 'yesterday' } },
+    { label: 'non-canonical validation time', override: { validatedAt: '2026-07-30T07:00:00+07:00' } },
+    { label: 'impossible validation time', override: { validatedAt: '2026-02-30T00:00:00.000Z' } },
+  ])('rejects unsafe bounded binding metadata: $label', async ({ override }) => {
+    const root = mkdtempSync(path.join(tmpdir(), 'creative-studio-connections-metadata-'));
+    const connectionStore = createCreativeStudioStore({ rootDir: root });
+    try {
+      await expect(connectionStore.saveConnection({ ...validConnectionBinding(), ...override })).rejects.toMatchObject({
+        code: 'invalid_payload',
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['api_key', 'base_url', 'token', 'metadata'])(
+    'rejects an unknown or sensitive manifest-root field while reading: %s',
+    async (field) => {
+      const root = mkdtempSync(path.join(tmpdir(), 'creative-studio-connections-root-'));
+      const connectionStore = createCreativeStudioStore({ rootDir: root });
+      try {
+        writeFileSync(
+          path.join(root, 'connections.json'),
+          JSON.stringify({
+            schemaVersion: 1,
+            connections: [validConnectionBinding()],
+            [field]: 'must-not-load',
+          })
+        );
+
+        await expect(connectionStore.listConnections()).rejects.toMatchObject({ code: 'storage_error' });
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  );
+
+  it('rejects connection capabilities with unknown fields instead of durable provider metadata', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'creative-studio-connections-invalid-'));
+    const connectionStore = createCreativeStudioStore({ rootDir: root });
+    try {
+      await expect(
+        connectionStore.saveConnection({
+          schemaVersion: 1,
+          id: 'binding_1',
+          providerId: 'provider_1',
+          adapterId: 'weprompt-media-gateway-v1',
+          model: 'open-sora',
+          capabilities: { mediaKinds: ['video'], baseUrl: 'https://not-stored.invalid' } as never,
+          validatedAt: '2026-07-30T00:00:00.000Z',
+        })
+      ).rejects.toMatchObject({ code: 'invalid_payload' });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('upserts the same provider adapter and model instead of creating duplicate routes', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'creative-studio-connections-upsert-'));
+    const connectionStore = createCreativeStudioStore({ rootDir: root });
+    try {
+      const base = {
+        schemaVersion: 1 as const,
+        providerId: 'provider_1',
+        adapterId: 'weprompt-media-gateway-v1' as const,
+        model: 'open-sora',
+        capabilities: { mediaKinds: ['video' as const], audioModes: ['none'] },
+        validatedAt: '2026-07-30T00:00:00.000Z',
+      };
+      await connectionStore.saveConnection({ ...base, id: 'binding_1' });
+      await connectionStore.saveConnection({ ...base, id: 'binding_2' });
+
+      await expect(connectionStore.listConnections()).resolves.toMatchObject([{ id: 'binding_2' }]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    { mediaKinds: ['image'], audioModes: ['none'] },
+    { mediaKinds: ['video'], audioModes: ['none', 'stereo'] },
+    { mediaKinds: ['video'], audioModes: ['none', 'none'] },
+    { mediaKinds: ['video'], aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '16:9'] },
+    { mediaKinds: ['video'], resolutions: ['720p', '1080p', '720p'] },
+  ])('rejects unbounded or non-silent persisted capability arrays', async (capabilities) => {
+    const root = mkdtempSync(path.join(tmpdir(), 'creative-studio-connections-bounds-'));
+    const connectionStore = createCreativeStudioStore({ rootDir: root });
+    try {
+      await expect(
+        connectionStore.saveConnection({
+          schemaVersion: 1,
+          id: 'binding_1',
+          providerId: 'provider_1',
+          adapterId: 'weprompt-media-gateway-v1',
+          model: 'open-sora',
+          capabilities: capabilities as never,
+          validatedAt: '2026-07-30T00:00:00.000Z',
+        })
+      ).rejects.toMatchObject({ code: 'invalid_payload' });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

@@ -178,6 +178,14 @@ const studioProjectInputSchema = z
   })
   .strict();
 const studioProjectRequestSchema = z.object({ projectId: safeIdSchema }).strict();
+const studioProviderAdapterSchema = z.enum(['weprompt-image-v1', 'byteplus-seedance-v1', 'weprompt-media-gateway-v1']);
+const studioConnectionSchema = z
+  .object({
+    providerId: safeIdSchema,
+    adapterId: studioProviderAdapterSchema,
+    model: z.string().trim().min(1).max(256),
+  })
+  .strict();
 const studioSceneSchema = z
   .object({
     id: safeIdSchema,
@@ -336,6 +344,12 @@ export const nativeBridgePayloadSchemas = {
   'creative-studio.choose-and-export-assets': z
     .object({ projectId: safeIdSchema, includeReferences: z.boolean() })
     .strict(),
+  'creative-studio.list-connection-candidates': voidPayloadSchema,
+  'creative-studio.list-connections': voidPayloadSchema,
+  'creative-studio.validate-connection': studioConnectionSchema,
+  'creative-studio.save-connection': studioConnectionSchema,
+  'creative-studio.remove-connection': z.object({ connectionId: safeIdSchema }).strict(),
+  'creative-studio.list-routes': z.object({ projectId: safeIdSchema.optional() }).strict().optional(),
   'office-artifact.get-state': z.object(officeArtifactRequestShape).strict(),
   'office-artifact.prepare-preview': z.object(officeArtifactRequestShape).strict(),
   'office-artifact.start-preview': z.object({ leaseId: identifierSchema, url: urlSchema.optional() }).strict(),

@@ -11,6 +11,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CreateStudioProjectInput, StudioProject, StudioScene } from '@/common/types/project/creativeStudioTypes';
+import type { IProvider } from '@/common/config/storage';
+import type { GenerationProviderAdapter } from '@process/services/creative-studio/adapters';
 import type { CreativeStudioStoreError } from '@process/services/creative-studio/store';
 import { createCreativeStudioStore } from '@process/services/creative-studio/store';
 import {
@@ -110,6 +112,202 @@ describe('CreativeStudioService', () => {
     await expect(
       service.updateProject({ projectId: 'missing_project', expectedRevision: 1, name: 'Changed' })
     ).rejects.toMatchObject({ code: 'not_found' } satisfies Partial<CreativeStudioStoreError>);
+  });
+
+  it('saves a validation-derived connection without treating it as a successful project route', async () => {
+    const connectionService = createCreativeStudioService({
+      store: createCreativeStudioStore({ rootDir }),
+      onProjectUpdated,
+      createConnectionId: () => 'binding_1',
+      validateConnection: async (input) => ({
+        schemaVersion: 1,
+        id: 'discarded_by_service',
+        providerId: input.providerId,
+        adapterId: input.adapterId,
+        model: input.model,
+        capabilities: { mediaKinds: ['video'], audioModes: ['none'] },
+        validatedAt: '2026-07-30T00:00:00.000Z',
+      }),
+    });
+    const project = await connectionService.createProject(makeInput());
+
+    const binding = await connectionService.saveConnection({
+      providerId: 'provider_1',
+      adapterId: 'weprompt-media-gateway-v1',
+      model: 'open-sora',
+    });
+
+    expect(binding.id).toBe('binding_1');
+    expect((await connectionService.getProject(project.id))?.routing.video).toBeNull();
+  });
+
+  it('lists and removes a saved binding after the service is recreated over the same store', async () => {
+    const originalStore = createCreativeStudioStore({ rootDir });
+    await originalStore.saveConnection({
+      schemaVersion: 1,
+      id: 'binding_stale',
+      providerId: 'provider_deleted',
+      adapterId: 'weprompt-media-gateway-v1',
+      model: 'open-sora',
+      capabilities: { mediaKinds: ['video'], audioModes: ['none'] },
+      validatedAt: '2026-07-30T00:00:00.000Z',
+    });
+    const reloaded = createCreativeStudioService({
+      store: createCreativeStudioStore({ rootDir }),
+      onProjectUpdated,
+    });
+
+    await expect(reloaded.listConnections()).resolves.toMatchObject([{ id: 'binding_stale' }]);
+    await expect(reloaded.removeConnection({ connectionId: 'binding_stale' })).resolves.toBe(true);
+    await expect(reloaded.listConnections()).resolves.toEqual([]);
+  });
+
+  it('validates, normalizes, sanitizes, and saves a manual gateway model absent from chat discovery', async () => {
+    const validateConnection = vi.fn(async () => ({
+      ok: true as const,
+      capabilities: {
+        mediaKinds: ['video'],
+        audioModes: ['none'],
+        aspectRatios: ['16:9', '9:16'],
+        resolutions: ['720p'],
+        minDurationSeconds: 2,
+        maxDurationSeconds: 20,
+        supportsFirstFrame: true,
+        cancellation: true,
+        rawProviderField: 'must-not-persist',
+      },
+    }));
+    const adapter: GenerationProviderAdapter = {
+      id: 'weprompt-media-gateway-v1',
+      validateConnection,
+      validateRequest: () => ({
+        ok: true,
+        normalized: { aspectRatio: '16:9', resolution: '720p', durationSeconds: 5 },
+      }),
+      submit: async () => ({ kind: 'remote', providerJobId: 'job_1' }),
+    };
+    const manualProvider: IProvider = {
+      id: 'provider_1',
+      platform: 'custom',
+      name: 'Gateway',
+      base_url: 'https://gateway.example',
+      api_key: 'secret',
+      models: [],
+    };
+    const connectionService = createCreativeStudioService({
+      store: createCreativeStudioStore({ rootDir }),
+      onProjectUpdated,
+      createConnectionId: () => 'binding_manual',
+      listProviders: async () => [manualProvider],
+      adapterRegistry: new Map([['weprompt-media-gateway-v1', adapter]]),
+    });
+
+    const saved = await connectionService.saveConnection({
+      providerId: 'provider_1',
+      adapterId: 'weprompt-media-gateway-v1',
+      model: '  open-sora-manual  ',
+    });
+
+    expect(validateConnection).toHaveBeenCalledWith(
+      { model: 'open-sora-manual' },
+      manualProvider,
+      expect.any(AbortSignal)
+    );
+    expect(saved).toMatchObject({
+      id: 'binding_manual',
+      model: 'open-sora-manual',
+      capabilities: {
+        mediaKinds: ['video'],
+        audioModes: ['none'],
+        aspectRatios: ['16:9', '9:16'],
+        resolutions: ['720p'],
+        minDurationSeconds: 2,
+        maxDurationSeconds: 20,
+        supportsFirstFrame: true,
+        cancellation: true,
+      },
+    });
+    expect(saved.capabilities).not.toHaveProperty('rawProviderField');
+  });
+
+  it('does not validate a manual model after its provider is disabled', async () => {
+    const validateConnection = vi.fn();
+    const connectionService = createCreativeStudioService({
+      store: createCreativeStudioStore({ rootDir }),
+      onProjectUpdated,
+      listProviders: async () => [
+        {
+          id: 'provider_1',
+          platform: 'custom',
+          name: 'Gateway',
+          base_url: 'https://gateway.example',
+          api_key: 'secret',
+          models: [],
+          enabled: false,
+        },
+      ],
+      adapterRegistry: new Map([
+        [
+          'weprompt-media-gateway-v1',
+          {
+            id: 'weprompt-media-gateway-v1',
+            validateConnection,
+            validateRequest: () => ({ ok: false, issues: [{ code: 'provider_unavailable' }] }),
+            submit: async () => ({ kind: 'remote' as const, providerJobId: 'never' }),
+          },
+        ],
+      ]),
+    });
+
+    await expect(
+      connectionService.validateConnection({
+        providerId: 'provider_1',
+        adapterId: 'weprompt-media-gateway-v1',
+        model: 'open-sora-manual',
+      })
+    ).rejects.toMatchObject({ code: 'invalid_route' });
+    expect(validateConnection).not.toHaveBeenCalled();
+  });
+
+  it('maps resolver dependency failures to a provider error', async () => {
+    const connectionService = createCreativeStudioService({
+      store: createCreativeStudioStore({ rootDir }),
+      onProjectUpdated,
+      providerResolver: {
+        listConnectionCandidates: async () => {
+          throw new Error('provider backend unavailable');
+        },
+        listRoutes: async () => {
+          throw new Error('settings backend unavailable');
+        },
+      },
+    });
+
+    await expect(connectionService.listConnectionCandidates()).rejects.toMatchObject({ code: 'provider_error' });
+    await expect(connectionService.listRoutes()).rejects.toMatchObject({ code: 'provider_error' });
+  });
+
+  it('passes only a project last-successful routing hint to the fresh route resolver', async () => {
+    const listRoutes = vi.fn(async () => ({
+      catalogVersion: 'catalog_1',
+      planning: { health: 'ready' as const },
+      automatic: [],
+      providerModels: [],
+      suggestions: {
+        image: { route: null, reason: 'no_compatible_route' as const },
+        video: { route: null, reason: 'no_compatible_route' as const },
+      },
+    }));
+    const routed = createCreativeStudioService({
+      store: createCreativeStudioStore({ rootDir }),
+      onProjectUpdated,
+      providerResolver: { listConnectionCandidates: async () => [], listRoutes },
+    });
+    const project = await routed.createProject(makeInput());
+
+    await routed.listRoutes({ projectId: project.id });
+
+    expect(listRoutes).toHaveBeenCalledWith({ routing: { image: null, video: null } });
   });
 
   it('rejects metadata outside renderer bounds instead of persisting oversized text', async () => {

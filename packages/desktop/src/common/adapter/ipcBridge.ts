@@ -71,6 +71,13 @@ import type {
   StudioProjectSummary,
   StudioImportOutcome,
   StudioExportOutcome,
+  StudioConnectionBinding,
+  StudioConnectionCandidate,
+  StudioListRoutesRequest,
+  StudioRemoveConnectionRequest,
+  StudioRouteCatalog,
+  StudioSaveConnectionRequest,
+  StudioValidateConnectionRequest,
   StudioReorderScenesRequest,
   StudioSelectAssetRequest,
   StudioUpdateProjectRequest,
@@ -1038,6 +1045,25 @@ export const creativeStudio = {
     StudioCommandResult<StudioExportOutcome>,
     StudioChooseAndExportAssetsRequest
   >('creative-studio.choose-and-export-assets'),
+  listConnectionCandidates: bridge.buildProvider<StudioCommandResult<StudioConnectionCandidate[]>, void>(
+    'creative-studio.list-connection-candidates'
+  ),
+  listConnections: bridge.buildProvider<StudioCommandResult<StudioConnectionBinding[]>, void>(
+    'creative-studio.list-connections'
+  ),
+  validateConnection: bridge.buildProvider<
+    StudioCommandResult<StudioConnectionBinding>,
+    StudioValidateConnectionRequest
+  >('creative-studio.validate-connection'),
+  saveConnection: bridge.buildProvider<StudioCommandResult<StudioConnectionBinding>, StudioSaveConnectionRequest>(
+    'creative-studio.save-connection'
+  ),
+  removeConnection: bridge.buildProvider<StudioCommandResult<boolean>, StudioRemoveConnectionRequest>(
+    'creative-studio.remove-connection'
+  ),
+  listRoutes: bridge.buildProvider<StudioCommandResult<StudioRouteCatalog>, StudioListRoutesRequest | undefined>(
+    'creative-studio.list-routes'
+  ),
   projectUpdated: bridge.buildEmitter<{ projectId: string }>('studio.project-updated'),
 };
 

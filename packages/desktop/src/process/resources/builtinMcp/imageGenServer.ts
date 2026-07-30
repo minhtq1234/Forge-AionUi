@@ -16,6 +16,10 @@ import { z } from 'zod';
 import { BUILTIN_IMAGE_GEN_ID, BUILTIN_IMAGE_GEN_NAME } from './constants';
 import { executeImageGeneration } from '@/common/chat/imageGenCore';
 import type { TProviderWithModel } from '@/common/config/storage';
+import { createStudioHostedImageDownloader } from '@process/services/creative-studio/adapters/imageAdapter';
+
+/** Uses the one bounded, SSRF-safe remote media policy for hosted image output. */
+const downloadHostedImage = createStudioHostedImageDownloader();
 
 // Read provider config from environment variables
 function getProviderFromEnv(): TProviderWithModel | null {
@@ -111,7 +115,9 @@ IMPORTANT: When user provides multiple images, ALWAYS pass ALL images to the ima
       const proxy = process.env.AIONUI_IMG_PROXY || undefined;
       const workspaceDir = workspace_dir || process.cwd();
 
-      const result = await executeImageGeneration({ prompt, image_uris }, provider, workspaceDir, proxy);
+      const result = await executeImageGeneration({ prompt, image_uris }, provider, workspaceDir, proxy, undefined, {
+        hostedImageDownloader: downloadHostedImage,
+      });
 
       if (!result.success) {
         return {

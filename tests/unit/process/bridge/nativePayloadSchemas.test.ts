@@ -131,6 +131,20 @@ const VALID_PAYLOADS = {
     expectedRevision: 1,
   },
   'creative-studio.choose-and-export-assets': { projectId: 'project_1', includeReferences: true },
+  'creative-studio.list-connection-candidates': undefined,
+  'creative-studio.list-connections': undefined,
+  'creative-studio.validate-connection': {
+    providerId: 'provider_1',
+    adapterId: 'weprompt-media-gateway-v1',
+    model: 'open-sora',
+  },
+  'creative-studio.save-connection': {
+    providerId: 'provider_1',
+    adapterId: 'weprompt-media-gateway-v1',
+    model: 'open-sora',
+  },
+  'creative-studio.remove-connection': { connectionId: 'binding_1' },
+  'creative-studio.list-routes': { projectId: 'project_1' },
   'app-operations.cancel': { operation_id: 'operation-1' },
   'office-artifact.get-state': {
     conversationId: 'conversation-1',
@@ -236,6 +250,8 @@ const VOID_PROVIDER_KEYS = [
   'system-settings:get-pet-size',
   'system-settings:get-pet-dnd',
   'system-settings:get-pet-confirm-enabled',
+  'creative-studio.list-connection-candidates',
+  'creative-studio.list-connections',
   'webui.get-status',
   'webui.stop',
 ] as const satisfies ReadonlyArray<NativeBridgeProviderKey>;
@@ -453,6 +469,23 @@ const INVALID_PAYLOADS = [
     'wrong include references boolean',
     { projectId: 'project_1', includeReferences: 'yes' },
   ],
+  [
+    'creative-studio.validate-connection',
+    'provider id traversal',
+    { providerId: '../provider', adapterId: 'weprompt-image-v1', model: 'image' },
+  ],
+  [
+    'creative-studio.validate-connection',
+    'renderer supplied provider URL',
+    { providerId: 'provider_1', adapterId: 'weprompt-image-v1', model: 'image', baseUrl: 'https://secret.invalid' },
+  ],
+  [
+    'creative-studio.save-connection',
+    'renderer supplied credential',
+    { providerId: 'provider_1', adapterId: 'weprompt-image-v1', model: 'image', apiKey: 'secret' },
+  ],
+  ['creative-studio.remove-connection', 'connection traversal', { connectionId: '../binding_1' }],
+  ['creative-studio.list-routes', 'project traversal', { projectId: '../project_1' }],
   [
     'creative-studio.propose-storyboard',
     'project id traversal',

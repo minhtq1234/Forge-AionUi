@@ -147,30 +147,118 @@ export type CreateStudioProjectInput = {
   resolution: StudioResolution;
 };
 
-export type StudioRouteConstraintIssue = {
+export type StudioRouteIssue = {
   code: 'provider_unavailable' | 'unsupported_media' | 'invalid_duration' | 'invalid_resolution' | 'invalid_reference';
-  messageKey: string;
 };
 
-export type StudioRouteValidation = {
-  valid: boolean;
-  normalized: {
-    aspectRatio: StudioAspectRatio;
-    resolution: StudioResolution;
-    durationSeconds: number;
-  };
-  issues: StudioRouteConstraintIssue[];
+export type NormalizedStudioGenerationParameters = {
+  aspectRatio: StudioAspectRatio;
+  resolution: StudioResolution;
+  durationSeconds: number;
+};
+
+export type StudioRouteValidation =
+  | {
+      ok: true;
+      normalized: {
+        aspectRatio: StudioAspectRatio;
+        resolution: StudioResolution;
+        durationSeconds: number;
+      };
+    }
+  | {
+      ok: false;
+      issues: StudioRouteIssue[];
+    };
+
+export type StudioConnectionCandidateModel = {
+  model: string;
+  health: 'available' | 'unknown' | 'unavailable';
+};
+
+export type StudioConnectionCandidate = {
+  providerId: string;
+  providerName: string;
+  models: StudioConnectionCandidateModel[];
 };
 
 export type StudioRouteCatalogEntry = {
-  route: StudioProviderRef;
+  providerId: string;
+  providerName: string;
+  model: string;
+  health: 'available' | 'unknown' | 'unavailable';
+  adapterId: StudioProviderAdapterId;
+  kind: StudioMediaKind;
+  constraints: StudioRouteConstraints;
+};
+
+export type StudioConnectionCapabilities = {
   mediaKinds: StudioMediaKind[];
-  validation: StudioRouteValidation;
+  audioModes?: string[];
+  aspectRatios?: StudioAspectRatio[];
+  resolutions?: StudioResolution[];
+  minDurationSeconds?: number;
+  maxDurationSeconds?: number;
+  supportsFirstFrame?: boolean;
+  cancellation?: boolean;
+};
+
+export type StudioRouteConstraints = {
+  aspectRatios: StudioAspectRatio[];
+  resolutions: StudioResolution[];
+  minDurationSeconds: number;
+  maxDurationSeconds: number;
+  supportsFirstFrame: boolean;
+  silentOutput: boolean;
+};
+
+/** Credential-free durable record stored in connections.json. */
+export type StudioConnectionBinding = {
+  schemaVersion: 1;
+  id: string;
+  providerId: string;
+  adapterId: StudioProviderAdapterId;
+  model: string;
+  capabilities: StudioConnectionCapabilities;
+  validatedAt: string;
+};
+
+export type StudioProviderModelOption = {
+  providerId: string;
+  providerName: string;
+  model: string;
+  health: 'available' | 'unknown' | 'unavailable';
+};
+
+export type StudioRouteSuggestionReason =
+  | 'last_successful'
+  | 'configured_image_model'
+  | 'sole_compatible'
+  | 'manual_required'
+  | 'no_compatible_route';
+
+export type StudioRouteSuggestion = {
+  reason: StudioRouteSuggestionReason;
+  route: StudioRouteCatalogEntry | null;
 };
 
 export type StudioRouteCatalog = {
-  planningReady: boolean;
-  routes: StudioRouteCatalogEntry[];
+  planning: {
+    health: 'ready' | 'checking' | 'setup_required' | 'unavailable';
+    reasonCode?:
+      | 'no_eligible_model'
+      | 'provider_missing'
+      | 'provider_disabled'
+      | 'model_missing'
+      | 'model_disabled'
+      | 'auth_required'
+      | 'health_check_failed';
+    resolvedModel?: { providerId: string; model: string };
+  };
+  automatic: StudioRouteCatalogEntry[];
+  providerModels: StudioProviderModelOption[];
+  suggestions: { image: StudioRouteSuggestion; video: StudioRouteSuggestion };
+  catalogVersion: string;
 };
 
 export type StudioCommandErrorCode =
@@ -258,6 +346,18 @@ export type StudioChooseAndExportAssetsRequest = StudioProjectRequest & {
   includeReferences: boolean;
 };
 
+export type StudioListRoutesRequest = { projectId?: string };
+
+export type StudioValidateConnectionRequest = {
+  providerId: string;
+  adapterId: StudioProviderAdapterId;
+  model: string;
+};
+
+export type StudioSaveConnectionRequest = StudioValidateConnectionRequest;
+
+export type StudioRemoveConnectionRequest = { connectionId: string };
+
 export type StudioImportOutcome = { status: 'imported'; asset: StudioAsset } | { status: 'cancelled' };
 
 export type StudioExportItem = { assetId: string; fileName: string };
@@ -285,4 +385,10 @@ export type StudioDesktopApi = {
   cancelJob(input: StudioJobRequest): Promise<StudioCommandResult<StudioJob>>;
   retryJob(input: StudioJobRequest): Promise<StudioCommandResult<StudioJob>>;
   chooseAndExportAssets(input: StudioChooseAndExportAssetsRequest): Promise<StudioCommandResult<StudioExportOutcome>>;
+  listConnectionCandidates(): Promise<StudioCommandResult<StudioConnectionCandidate[]>>;
+  listConnections(): Promise<StudioCommandResult<StudioConnectionBinding[]>>;
+  validateConnection(input: StudioValidateConnectionRequest): Promise<StudioCommandResult<StudioConnectionBinding>>;
+  saveConnection(input: StudioSaveConnectionRequest): Promise<StudioCommandResult<StudioConnectionBinding>>;
+  removeConnection(input: StudioRemoveConnectionRequest): Promise<StudioCommandResult<boolean>>;
+  listRoutes(input?: StudioListRoutesRequest): Promise<StudioCommandResult<StudioRouteCatalog>>;
 };
