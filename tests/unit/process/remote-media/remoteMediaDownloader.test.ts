@@ -292,6 +292,7 @@ describe('downloadRemoteMedia', () => {
       async *[Symbol.asyncIterator](): AsyncGenerator<Uint8Array> {
         markBodyStarted?.();
         await new Promise(() => undefined);
+        yield new Uint8Array();
       },
     };
     const setTimer = vi.fn((callback: () => void) => {
