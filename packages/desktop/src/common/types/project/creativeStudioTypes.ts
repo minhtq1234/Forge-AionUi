@@ -35,6 +35,11 @@ export type StudioTextModelRef = {
   model: string;
 };
 
+export type StudioTextModelOption = StudioTextModelRef & {
+  providerName: string;
+  health: 'available' | 'unknown';
+};
+
 /** An app-managed asset identity, deliberately not a filesystem path or URL. */
 export type StudioManagedAssetRef = {
   collection: 'assets' | 'imports' | 'thumbnails';

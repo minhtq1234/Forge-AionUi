@@ -17,3 +17,13 @@ export type {
   StudioStoryboardDraftOutput,
   StudioStoryboardMessage,
 } from './storyboardPrompt';
+export { createStudioStoryboardPlanner, StudioStoryboardPlannerError } from './storyboardPlanner';
+export type {
+  StudioStoryboardAuditEvent,
+  StudioStoryboardClient,
+  StudioStoryboardClientOptions,
+  StudioStoryboardCompletion,
+  StudioStoryboardPlanner,
+  StudioStoryboardPlannerDeps,
+  StudioStoryboardPlannerErrorCode,
+} from './storyboardPlanner';
