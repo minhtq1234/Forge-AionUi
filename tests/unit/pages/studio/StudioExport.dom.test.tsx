@@ -119,15 +119,6 @@ const routes = (): StudioRouteCatalog => ({
   },
   image: { status: 'setup_required', selected: null, options: [] },
   video: { status: 'setup_required', selected: null, options: [] },
-  planning: {
-    health: 'ready',
-    resolvedModel: { providerId: 'provider-1', model: 'operations-model' },
-  },
-  automatic: [],
-  suggestions: {
-    image: { reason: 'no_compatible_route', route: null },
-    video: { reason: 'no_compatible_route', route: null },
-  },
   catalogVersion: 'catalog-1',
 });
 
@@ -328,8 +319,8 @@ describe('Studio asset export', () => {
       })
     );
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('conversation.creativeStudio.export.failed');
-    expect(screen.getByRole('alert')).toHaveTextContent('conversation.creativeStudio.errors.storage');
+    expect(await screen.findByText('conversation.creativeStudio.export.failed')).toBeInTheDocument();
+    expect(screen.getByText('conversation.creativeStudio.errors.storage')).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 

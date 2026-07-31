@@ -9,10 +9,10 @@ import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  StudioRendererProject,
   StudioRendererJob,
   StudioRouteCatalog,
   StudioRouteCatalogEntry,
-  StudioSceneRouteSnapshot,
 } from '@/common/types/project/creativeStudioTypes';
 import {
   GenerationControls,
@@ -63,25 +63,45 @@ const catalog = (overrides: Partial<StudioRouteCatalog> = {}): StudioRouteCatalo
         },
       ],
     },
-    image: { status: 'selection_required', selected: null, options: [suggested] },
-    video: { status: 'setup_required', selected: null, options: [] },
-    planning: { health: 'ready', resolvedModel: { providerId: 'planner', model: 'planner-model' } },
-    automatic: [suggested],
-    suggestions: {
-      image: { reason: 'sole_compatible', route: suggested },
-      video: { reason: 'no_compatible_route', route: null },
+    image: {
+      status: 'ready',
+      selected: {
+        providerId: suggested.providerId,
+        adapterId: suggested.adapterId,
+        model: suggested.model,
+      },
+      options: [suggested],
     },
+    video: { status: 'setup_required', selected: null, options: [] },
     catalogVersion: 'catalog-v1',
     ...overrides,
   };
 };
 
-const selectedSnapshot = (overrides: Partial<StudioSceneRouteSnapshot> = {}): StudioSceneRouteSnapshot => ({
-  sceneId: 'scene-1',
-  providerId: 'provider_image',
-  adapterId: 'weprompt-image-v1',
-  model: 'image-model-v1',
-  kind: 'image',
+const project = (overrides: Partial<StudioRendererProject> = {}): StudioRendererProject => ({
+  schemaVersion: 1,
+  revision: 1,
+  id: 'project-1',
+  name: 'Project',
+  brief: '',
+  aspectRatio: '16:9',
+  targetDurationSeconds: 10,
+  resolution: '720p',
+  sceneOrder: ['scene-1'],
+  scenes: {},
+  assets: {},
+  jobs: {},
+  routing: {
+    storyboard: null,
+    image: {
+      providerId: 'provider_image',
+      adapterId: 'weprompt-image-v1',
+      model: 'image-model-v1',
+    },
+    video: null,
+  },
+  createdAt: '2026-07-30T00:00:00.000Z',
+  updatedAt: '2026-07-30T00:00:00.000Z',
   ...overrides,
 });
 
@@ -109,6 +129,7 @@ const job = (overrides: Partial<StudioRendererJob>): StudioRendererJob => ({
 
 const createProps = (overrides: Partial<GenerationControlsProps> = {}): GenerationControlsProps => ({
   catalog: catalog(),
+  project: project(),
   catalogLoading: false,
   catalogErrorMessageKey: null,
   onRefreshCatalog: vi.fn(),
@@ -117,17 +138,14 @@ const createProps = (overrides: Partial<GenerationControlsProps> = {}): Generati
   resolution: '720p',
   sceneDurationSeconds: 5,
   hasReference: false,
-  selectedRoute: null,
-  selectedRouteInvalid: false,
   batchSceneCount: 2,
   disabled: false,
   jobs: [],
   pendingJobIds: [],
   actionIssue: null,
-  onRouteChange: vi.fn(),
+  onOpenSettings: vi.fn(),
   onOpenSingleReview: vi.fn(),
   onOpenBatchReview: vi.fn(),
-  onOpenConnection: vi.fn(),
   onCancelJob: vi.fn(),
   onRetryJob: vi.fn(),
   onRetryDownload: vi.fn(),
@@ -140,49 +158,49 @@ describe('GenerationControls', () => {
     vi.clearAllMocks();
   });
 
-  it('does not claim a smart route or canonical reason when the catalog has no suggestion', async () => {
+  it('derives review from persisted project routing without exposing Studio configuration controls', () => {
+    const props = createProps();
+    render(<GenerationControls {...props} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.review.generateScene' }));
+
+    expect(props.onOpenSingleReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        route: expect.objectContaining({
+          providerId: 'provider_image',
+          model: 'image-model-v1',
+          kind: 'image',
+        }),
+      })
+    );
+    expect(screen.queryByText('conversation.creativeStudio.routing.connectProvider')).not.toBeInTheDocument();
+    expect(screen.queryByText('conversation.creativeStudio.routing.advanced')).not.toBeInTheDocument();
+    expect(screen.queryByText('weprompt-image-v1')).not.toBeInTheDocument();
+  });
+
+  it('marks a missing persisted selection without auto-selecting the sole catalog option', () => {
     const props = createProps({
-      catalog: catalog({
-        automatic: [],
-        suggestions: {
-          image: { reason: 'no_compatible_route', route: null },
-          video: { reason: 'no_compatible_route', route: null },
-        },
-      }),
+      project: project({ routing: { storyboard: null, image: null, video: null } }),
     });
     render(<GenerationControls {...props} />);
 
-    expect(await screen.findByText('conversation.creativeStudio.routing.missingRoute')).toBeInTheDocument();
-    expect(screen.queryByText('conversation.creativeStudio.routing.smartRoute')).not.toBeInTheDocument();
-    expect(screen.queryByText('conversation.creativeStudio.routing.noCompatibleRoute')).not.toBeInTheDocument();
-
+    expect(screen.getByText('conversation.creativeStudio.routing.missingRoute')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.review.generateScene' }));
-    fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.review.generateReadyScenes' }));
-    expect(props.onOpenSingleReview).toHaveBeenCalledWith({
-      sceneId: 'scene-1',
-      route: null,
-      routeStatus: 'missing',
-      catalogVersion: 'catalog-v1',
-      availableRoutes: [],
-    });
-    expect(props.onOpenBatchReview).toHaveBeenCalledWith({
-      catalogVersion: 'catalog-v1',
-      suggestedRoutes: { image: null, video: null },
-      availableRoutes: [],
-    });
+    expect(props.onOpenSingleReview).toHaveBeenCalledWith(
+      expect.objectContaining({ route: null, routeStatus: 'missing' })
+    );
   });
 
-  it('can disable an unready selected scene without disabling the ready-scene batch action', async () => {
+  it('can disable an unready selected scene without disabling the ready-scene batch action', () => {
     render(<GenerationControls {...createProps({ singleDisabled: true })} />);
 
-    await screen.findByText('conversation.creativeStudio.routing.smartRoute');
     expect(screen.getByRole('button', { name: 'conversation.creativeStudio.review.generateScene' })).toBeDisabled();
     expect(
       screen.getByRole('button', { name: 'conversation.creativeStudio.review.generateReadyScenes' })
     ).toBeEnabled();
   });
 
-  it('labels a scene with a selected output as another paid variation', async () => {
+  it('labels a scene with a selected output as another paid variation', () => {
     render(
       <GenerationControls
         {...createProps({
@@ -192,7 +210,7 @@ describe('GenerationControls', () => {
     );
 
     expect(
-      await screen.findByRole('button', {
+      screen.getByRole('button', {
         name: 'conversation.creativeStudio.review.regenerateScene',
       })
     ).toBeEnabled();
@@ -201,174 +219,6 @@ describe('GenerationControls', () => {
         name: 'conversation.creativeStudio.review.generateScene',
       })
     ).not.toBeInTheDocument();
-  });
-
-  it('shows the canonical suggestion identity and translated reason without recomputing it', async () => {
-    const props = createProps();
-    render(<GenerationControls {...props} />);
-
-    expect(await screen.findByText('conversation.creativeStudio.routing.smartRoute')).toBeInTheDocument();
-    expect(screen.getByText('conversation.creativeStudio.routing.suggestionSoleCompatible')).toBeInTheDocument();
-    expect(screen.getByText('Image Provider')).toBeInTheDocument();
-    expect(screen.getByText('weprompt-image-v1')).toBeInTheDocument();
-    expect(screen.getByText('image-model-v1')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.review.generateScene' }));
-    expect(props.onOpenSingleReview).toHaveBeenCalledExactlyOnceWith({
-      sceneId: 'scene-1',
-      route: selectedSnapshot(),
-      routeStatus: 'valid',
-      catalogVersion: 'catalog-v1',
-      availableRoutes: [
-        {
-          providerId: 'provider_image',
-          providerName: 'Image Provider',
-          model: 'image-model-v1',
-          health: 'available',
-          adapterId: 'weprompt-image-v1',
-          kind: 'image',
-          constraints: {
-            aspectRatios: ['16:9'],
-            resolutions: ['720p'],
-            minDurationSeconds: 1,
-            maxDurationSeconds: 60,
-            supportsFirstFrame: true,
-            silentOutput: true,
-          },
-        },
-      ],
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.review.generateReadyScenes' }));
-    expect(props.onOpenBatchReview).toHaveBeenCalledExactlyOnceWith({
-      catalogVersion: 'catalog-v1',
-      suggestedRoutes: {
-        image: {
-          providerId: 'provider_image',
-          adapterId: 'weprompt-image-v1',
-          model: 'image-model-v1',
-          kind: 'image',
-        },
-        video: null,
-      },
-      availableRoutes: [
-        {
-          providerId: 'provider_image',
-          providerName: 'Image Provider',
-          model: 'image-model-v1',
-          health: 'available',
-          adapterId: 'weprompt-image-v1',
-          kind: 'image',
-          constraints: {
-            aspectRatios: ['16:9'],
-            resolutions: ['720p'],
-            minDurationSeconds: 1,
-            maxDurationSeconds: 60,
-            supportsFirstFrame: true,
-            silentOutput: true,
-          },
-        },
-      ],
-    });
-  });
-
-  it('reports the exact Advanced route snapshot selected by the user', async () => {
-    const secondRoute = imageRoute({
-      providerId: 'provider_image_2',
-      providerName: 'Image Provider Two',
-      model: 'image-model-v2',
-    });
-    const props = createProps({
-      catalog: catalog({
-        automatic: [imageRoute(), secondRoute],
-        suggestions: {
-          image: { reason: 'manual_required', route: null },
-          video: { reason: 'no_compatible_route', route: null },
-        },
-      }),
-    });
-    render(<GenerationControls {...props} />);
-
-    const advanced = await screen.findByRole('radiogroup', {
-      name: 'conversation.creativeStudio.routing.advanced',
-    });
-    fireEvent.click(within(advanced).getByRole('radio', { name: /Image Provider Two.*image-model-v2/ }));
-
-    expect(props.onRouteChange).toHaveBeenCalledExactlyOnceWith(
-      {
-        sceneId: 'scene-1',
-        providerId: 'provider_image_2',
-        adapterId: 'weprompt-image-v1',
-        model: 'image-model-v2',
-        kind: 'image',
-      },
-      'catalog-v1'
-    );
-  });
-
-  it('keeps a stale explicit route visible and never falls back to a newer smart suggestion', async () => {
-    const stale = selectedSnapshot({
-      providerId: 'provider_stale',
-      adapterId: 'weprompt-media-gateway-v1',
-      model: 'open-sora-stale',
-    });
-    const props = createProps({ selectedRoute: stale });
-    render(<GenerationControls {...props} />);
-
-    expect(await screen.findByText('conversation.creativeStudio.routing.invalidRoute')).toBeInTheDocument();
-    expect(screen.getByText('provider_stale')).toBeInTheDocument();
-    expect(screen.getByText('weprompt-media-gateway-v1')).toBeInTheDocument();
-    expect(screen.getByText('open-sora-stale')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.review.generateScene' }));
-    expect(props.onOpenSingleReview).toHaveBeenCalledExactlyOnceWith({
-      sceneId: 'scene-1',
-      route: stale,
-      routeStatus: 'invalid',
-      catalogVersion: 'catalog-v1',
-      availableRoutes: [
-        {
-          providerId: 'provider_image',
-          providerName: 'Image Provider',
-          model: 'image-model-v1',
-          health: 'available',
-          adapterId: 'weprompt-image-v1',
-          kind: 'image',
-          constraints: {
-            aspectRatios: ['16:9'],
-            resolutions: ['720p'],
-            minDurationSeconds: 1,
-            maxDurationSeconds: 60,
-            supportsFirstFrame: true,
-            silentOutput: true,
-          },
-        },
-      ],
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.review.generateReadyScenes' }));
-    expect(props.onOpenBatchReview).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
-        availableRoutes: [
-          {
-            providerId: 'provider_image',
-            providerName: 'Image Provider',
-            model: 'image-model-v1',
-            health: 'available',
-            adapterId: 'weprompt-image-v1',
-            kind: 'image',
-            constraints: {
-              aspectRatios: ['16:9'],
-              resolutions: ['720p'],
-              minDurationSeconds: 1,
-              maxDurationSeconds: 60,
-              supportsFirstFrame: true,
-              silentOutput: true,
-            },
-          },
-        ],
-      })
-    );
   });
 
   it.each([
@@ -412,25 +262,81 @@ describe('GenerationControls', () => {
       route: imageRoute({ health: 'unavailable' }),
       props: {},
     },
-  ])('surfaces a suggested route incompatible with the current $name before review', async ({ route, props }) => {
+  ])('marks the persisted route invalid when it conflicts with the current $name', ({ route, props }) => {
     const componentProps = createProps({
       ...props,
       catalog: catalog({
-        automatic: [route],
-        suggestions: {
-          image: { reason: 'sole_compatible', route },
-          video: { reason: 'no_compatible_route', route: null },
+        image: {
+          status: route.health === 'unavailable' ? 'unavailable' : 'ready',
+          selected: project().routing.image,
+          options: [route],
         },
       }),
     });
     render(<GenerationControls {...componentProps} />);
 
-    expect(await screen.findByText('conversation.creativeStudio.routing.invalidRoute')).toBeInTheDocument();
+    expect(screen.getByText('conversation.creativeStudio.routing.invalidRoute')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.review.generateScene' }));
     expect(componentProps.onOpenSingleReview).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         sceneId: 'scene-1',
         routeStatus: 'invalid',
+      })
+    );
+  });
+
+  it('opens Model Settings and exposes a typed refresh failure without owning connection commands', () => {
+    const props = createProps({
+      catalogErrorMessageKey: 'conversation.creativeStudio.errors.provider',
+    });
+    render(<GenerationControls {...props} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('conversation.creativeStudio.errors.provider');
+    fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.models.openSettings' }));
+    expect(props.onOpenSettings).toHaveBeenCalledExactlyOnceWith('/settings/model');
+  });
+
+  it('matches persisted image and video selections only against their corresponding catalogs for batch review', () => {
+    const video = imageRoute({
+      providerId: 'provider_video',
+      providerName: 'Video Provider',
+      adapterId: 'byteplus-seedance-v1',
+      model: 'video-model-v1',
+      kind: 'video',
+    });
+    const props = createProps({
+      project: project({
+        routing: {
+          storyboard: null,
+          image: project().routing.image,
+          video: {
+            providerId: video.providerId,
+            adapterId: video.adapterId,
+            model: video.model,
+          },
+        },
+      }),
+      catalog: catalog({
+        video: {
+          status: 'ready',
+          selected: {
+            providerId: video.providerId,
+            adapterId: video.adapterId,
+            model: video.model,
+          },
+          options: [video],
+        },
+      }),
+    });
+    render(<GenerationControls {...props} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.review.generateReadyScenes' }));
+    expect(props.onOpenBatchReview).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        routes: {
+          image: expect.objectContaining({ route: expect.objectContaining({ kind: 'image' }) }),
+          video: expect.objectContaining({ route: expect.objectContaining({ kind: 'video' }) }),
+        },
       })
     );
   });
@@ -447,8 +353,6 @@ describe('GenerationControls', () => {
         })}
       />
     );
-    await screen.findByText('conversation.creativeStudio.routing.smartRoute');
-
     expect(
       within(screen.getByRole('listitem', { name: 'job-submitting' })).getByRole('progressbar', {
         name: 'conversation.creativeStudio.jobs.status.submitting',
@@ -511,13 +415,12 @@ describe('GenerationControls', () => {
       },
     });
     const { container } = render(<GenerationControls {...props} />);
-    await screen.findByText('conversation.creativeStudio.routing.smartRoute');
-
     expect(screen.getByText('conversation.creativeStudio.jobs.status.running')).toBeInTheDocument();
     expect(screen.getByText('conversation.creativeStudio.jobs.progress:percent=42')).toBeInTheDocument();
     expect(screen.getByText('conversation.creativeStudio.jobs.errors.auth')).toBeInTheDocument();
     expect(screen.getByText('conversation.creativeStudio.errors.cancellationRefused')).toBeInTheDocument();
     expect(screen.queryByText('secret provider response')).not.toBeInTheDocument();
+    expect(screen.queryByText('byteplus-seedance-v1')).not.toBeInTheDocument();
     expect(container.querySelectorAll('[aria-hidden="true"] svg').length).toBeGreaterThanOrEqual(5);
 
     expect(
@@ -563,8 +466,6 @@ describe('GenerationControls', () => {
         })}
       />
     );
-    await screen.findByText('conversation.creativeStudio.routing.smartRoute');
-
     expect(
       within(screen.getByRole('listitem', { name: 'job-parent' })).queryByRole('button', {
         name: 'conversation.creativeStudio.jobs.retry',
@@ -596,8 +497,6 @@ describe('GenerationControls', () => {
       ],
     });
     render(<GenerationControls {...props} />);
-    await screen.findByText('conversation.creativeStudio.routing.smartRoute');
-
     expect(
       within(screen.getByRole('listitem', { name: 'job-parent' })).queryByRole('button', {
         name: 'conversation.creativeStudio.jobs.retry',
@@ -626,8 +525,6 @@ describe('GenerationControls', () => {
       ],
     });
     render(<GenerationControls {...props} />);
-    await screen.findByText('conversation.creativeStudio.routing.smartRoute');
-
     const retry = within(screen.getByRole('listitem', { name: 'job-failed' })).getByRole('button', {
       name: 'conversation.creativeStudio.jobs.retry',
     });
@@ -651,8 +548,6 @@ describe('GenerationControls', () => {
       ],
     });
     render(<GenerationControls {...props} />);
-    await screen.findByText('conversation.creativeStudio.routing.smartRoute');
-
     const retry = within(screen.getByRole('listitem', { name: 'job-unknown' })).getByRole('button', {
       name: 'conversation.creativeStudio.jobs.retry',
     });
@@ -685,8 +580,6 @@ describe('GenerationControls', () => {
       ],
     });
     render(<GenerationControls {...props} />);
-    await screen.findByText('conversation.creativeStudio.routing.smartRoute');
-
     expect(
       within(screen.getByRole('listitem', { name: 'job-download-disabled' })).queryByRole('button', {
         name: 'conversation.creativeStudio.jobs.retryDownload',

@@ -470,19 +470,6 @@ const routeSupportsProject = (route: StudioRouteCatalogEntry, project: StudioPro
     );
 };
 
-const compatibilitySuggestion = (
-  selected: StudioProviderRef | null,
-  options: StudioRouteCatalogEntry[]
-): StudioRouteCatalog['suggestions']['image'] => {
-  const explicit = selected === null ? null : (options.find((route) => mediaRouteMatches(route, selected)) ?? null);
-  if (explicit) return { reason: 'last_successful', route: explicit };
-  if (options.length === 1) return { reason: 'sole_compatible', route: options[0]! };
-  return {
-    reason: options.length === 0 ? 'no_compatible_route' : 'manual_required',
-    route: null,
-  };
-};
-
 type BuiltStudioCatalog = {
   catalog: StudioRouteCatalog;
   generation: StudioGenerationRouteCatalog;
@@ -559,17 +546,6 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
         image,
         video,
         catalogVersion,
-        planning:
-          storyboard.status === 'ready' && storyboard.selected
-            ? { health: 'ready', resolvedModel: storyboard.selected }
-            : {
-                health: storyboard.status === 'selection_required' ? 'setup_required' : storyboard.status,
-              },
-        automatic: generation.routes,
-        suggestions: {
-          image: compatibilitySuggestion(selected.image, image.options),
-          video: compatibilitySuggestion(selected.video, video.options),
-        },
       },
     };
   };

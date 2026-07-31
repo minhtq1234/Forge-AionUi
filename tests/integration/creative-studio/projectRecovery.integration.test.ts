@@ -325,7 +325,7 @@ describe('Creative Studio project recovery integration', () => {
         scenes: { [scene.id]: structuredClone(scene) },
       }));
       const catalog = await beforeRestart.runtime.service.listRoutes({ projectId: project.id });
-      const videoRoute = catalog.automatic.find((candidate) => candidate.kind === 'video');
+      const videoRoute = catalog.video.options.find((candidate) => candidate.kind === 'video');
       if (!videoRoute) throw new Error('Fresh runtime did not resolve its E2E fake video route');
       const selectedProject = await beforeRestart.runtime.service.updateModelSelection({
         projectId: project.id,

@@ -9,12 +9,13 @@ import type {
   StudioCommandErrorCode,
   StudioMediaKind,
   StudioRendererJob,
+  StudioRendererProject,
   StudioResolution,
   StudioRouteCatalog,
   StudioRouteCatalogEntry,
   StudioSceneRouteSnapshot,
 } from '@/common/types/project/creativeStudioTypes';
-import { Alert, Button, Progress, Radio, Spin, Tag } from '@arco-design/web-react';
+import { Alert, Button, Progress, Spin } from '@arco-design/web-react';
 import { Attention, CheckOne, CloseOne, Loading, Refresh, Time } from '@icon-park/react';
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -35,11 +36,14 @@ export type GenerationSingleReviewRequest = {
   availableRoutes: StudioRouteCatalogEntry[];
 };
 
-export type GenerationSuggestedRoute = Omit<StudioSceneRouteSnapshot, 'sceneId'>;
+export type GenerationResolvedRoute = {
+  route: Omit<StudioSceneRouteSnapshot, 'sceneId'>;
+  routeStatus: 'valid' | 'invalid';
+};
 
 export type GenerationBatchReviewRequest = {
   catalogVersion: string | null;
-  suggestedRoutes: Record<StudioMediaKind, GenerationSuggestedRoute | null>;
+  routes: Record<StudioMediaKind, GenerationResolvedRoute | null>;
   availableRoutes: StudioRouteCatalogEntry[];
 };
 
@@ -50,6 +54,7 @@ export type GenerationJobActionIssue = {
 };
 
 export type GenerationControlsProps = {
+  project: StudioRendererProject;
   catalog: StudioRouteCatalog | null;
   catalogLoading: boolean;
   catalogErrorMessageKey: string | null;
@@ -59,45 +64,20 @@ export type GenerationControlsProps = {
   resolution?: StudioResolution;
   sceneDurationSeconds?: number;
   hasReference?: boolean;
-  selectedRoute: StudioSceneRouteSnapshot | null;
-  selectedRouteInvalid?: boolean;
   batchSceneCount: number;
   disabled?: boolean;
   singleDisabled?: boolean;
   jobs: StudioRendererJob[];
   pendingJobIds?: readonly string[];
   actionIssue?: GenerationJobActionIssue | null;
-  onRouteChange: (route: StudioSceneRouteSnapshot, catalogVersion: string) => void;
+  onOpenSettings: (path: '/settings/model') => void;
   onOpenSingleReview: (request: GenerationSingleReviewRequest) => void;
   onOpenBatchReview: (request: GenerationBatchReviewRequest) => void;
-  onOpenConnection: () => void;
   onCancelJob: (jobId: string) => ActionResult;
   onRetryJob: (jobId: string) => ActionResult;
   onRetryDownload: (jobId: string) => ActionResult;
   onReviewUnknownSubmission: (jobId: string) => ActionResult;
 };
-
-const routeIdentity = (
-  route: Pick<StudioRouteCatalogEntry | StudioSceneRouteSnapshot, 'providerId' | 'adapterId' | 'model' | 'kind'>
-): string => `${route.providerId}\u0000${route.adapterId}\u0000${route.model}\u0000${route.kind}`;
-
-const toSnapshot = (sceneId: string, route: StudioRouteCatalogEntry): StudioSceneRouteSnapshot => ({
-  sceneId,
-  providerId: route.providerId,
-  adapterId: route.adapterId,
-  model: route.model,
-  kind: route.kind,
-});
-
-const toSuggestedRoute = (route: StudioRouteCatalogEntry | null): GenerationSuggestedRoute | null =>
-  route === null
-    ? null
-    : {
-        providerId: route.providerId,
-        adapterId: route.adapterId,
-        model: route.model,
-        kind: route.kind,
-      };
 
 const copyCatalogEntry = (route: StudioRouteCatalogEntry): StudioRouteCatalogEntry => ({
   providerId: route.providerId,
@@ -139,18 +119,40 @@ const routeSupportsScene = (
       durationSeconds <= route.constraints.maxDurationSeconds)) &&
   (hasReference !== true || route.constraints.supportsFirstFrame);
 
-const suggestionReasonKey = (reason: StudioRouteCatalog['suggestions'][StudioMediaKind]['reason']): string | null => {
-  switch (reason) {
-    case 'last_successful':
-      return 'conversation.creativeStudio.routing.suggestionLastSuccessful';
-    case 'configured_image_model':
-      return 'conversation.creativeStudio.routing.suggestionConfiguredImageModel';
-    case 'sole_compatible':
-      return 'conversation.creativeStudio.routing.suggestionSoleCompatible';
-    case 'manual_required':
-    case 'no_compatible_route':
-      return null;
-  }
+const catalogRoutes = (catalog: StudioRouteCatalog | null): StudioRouteCatalogEntry[] =>
+  catalog === null ? [] : [...catalog.image.options, ...catalog.video.options].map(copyCatalogEntry);
+
+const resolvePersistedRoute = (
+  project: StudioRendererProject,
+  kind: StudioMediaKind,
+  catalog: StudioRouteCatalog | null,
+  routeContext: Parameters<typeof routeSupportsScene>[1]
+): GenerationResolvedRoute | null => {
+  const selected = project.routing[kind];
+  if (selected === null) return null;
+  const catalogRoute = catalog?.[kind].options.find(
+    (candidate) =>
+      candidate.kind === kind &&
+      candidate.providerId === selected.providerId &&
+      candidate.adapterId === selected.adapterId &&
+      candidate.model === selected.model
+  );
+  const route = {
+    providerId: selected.providerId,
+    adapterId: selected.adapterId,
+    model: selected.model,
+    kind,
+  };
+  return {
+    route,
+    routeStatus:
+      catalog !== null &&
+      catalog[kind].status === 'ready' &&
+      catalogRoute !== undefined &&
+      routeSupportsScene(catalogRoute, routeContext)
+        ? 'valid'
+        : 'invalid',
+  };
 };
 
 const jobStatusKey = (status: StudioRendererJob['status']): string => {
@@ -192,32 +194,14 @@ const statusIcon = (status: StudioRendererJob['status']): React.ReactNode => {
   }
 };
 
-const RouteIdentity: React.FC<{
-  provider: string;
-  adapter: string;
-  model: string;
-}> = ({ provider, adapter, model }) => {
-  const { t } = useTranslation();
-  return (
-    <dl className='m-0 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-10px gap-y-5px'>
-      <dt className='text-12px text-t-tertiary'>{t('conversation.creativeStudio.routing.providerLabel')}</dt>
-      <dd className='m-0 break-all text-12px text-t-primary'>{provider}</dd>
-      <dt className='text-12px text-t-tertiary'>{t('conversation.creativeStudio.routing.adapterLabel')}</dt>
-      <dd className='m-0 break-all text-12px text-t-primary'>{adapter}</dd>
-      <dt className='text-12px text-t-tertiary'>{t('conversation.creativeStudio.routing.modelLabel')}</dt>
-      <dd className='m-0 break-all text-12px text-t-primary'>{model}</dd>
-    </dl>
-  );
-};
-
 /**
- * Canonical route catalog viewer, review launcher, and job-action surface.
+ * Persisted project route reviewer and job-action surface.
  *
- * Route suggestions are consumed exactly as returned by the main process.
  * Every button here either opens review/setup or delegates a typed job intent;
  * it never submits paid generation directly.
  */
 export const GenerationControls: React.FC<GenerationControlsProps> = ({
+  project,
   catalog,
   catalogLoading,
   catalogErrorMessageKey,
@@ -227,18 +211,15 @@ export const GenerationControls: React.FC<GenerationControlsProps> = ({
   resolution,
   sceneDurationSeconds,
   hasReference,
-  selectedRoute,
-  selectedRouteInvalid = false,
   batchSceneCount,
   disabled = false,
   singleDisabled = false,
   jobs,
   pendingJobIds = [],
   actionIssue = null,
-  onRouteChange,
+  onOpenSettings,
   onOpenSingleReview,
   onOpenBatchReview,
-  onOpenConnection,
   onCancelJob,
   onRetryJob,
   onRetryDownload,
@@ -252,54 +233,23 @@ export const GenerationControls: React.FC<GenerationControlsProps> = ({
   );
 
   const kind = scene?.mediaKind ?? null;
-  const suggestion = kind && catalog ? catalog.suggestions[kind] : null;
-  const suggestedRoute = suggestion?.route ?? null;
-  const reasonKey = suggestion && suggestedRoute ? suggestionReasonKey(suggestion.reason) : null;
-  const advancedRoutes = useMemo(
-    () => (catalog && kind ? catalog.automatic.filter((route) => route.kind === kind) : []),
-    [catalog, kind]
-  );
-  const availableRoutes = useMemo(() => catalog?.automatic.map(copyCatalogEntry) ?? [], [catalog]);
-  const selectedCatalogRoute =
-    selectedRoute === null
-      ? null
-      : (advancedRoutes.find((route) => routeIdentity(route) === routeIdentity(selectedRoute)) ?? null);
+  const availableRoutes = useMemo(() => catalogRoutes(catalog), [catalog]);
   const routeContext = {
     ...(aspectRatio === undefined ? {} : { aspectRatio }),
     ...(resolution === undefined ? {} : { resolution }),
     ...(sceneDurationSeconds === undefined ? {} : { durationSeconds: sceneDurationSeconds }),
     ...(hasReference === undefined ? {} : { hasReference }),
   };
-  const suggestedRouteIsInvalid = suggestedRoute !== null && !routeSupportsScene(suggestedRoute, routeContext);
-  const selectedRouteIsInvalid =
-    catalog !== null &&
-    selectedRoute !== null &&
-    (selectedRouteInvalid ||
-      scene === null ||
-      selectedRoute.sceneId !== scene.id ||
-      selectedRoute.kind !== scene.mediaKind ||
-      selectedCatalogRoute === null ||
-      !routeSupportsScene(selectedCatalogRoute, routeContext));
+  const resolvedRoute = kind === null ? null : resolvePersistedRoute(project, kind, catalog, routeContext);
   const effectiveRoute =
-    selectedRoute ?? (scene !== null && suggestedRoute !== null ? toSnapshot(scene.id, suggestedRoute) : null);
+    scene === null || resolvedRoute === null
+      ? null
+      : {
+          sceneId: scene.id,
+          ...resolvedRoute.route,
+        };
   const effectiveRouteStatus: GenerationSingleReviewRequest['routeStatus'] =
-    effectiveRoute === null
-      ? 'missing'
-      : selectedRoute !== null
-        ? catalog === null || selectedRouteIsInvalid
-          ? 'invalid'
-          : 'valid'
-        : suggestedRouteIsInvalid
-          ? 'invalid'
-          : 'valid';
-  const showAdvanced = advancedRoutes.length > 1 || selectedRoute !== null;
-
-  const selectAdvancedRoute = (identity: string): void => {
-    if (!scene || !catalog) return;
-    const route = advancedRoutes.find((candidate) => routeIdentity(candidate) === identity);
-    if (!route) return;
-    onRouteChange(toSnapshot(scene.id, route), catalog.catalogVersion);
-  };
+    effectiveRoute === null ? 'missing' : resolvedRoute!.routeStatus;
 
   const openSingleReview = (): void => {
     if (!scene || catalogLoading) return;
@@ -316,9 +266,9 @@ export const GenerationControls: React.FC<GenerationControlsProps> = ({
     if (catalogLoading) return;
     onOpenBatchReview({
       catalogVersion: catalog?.catalogVersion ?? null,
-      suggestedRoutes: {
-        image: toSuggestedRoute(catalog?.suggestions.image.route ?? null),
-        video: toSuggestedRoute(catalog?.suggestions.video.route ?? null),
+      routes: {
+        image: resolvePersistedRoute(project, 'image', catalog, {}),
+        video: resolvePersistedRoute(project, 'video', catalog, {}),
       },
       availableRoutes,
     });
@@ -340,10 +290,10 @@ export const GenerationControls: React.FC<GenerationControlsProps> = ({
             disabled={disabled}
             onClick={() => void onRefreshCatalog()}
           >
-            {t('conversation.creativeStudio.connection.refresh')}
+            {t('conversation.creativeStudio.models.refresh')}
           </Button>
-          <Button disabled={disabled} onClick={onOpenConnection}>
-            {t('conversation.creativeStudio.routing.connectProvider')}
+          <Button disabled={disabled} onClick={() => onOpenSettings('/settings/model')}>
+            {t('conversation.creativeStudio.models.openSettings')}
           </Button>
         </div>
       </div>
@@ -356,70 +306,15 @@ export const GenerationControls: React.FC<GenerationControlsProps> = ({
         <>
           {catalogErrorMessageKey && <Alert type='error' content={t(catalogErrorMessageKey)} />}
 
-          {suggestedRoute !== null && reasonKey !== null ? (
-            <section
-              aria-label={t('conversation.creativeStudio.routing.smartRoute')}
-              className='rounded-8px border border-border-2 bg-fill-1 p-12px'
-            >
-              <div className='mb-8px flex flex-wrap items-center gap-8px'>
-                <h3 className='m-0 text-13px font-600 text-t-primary'>
-                  {t('conversation.creativeStudio.routing.smartRoute')}
-                </h3>
-                <Tag>{t(reasonKey)}</Tag>
-              </div>
-              <RouteIdentity
-                provider={suggestedRoute.providerName}
-                adapter={suggestedRoute.adapterId}
-                model={suggestedRoute.model}
-              />
-              {suggestedRouteIsInvalid && (
-                <Alert
-                  className='mt-8px'
-                  type='error'
-                  content={t('conversation.creativeStudio.routing.invalidRoute')}
-                />
-              )}
-            </section>
+          {effectiveRoute === null ? (
+            <Alert type='warning' content={t('conversation.creativeStudio.routing.missingRoute')} />
           ) : (
-            <div role='status' className='rounded-8px border border-warning-3 bg-warning-light-1 p-10px text-warning'>
-              {t('conversation.creativeStudio.routing.missingRoute')}
-            </div>
-          )}
-
-          {showAdvanced && (
-            <section className='rounded-8px border border-border-2 p-12px'>
-              <h3 className='mb-8px mt-0 text-13px font-600 text-t-primary'>
-                {t('conversation.creativeStudio.routing.advanced')}
-              </h3>
-              <Radio.Group
-                aria-label={t('conversation.creativeStudio.routing.advanced')}
-                value={selectedCatalogRoute ? routeIdentity(selectedCatalogRoute) : undefined}
-                direction='vertical'
-                onChange={selectAdvancedRoute}
-              >
-                {advancedRoutes.map((route) => (
-                  <Radio
-                    key={routeIdentity(route)}
-                    value={routeIdentity(route)}
-                    aria-label={`${route.providerName} ${route.adapterId} ${route.model}`}
-                  >
-                    <span className='break-all text-12px text-t-primary'>
-                      {route.providerName} · {route.adapterId} · {route.model}
-                    </span>
-                  </Radio>
-                ))}
-              </Radio.Group>
-            </section>
-          )}
-
-          {selectedRoute !== null && (
             <section className='rounded-8px border border-border-2 bg-fill-1 p-12px'>
-              <RouteIdentity
-                provider={selectedRoute.providerId}
-                adapter={selectedRoute.adapterId}
-                model={selectedRoute.model}
-              />
-              {selectedRouteIsInvalid && (
+              <dl className='m-0 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-10px gap-y-5px'>
+                <dt className='text-12px text-t-tertiary'>{t('conversation.creativeStudio.routing.modelLabel')}</dt>
+                <dd className='m-0 break-all text-12px text-t-primary'>{effectiveRoute.model}</dd>
+              </dl>
+              {effectiveRouteStatus === 'invalid' && (
                 <Alert
                   className='mt-8px'
                   type='error'
@@ -490,7 +385,7 @@ export const GenerationControls: React.FC<GenerationControlsProps> = ({
                     </span>
                     <span className='text-12px font-500 text-t-primary'>{t(jobStatusKey(job.status))}</span>
                     <span className='break-all text-11px text-t-tertiary'>
-                      {job.provider.providerId} · {job.provider.adapterId} · {job.provider.model}
+                      {job.provider.providerId} · {job.provider.model}
                     </span>
                   </div>
 

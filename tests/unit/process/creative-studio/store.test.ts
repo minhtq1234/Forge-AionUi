@@ -32,7 +32,6 @@ import type {
   StudioRendererJob,
   StudioRendererProject,
   StudioRouteCatalog,
-  StudioRouteSuggestion,
 } from '@/common/types/project/creativeStudioTypes';
 import { createCreativeStudioStore, type CreativeStudioStore } from '@process/services/creative-studio/store';
 
@@ -850,8 +849,7 @@ describe('creative studio renderer DTO contract', () => {
       | StudioProviderRef
       | StudioRouteCatalog
       | StudioConnectionBinding
-      | StudioConnectionCandidate
-      | StudioRouteSuggestion;
+      | StudioConnectionCandidate;
     type RendererProjectKeys = KeysOfUnion<RendererDto>;
     type NoForbiddenRendererFields = Extract<RendererProjectKeys, ForbiddenRendererField>;
     const result: StudioCommandResult<StudioProjectSummary[]> = { ok: true, data: [] };

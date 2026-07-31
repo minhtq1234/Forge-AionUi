@@ -50,12 +50,6 @@ const catalog = (version: string): StudioRouteCatalog => ({
   image: { status: 'selection_required', selected: null, options: [] },
   video: { status: 'selection_required', selected: null, options: [] },
   catalogVersion: version,
-  planning: { health: 'setup_required' },
-  automatic: [],
-  suggestions: {
-    image: { reason: 'no_compatible_route', route: null },
-    video: { reason: 'no_compatible_route', route: null },
-  },
 });
 
 const deferred = <T>() => {

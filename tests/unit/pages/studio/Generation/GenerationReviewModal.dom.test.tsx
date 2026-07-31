@@ -49,14 +49,14 @@ const mixedScenes = (): GenerationReviewScene[] => [
     title: 'Opening image',
     mediaKind: 'image',
     durationSeconds: 5,
-    route: { status: 'valid', snapshot: imageRoute },
+    route: { status: 'valid', snapshot: imageRoute, providerName: 'Provider One' },
   },
   {
     id: 'scene-video',
     title: 'Product motion',
     mediaKind: 'video',
     durationSeconds: 7,
-    route: { status: 'valid', snapshot: videoRoute },
+    route: { status: 'valid', snapshot: videoRoute, providerName: 'Provider Two' },
   },
 ];
 
@@ -79,11 +79,13 @@ describe('GenerationReviewModal', () => {
     render(<GenerationReviewModal {...createProps()} />);
 
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('provider_image')).toBeInTheDocument();
-    expect(within(dialog).getByText('weprompt-image-v1')).toBeInTheDocument();
+    expect(within(dialog).getByText('Provider One')).toBeInTheDocument();
+    expect(within(dialog).queryByText('provider_image')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('weprompt-image-v1')).not.toBeInTheDocument();
     expect(within(dialog).getByText('image-model-v1')).toBeInTheDocument();
-    expect(within(dialog).getByText('provider_video')).toBeInTheDocument();
-    expect(within(dialog).getByText('byteplus-seedance-v1')).toBeInTheDocument();
+    expect(within(dialog).getByText('Provider Two')).toBeInTheDocument();
+    expect(within(dialog).queryByText('provider_video')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('byteplus-seedance-v1')).not.toBeInTheDocument();
     expect(within(dialog).getByText('seedance-1-5-pro')).toBeInTheDocument();
     expect(within(dialog).getByText('conversation.creativeStudio.review.sceneCount:count=2')).toBeInTheDocument();
     expect(within(dialog).getByText('conversation.creativeStudio.review.videoSeconds:seconds=7')).toBeInTheDocument();
@@ -162,11 +164,11 @@ describe('GenerationReviewModal', () => {
           scenes: [
             {
               ...mixedScenes()[0]!,
-              route: { status: 'missing', snapshot: null },
+              route: { status: 'missing', snapshot: null, providerName: null },
             },
             {
               ...mixedScenes()[1]!,
-              route: { status: 'invalid', snapshot: staleRoute },
+              route: { status: 'invalid', snapshot: staleRoute, providerName: 'Unavailable provider' },
             },
           ],
         })}
@@ -175,8 +177,9 @@ describe('GenerationReviewModal', () => {
 
     expect(screen.getByText('conversation.creativeStudio.review.missingRoute')).toBeInTheDocument();
     expect(screen.getByText('conversation.creativeStudio.review.invalidRoute')).toBeInTheDocument();
-    expect(screen.getByText('provider_stale')).toBeInTheDocument();
-    expect(screen.getByText('weprompt-media-gateway-v1')).toBeInTheDocument();
+    expect(screen.getByText('Unavailable provider')).toBeInTheDocument();
+    expect(screen.queryByText('provider_stale')).not.toBeInTheDocument();
+    expect(screen.queryByText('weprompt-media-gateway-v1')).not.toBeInTheDocument();
     expect(screen.getByText('open-sora-stale')).toBeInTheDocument();
     expect(screen.getByText('conversation.creativeStudio.review.disabledMissingRoutes')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'conversation.creativeStudio.review.confirm' })).toBeDisabled();

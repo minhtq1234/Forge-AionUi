@@ -83,7 +83,7 @@ const project = (overrides: Partial<StudioRendererProject> = {}): StudioRenderer
   ...overrides,
 });
 
-const routes = (health: StudioRouteCatalog['planning']['health'] = 'ready'): StudioRouteCatalog => ({
+const routes = (health: 'ready' | 'setup_required' | 'unavailable' = 'ready'): StudioRouteCatalog => ({
   storyboard: {
     status: health === 'ready' ? 'ready' : 'setup_required',
     selected: health === 'ready' ? { providerId: 'provider-1', model: 'operations-model' } : null,
@@ -101,12 +101,6 @@ const routes = (health: StudioRouteCatalog['planning']['health'] = 'ready'): Stu
   },
   image: { status: 'setup_required', selected: null, options: [] },
   video: { status: 'setup_required', selected: null, options: [] },
-  planning: { health },
-  automatic: [],
-  suggestions: {
-    image: { reason: 'no_compatible_route', route: null },
-    video: { reason: 'no_compatible_route', route: null },
-  },
   catalogVersion: 'catalog-1',
 });
 

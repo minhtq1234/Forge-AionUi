@@ -6,4 +6,3 @@
 
 export * from './GenerationControls';
 export * from './GenerationReviewModal';
-export * from './StudioConnectionModal';

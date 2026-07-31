@@ -265,18 +265,6 @@ export type StudioConnectionBinding = {
   validatedAt: string;
 };
 
-export type StudioRouteSuggestionReason =
-  | 'last_successful'
-  | 'configured_image_model'
-  | 'sole_compatible'
-  | 'manual_required'
-  | 'no_compatible_route';
-
-export type StudioRouteSuggestion = {
-  reason: StudioRouteSuggestionReason;
-  route: StudioRouteCatalogEntry | null;
-};
-
 export type StudioModelAvailability = 'ready' | 'selection_required' | 'setup_required' | 'unavailable';
 
 export type StudioRouteCatalog = {
@@ -296,15 +284,6 @@ export type StudioRouteCatalog = {
     options: StudioRouteCatalogEntry[];
   };
   catalogVersion: string;
-  /** Transitional renderer compatibility; removed in Task 10. */
-  planning: {
-    health: 'ready' | 'checking' | 'setup_required' | 'unavailable';
-    resolvedModel?: StudioTextModelRef;
-  };
-  /** Transitional renderer compatibility; removed in Task 10. */
-  automatic: StudioRouteCatalogEntry[];
-  /** Transitional renderer compatibility; removed in Task 10. */
-  suggestions: { image: StudioRouteSuggestion; video: StudioRouteSuggestion };
 };
 
 export type StudioCommandErrorCode =

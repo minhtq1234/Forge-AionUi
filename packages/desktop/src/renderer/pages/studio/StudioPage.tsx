@@ -12,6 +12,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ipcBridge } from '@/common';
 import type {
   StudioRendererProject,
+  StudioRouteCatalog,
   StudioRouteCatalogEntry,
   StudioScene,
   StudioSceneRouteSnapshot,
@@ -30,7 +31,6 @@ import {
   StagePreview,
   StoryboardDraftModal,
   StoryboardPanel,
-  StudioConnectionModal,
   StudioHeader,
   StudioLibrary,
   StudioModelBar,
@@ -51,16 +51,6 @@ type GenerationReviewState = {
 const routeIdentity = (
   route: Pick<StudioRouteCatalogEntry | StudioSceneRouteSnapshot, 'providerId' | 'adapterId' | 'model' | 'kind'>
 ): string => `${route.providerId}\u0000${route.adapterId}\u0000${route.model}\u0000${route.kind}`;
-
-const projectRoutingIdentity = (project: StudioRendererProject): string =>
-  (['image', 'video'] as const)
-    .map((kind) => {
-      const route = project.routing[kind];
-      return route === null
-        ? `${kind}:none`
-        : `${kind}:${route.providerId}\u0000${route.adapterId}\u0000${route.model}`;
-    })
-    .join('\u0001');
 
 const routeIsCompatible = (
   project: StudioRendererProject,
@@ -95,22 +85,48 @@ const toReviewScene = (
   route: StudioSceneRouteSnapshot | null,
   availableRoutes: readonly StudioRouteCatalogEntry[],
   routeStatus?: 'valid' | 'invalid' | 'missing'
-): GenerationReviewScene => ({
-  id: scene.id,
-  title: scene.title,
-  mediaKind: scene.mediaKind,
-  durationSeconds: scene.durationSeconds,
-  route:
-    route === null
-      ? { status: 'missing', snapshot: null }
-      : {
-          status:
-            routeStatus === 'invalid' || !routeIsCompatible(project, scene, route, availableRoutes)
-              ? 'invalid'
-              : 'valid',
-          snapshot: route,
-        },
-});
+): GenerationReviewScene => {
+  const catalogRoute =
+    route === null ? undefined : availableRoutes.find((candidate) => routeIdentity(candidate) === routeIdentity(route));
+  return {
+    id: scene.id,
+    title: scene.title,
+    mediaKind: scene.mediaKind,
+    durationSeconds: scene.durationSeconds,
+    route:
+      route === null
+        ? { status: 'missing', snapshot: null, providerName: null }
+        : {
+            status:
+              routeStatus === 'invalid' || !routeIsCompatible(project, scene, route, availableRoutes)
+                ? 'invalid'
+                : 'valid',
+            snapshot: route,
+            providerName: catalogRoute?.providerName ?? null,
+          },
+  };
+};
+
+const catalogEntries = (catalog: StudioRouteCatalog): StudioRouteCatalogEntry[] => [
+  ...catalog.image.options,
+  ...catalog.video.options,
+];
+
+const projectRouteSnapshot = (
+  project: StudioRendererProject,
+  scene: Pick<StudioScene, 'id' | 'mediaKind'>
+): StudioSceneRouteSnapshot | null => {
+  const selected = project.routing[scene.mediaKind];
+  return selected === null
+    ? null
+    : {
+        sceneId: scene.id,
+        providerId: selected.providerId,
+        adapterId: selected.adapterId,
+        model: selected.model,
+        kind: scene.mediaKind,
+      };
+};
 
 const sceneHasActiveGenerationJob = (project: StudioRendererProject, scene: StudioScene): boolean =>
   scene.jobIds.some((jobId) => {
@@ -157,13 +173,10 @@ const StudioProjectShell: React.FC = () => {
   });
   const [draftModalVisible, setDraftModalVisible] = useState(false);
   const [generationReview, setGenerationReview] = useState<GenerationReviewState | null>(null);
-  const [connectionVisible, setConnectionVisible] = useState(false);
-  const [routeCatalogEpoch, setRouteCatalogEpoch] = useState(0);
   const [headerBatchLoading, setHeaderBatchLoading] = useState(false);
   const [headerGenerationIssue, setHeaderGenerationIssue] = useState<string | null>(null);
   const [generationReviewIssueMessageKey, setGenerationReviewIssueMessageKey] = useState<string | null>(null);
   const [generationReviewRefreshing, setGenerationReviewRefreshing] = useState(false);
-  const [selectedRoutes, setSelectedRoutes] = useState<Record<string, StudioSceneRouteSnapshot>>({});
   const [duplicateChargeJobId, setDuplicateChargeJobId] = useState<string | null>(null);
   const [variationPending, setVariationPending] = useState(false);
   const [variationIssueMessageKey, setVariationIssueMessageKey] = useState<string | null>(null);
@@ -246,7 +259,6 @@ const StudioProjectShell: React.FC = () => {
   );
   const selectedScene =
     project !== null && editor.selectedSceneId !== null ? (project.scenes[editor.selectedSceneId] ?? null) : null;
-  const selectedRoute = selectedScene === null ? null : (selectedRoutes[selectedScene.id] ?? null);
   const selectedAsset =
     project !== null && selectedScene?.selectedAssetId ? (project.assets[selectedScene.selectedAssetId] ?? null) : null;
   const selectedReferenceAsset =
@@ -344,20 +356,9 @@ const StudioProjectShell: React.FC = () => {
     (request: GenerationBatchReviewRequest): void => {
       if (project === null || generationBlocked || request.catalogVersion === null || readyScenes.length === 0) return;
       const scenes = readyScenes.map((scene) => {
-        const explicitRoute = selectedRoutes[scene.id] ?? null;
-        const suggestedRoute = request.suggestedRoutes[scene.mediaKind];
-        const route =
-          explicitRoute ??
-          (suggestedRoute === null
-            ? null
-            : {
-                sceneId: scene.id,
-                providerId: suggestedRoute.providerId,
-                adapterId: suggestedRoute.adapterId,
-                model: suggestedRoute.model,
-                kind: suggestedRoute.kind,
-              });
-        return toReviewScene(project, scene, route, request.availableRoutes);
+        const resolved = request.routes[scene.mediaKind];
+        const route = resolved === null ? null : { sceneId: scene.id, ...resolved.route };
+        return toReviewScene(project, scene, route, request.availableRoutes, resolved?.routeStatus);
       });
       studioJobs.clearIssue();
       setHeaderGenerationIssue(null);
@@ -371,7 +372,7 @@ const StudioProjectShell: React.FC = () => {
         projectRevision: project.revision,
       });
     },
-    [generationBlocked, project, readyScenes, selectedRoutes, studioJobs]
+    [generationBlocked, project, readyScenes, studioJobs]
   );
 
   const openHeaderBatchReview = useCallback(async (): Promise<void> => {
@@ -404,24 +405,27 @@ const StudioProjectShell: React.FC = () => {
         setHeaderGenerationIssue('conversation.creativeStudio.errors.staleProject');
         return;
       }
-      const suggestedRoute = (kind: 'image' | 'video') => {
-        const route = catalog.suggestions[kind].route;
+      const selectedRoute = (kind: 'image' | 'video') => {
+        const route = project.routing[kind];
         return route === null
           ? null
           : {
-              providerId: route.providerId,
-              adapterId: route.adapterId,
-              model: route.model,
-              kind: route.kind,
+              route: {
+                providerId: route.providerId,
+                adapterId: route.adapterId,
+                model: route.model,
+                kind,
+              },
+              routeStatus: 'valid' as const,
             };
       };
       openBatchReview({
         catalogVersion: catalog.catalogVersion,
-        suggestedRoutes: {
-          image: suggestedRoute('image'),
-          video: suggestedRoute('video'),
+        routes: {
+          image: selectedRoute('image'),
+          video: selectedRoute('video'),
         },
-        availableRoutes: catalog.automatic,
+        availableRoutes: catalogEntries(catalog),
       });
     } catch {
       setHeaderGenerationIssue('conversation.creativeStudio.errors.provider');
@@ -460,34 +464,23 @@ const StudioProjectShell: React.FC = () => {
             setGenerationReviewIssueMessageKey('conversation.creativeStudio.errors.staleProject');
             return;
           }
-          const routeForScene = (scene: StudioScene): StudioSceneRouteSnapshot | null => {
-            const explicitRoute = selectedRoutes[scene.id];
-            if (explicitRoute !== undefined) return explicitRoute;
-            const suggestion = catalog.suggestions[scene.mediaKind].route;
-            return suggestion === null
-              ? null
-              : {
-                  sceneId: scene.id,
-                  providerId: suggestion.providerId,
-                  adapterId: suggestion.adapterId,
-                  model: suggestion.model,
-                  kind: suggestion.kind,
-                };
-          };
+          const availableRoutes = catalogEntries(catalog);
           const refreshedScenes =
             generationReview.mode === 'single'
               ? generationReview.scenes.flatMap(({ id: sceneId }) => {
                   const scene = project.scenes[sceneId];
                   return scene === undefined || !sceneCanOpenSingleReview(project, scene)
                     ? []
-                    : [toReviewScene(project, scene, routeForScene(scene), catalog.automatic)];
+                    : [toReviewScene(project, scene, projectRouteSnapshot(project, scene), availableRoutes)];
                 })
-              : readyScenes.map((scene) => toReviewScene(project, scene, routeForScene(scene), catalog.automatic));
+              : readyScenes.map((scene) =>
+                  toReviewScene(project, scene, projectRouteSnapshot(project, scene), availableRoutes)
+                );
           setGenerationReview({
             mode: generationReview.mode,
             scenes: refreshedScenes,
             catalogVersion: catalog.catalogVersion,
-            availableRoutes: catalog.automatic,
+            availableRoutes,
             projectId: project.id,
             projectRevision: project.revision,
           });
@@ -508,7 +501,7 @@ const StudioProjectShell: React.FC = () => {
       });
       if (submitted) setGenerationReview(null);
     },
-    [generationReview, project, readyScenes, selectedRoutes, studioJobs, studioModels]
+    [generationReview, project, readyScenes, studioJobs, studioModels]
   );
 
   useEffect(() => {
@@ -517,21 +510,23 @@ const StudioProjectShell: React.FC = () => {
     setGenerationReview((current) => {
       if (current === null) return null;
       const currentById = new Map(current.scenes.map((scene) => [scene.id, scene]));
-      const routeByScene = new Map(staleIntent.routes.map((route) => [route.sceneId, route]));
+      const availableRoutes =
+        studioModels.catalog === null ? current.availableRoutes : catalogEntries(studioModels.catalog);
       return {
         ...current,
-        catalogVersion: staleIntent.catalogVersion,
+        catalogVersion: studioModels.catalog?.catalogVersion ?? staleIntent.catalogVersion,
+        availableRoutes,
         projectId: project.id,
         projectRevision: project.revision,
         scenes: staleIntent.sceneIds.flatMap((sceneId) => {
           const scene = project.scenes[sceneId];
-          const route = routeByScene.get(sceneId) ?? null;
+          const route = scene === undefined ? null : projectRouteSnapshot(project, scene);
           const eligible =
             scene !== undefined &&
             sceneCanOpenSingleReview(project, scene) &&
             (current.mode === 'single' || scene.selectedAssetId === null);
           if (eligible) {
-            return [toReviewScene(project, scene, route, current.availableRoutes)];
+            return [toReviewScene(project, scene, route, availableRoutes)];
           }
           const previous = currentById.get(sceneId);
           return previous === undefined
@@ -542,13 +537,17 @@ const StudioProjectShell: React.FC = () => {
                   route:
                     previous.route.snapshot === null
                       ? previous.route
-                      : { status: 'invalid' as const, snapshot: previous.route.snapshot },
+                      : {
+                          status: 'invalid' as const,
+                          snapshot: previous.route.snapshot,
+                          providerName: previous.route.providerName,
+                        },
                 },
               ];
         }),
       };
     });
-  }, [project, studioJobs.staleIntent]);
+  }, [project, studioJobs.staleIntent, studioModels.catalog]);
 
   const handleSelectVariation = useCallback(
     async (request: StudioSelectVariationRequest): Promise<void> => {
@@ -717,7 +716,6 @@ const StudioProjectShell: React.FC = () => {
           canonicalMutationPending ||
           referenceImportSceneId !== null ||
           generationReview !== null ||
-          connectionVisible ||
           duplicateChargeJobId !== null ||
           exportVisible
         }
@@ -847,7 +845,7 @@ const StudioProjectShell: React.FC = () => {
           />
           <div className={styles.generationPanel}>
             <GenerationControls
-              key={`${project.id}-${routeCatalogEpoch}-${projectRoutingIdentity(project)}`}
+              project={project}
               catalog={studioModels.catalog}
               catalogLoading={studioModels.loading}
               catalogErrorMessageKey={studioModels.errorMessageKey}
@@ -865,22 +863,15 @@ const StudioProjectShell: React.FC = () => {
               resolution={project.resolution}
               sceneDurationSeconds={selectedScene?.durationSeconds}
               hasReference={selectedScene?.referenceAssetId !== null}
-              selectedRoute={selectedRoute}
               batchSceneCount={readyScenes.length}
               disabled={generationBlocked}
               singleDisabled={selectedScene !== null && !sceneCanOpenSingleReview(project, selectedScene)}
               jobs={selectedSceneJobs}
               pendingJobIds={studioJobs.mutationPending ? selectedSceneJobs.map((job) => job.id) : []}
               actionIssue={generationActionIssue}
-              onRouteChange={(route) =>
-                setSelectedRoutes((current) => ({
-                  ...current,
-                  [route.sceneId]: route,
-                }))
-              }
+              onOpenSettings={(path) => setTimeout(() => navigate(path), 0)}
               onOpenSingleReview={openSingleReview}
               onOpenBatchReview={openBatchReview}
-              onOpenConnection={() => setConnectionVisible(true)}
               onCancelJob={studioJobs.cancelJob}
               onRetryJob={studioJobs.retryJob}
               onRetryDownload={studioJobs.retryDownload}
@@ -934,24 +925,6 @@ const StudioProjectShell: React.FC = () => {
           }
         }}
         onConfirm={confirmGeneration}
-      />
-      <StudioConnectionModal
-        visible={connectionVisible}
-        refreshToken={routeCatalogEpoch}
-        onCancel={() => setConnectionVisible(false)}
-        onOpenSettings={(path) => {
-          setConnectionVisible(false);
-          setTimeout(() => navigate(path), 0);
-        }}
-        onSaved={() => {
-          setConnectionVisible(false);
-          setRouteCatalogEpoch((epoch) => epoch + 1);
-          void studioModels.refresh();
-        }}
-        onRemoved={() => {
-          setRouteCatalogEpoch((epoch) => epoch + 1);
-          void studioModels.refresh();
-        }}
       />
       <Modal
         visible={exportVisible}

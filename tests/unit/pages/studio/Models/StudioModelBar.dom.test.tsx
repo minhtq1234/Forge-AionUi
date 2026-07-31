@@ -50,12 +50,6 @@ const catalog = (overrides: Partial<StudioRouteCatalog> = {}): StudioRouteCatalo
   image: { status: 'selection_required', selected: null, options: [mediaRoute('image')] },
   video: { status: 'selection_required', selected: null, options: [mediaRoute('video')] },
   catalogVersion: 'catalog-1',
-  planning: { health: 'setup_required' },
-  automatic: [mediaRoute('image'), mediaRoute('video')],
-  suggestions: {
-    image: { reason: 'sole_compatible', route: mediaRoute('image') },
-    video: { reason: 'sole_compatible', route: mediaRoute('video') },
-  },
   ...overrides,
 });
 

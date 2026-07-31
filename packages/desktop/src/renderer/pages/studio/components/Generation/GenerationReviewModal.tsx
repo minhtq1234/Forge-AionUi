@@ -20,10 +20,12 @@ export type GenerationReviewRoute =
   | {
       status: 'valid' | 'invalid';
       snapshot: StudioSceneRouteSnapshot;
+      providerName: string | null;
     }
   | {
       status: 'missing';
       snapshot: null;
+      providerName: null;
     };
 
 export type GenerationReviewScene = {
@@ -209,11 +211,9 @@ export const GenerationReviewModal: React.FC<GenerationReviewModalProps> = ({
                     <dt className='text-12px text-t-tertiary'>
                       {t('conversation.creativeStudio.review.providerLabel')}
                     </dt>
-                    <dd className='m-0 break-all text-12px text-t-primary'>{scene.route.snapshot.providerId}</dd>
-                    <dt className='text-12px text-t-tertiary'>
-                      {t('conversation.creativeStudio.review.adapterLabel')}
-                    </dt>
-                    <dd className='m-0 break-all text-12px text-t-primary'>{scene.route.snapshot.adapterId}</dd>
+                    <dd className='m-0 break-all text-12px text-t-primary'>
+                      {scene.route.providerName ?? t('conversation.creativeStudio.models.unavailable')}
+                    </dd>
                     <dt className='text-12px text-t-tertiary'>{t('conversation.creativeStudio.review.modelLabel')}</dt>
                     <dd className='m-0 break-all text-12px text-t-primary'>{scene.route.snapshot.model}</dd>
                   </dl>

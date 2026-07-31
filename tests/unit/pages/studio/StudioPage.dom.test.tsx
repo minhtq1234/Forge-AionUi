@@ -68,7 +68,15 @@ const project = (id = 'project-1', overrides: Partial<StudioRendererProject> = {
   scenes: {},
   assets: {},
   jobs: {},
-  routing: { storyboard: null, image: null, video: null },
+  routing: {
+    storyboard: null,
+    image: {
+      providerId: 'provider-image',
+      adapterId: 'weprompt-image-v1',
+      model: 'image-model',
+    },
+    video: null,
+  },
   createdAt: '2026-07-30T00:00:00.000Z',
   updatedAt: '2026-07-30T00:00:00.000Z',
   ...overrides,
@@ -140,19 +148,10 @@ const routes = (): StudioRouteCatalog => ({
   },
   image: { status: 'setup_required', selected: null, options: [] },
   video: { status: 'setup_required', selected: null, options: [] },
-  planning: {
-    health: 'ready',
-    resolvedModel: { providerId: 'provider-1', model: 'operations-model' },
-  },
-  automatic: [],
-  suggestions: {
-    image: { reason: 'no_compatible_route', route: null },
-    video: { reason: 'no_compatible_route', route: null },
-  },
   catalogVersion: 'catalog-1',
 });
 
-const imageRoute = (): StudioRouteCatalogEntry => ({
+const imageRoute = (overrides: Partial<StudioRouteCatalogEntry> = {}): StudioRouteCatalogEntry => ({
   providerId: 'provider-image',
   providerName: 'Image provider',
   model: 'image-model',
@@ -167,14 +166,19 @@ const imageRoute = (): StudioRouteCatalogEntry => ({
     supportsFirstFrame: true,
     silentOutput: true,
   },
+  ...overrides,
 });
 
-const routesWithImage = (): StudioRouteCatalog => ({
+const routesWithImage = (route = imageRoute()): StudioRouteCatalog => ({
   ...routes(),
-  automatic: [imageRoute()],
-  suggestions: {
-    image: { reason: 'sole_compatible', route: imageRoute() },
-    video: { reason: 'no_compatible_route', route: null },
+  image: {
+    status: 'ready',
+    selected: {
+      providerId: route.providerId,
+      adapterId: route.adapterId,
+      model: route.model,
+    },
+    options: [route],
   },
 });
 
@@ -264,6 +268,13 @@ describe('StudioPage and useStudioProject', () => {
     expect(screen.getByText('conversation.creativeStudio.inspector.title')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'conversation.creativeStudio.draft.action' })).toBeInTheDocument();
     await waitFor(() => expect(bridge.listRoutes.invoke).toHaveBeenCalledWith({ projectId: 'project-1' }));
+    expect(
+      screen.queryByRole('button', { name: 'conversation.creativeStudio.routing.connectProvider' })
+    ).not.toBeInTheDocument();
+    expect(bridge.listConnectionCandidates.invoke).not.toHaveBeenCalled();
+    expect(bridge.listConnections.invoke).not.toHaveBeenCalled();
+    expect(bridge.saveConnection.invoke).not.toHaveBeenCalled();
+    expect(bridge.removeConnection.invoke).not.toHaveBeenCalled();
   });
 
   it('imports a first frame through the native managed-asset command and refetches canonical state', async () => {
@@ -685,11 +696,13 @@ describe('StudioPage and useStudioProject', () => {
     const initial = project('project-1', {
       sceneOrder: [opening.id],
       scenes: { [opening.id]: opening },
+      routing: { storyboard: null, image: null, video: null },
     });
     const sameRouting = project('project-1', {
       revision: 3,
       sceneOrder: [opening.id],
       scenes: { [opening.id]: opening },
+      routing: { storyboard: null, image: null, video: null },
     });
     const routed = project('project-1', {
       revision: 4,
@@ -746,6 +759,21 @@ describe('StudioPage and useStudioProject', () => {
       targetDurationSeconds: 6,
       sceneOrder: [revisedOpening.id],
       scenes: { [revisedOpening.id]: revisedOpening },
+      routing: {
+        storyboard: null,
+        image: {
+          providerId: 'provider-image-new',
+          adapterId: 'weprompt-media-gateway-v1',
+          model: 'image-model-new',
+        },
+        video: null,
+      },
+    });
+    const revisedRoute = imageRoute({
+      providerId: 'provider-image-new',
+      providerName: 'New image provider',
+      adapterId: 'weprompt-media-gateway-v1',
+      model: 'image-model-new',
     });
     bridge.getProject.invoke
       .mockResolvedValueOnce(ok(initial))
@@ -753,7 +781,7 @@ describe('StudioPage and useStudioProject', () => {
       .mockResolvedValue(ok(revised));
     bridge.listRoutes.invoke.mockResolvedValueOnce(ok(routesWithImage())).mockResolvedValue(
       ok({
-        ...routesWithImage(),
+        ...routesWithImage(revisedRoute),
         catalogVersion: 'catalog-2',
       })
     );
@@ -779,6 +807,8 @@ describe('StudioPage and useStudioProject', () => {
     await waitFor(() => expect(bridge.listRoutes.invoke).toHaveBeenCalledTimes(routeRequestsBeforeConfirmation + 1));
     expect(bridge.submitScenes.invoke).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog')).toHaveTextContent('Revised opening');
+    expect(screen.getByRole('dialog')).toHaveTextContent('New image provider');
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('weprompt-media-gateway-v1');
     expect(screen.getByRole('dialog')).toHaveTextContent('conversation.creativeStudio.errors.staleProject');
 
     fireEvent.click(
@@ -793,6 +823,15 @@ describe('StudioPage and useStudioProject', () => {
           projectId: 'project-1',
           expectedRevision: 3,
           catalogVersion: 'catalog-2',
+          routes: [
+            {
+              sceneId: 'scene-1',
+              providerId: 'provider-image-new',
+              adapterId: 'weprompt-media-gateway-v1',
+              model: 'image-model-new',
+              kind: 'image',
+            },
+          ],
         })
       )
     );
@@ -903,9 +942,29 @@ describe('StudioPage and useStudioProject', () => {
       revision: 3,
       sceneOrder: [opening.id],
       scenes: { [opening.id]: opening },
+      routing: {
+        storyboard: null,
+        image: {
+          providerId: 'provider-image-new',
+          adapterId: 'weprompt-media-gateway-v1',
+          model: 'image-model-new',
+        },
+        video: null,
+      },
     });
-    bridge.getProject.invoke.mockResolvedValueOnce(ok(initial)).mockResolvedValue(ok(refreshed));
-    bridge.listRoutes.invoke.mockResolvedValue(ok(routesWithImage()));
+    const refreshedRoute = imageRoute({
+      providerId: 'provider-image-new',
+      providerName: 'New image provider',
+      adapterId: 'weprompt-media-gateway-v1',
+      model: 'image-model-new',
+    });
+    bridge.getProject.invoke
+      .mockResolvedValueOnce(ok(initial))
+      .mockResolvedValueOnce(ok(initial))
+      .mockResolvedValue(ok(refreshed));
+    bridge.listRoutes.invoke
+      .mockResolvedValueOnce(ok(routesWithImage()))
+      .mockResolvedValue(ok({ ...routesWithImage(refreshedRoute), catalogVersion: 'catalog-2' }));
     bridge.submitScenes.invoke.mockResolvedValueOnce(stale()).mockResolvedValueOnce(ok([]));
     renderRoute();
 
@@ -924,10 +983,12 @@ describe('StudioPage and useStudioProject', () => {
     await waitFor(() =>
       expect(screen.getByRole('dialog')).toHaveTextContent('conversation.creativeStudio.errors.staleProject')
     );
+    await waitFor(() => expect(screen.getByRole('dialog')).toHaveTextContent('New image provider'));
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('weprompt-media-gateway-v1');
     expect(bridge.submitScenes.invoke).toHaveBeenCalledTimes(1);
 
     fireEvent.click(
-      screen.getByRole('button', {
+      await screen.findByRole('button', {
         name: 'conversation.creativeStudio.review.confirm',
       })
     );
@@ -936,6 +997,16 @@ describe('StudioPage and useStudioProject', () => {
     expect(bridge.submitScenes.invoke.mock.calls[1]?.[0]).toMatchObject({
       projectId: 'project-1',
       expectedRevision: 3,
+      catalogVersion: 'catalog-2',
+      routes: [
+        {
+          sceneId: 'scene-1',
+          providerId: 'provider-image-new',
+          adapterId: 'weprompt-media-gateway-v1',
+          model: 'image-model-new',
+          kind: 'image',
+        },
+      ],
     });
   });
 
@@ -1249,7 +1320,7 @@ describe('StudioPage and useStudioProject', () => {
 
     act(() => onUpdate?.({ projectId: 'project-1' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('conversation.creativeStudio.errors.storage');
+    expect(await screen.findByText('conversation.creativeStudio.errors.storage')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Launch film' })).toBeInTheDocument();
   });
 
@@ -1321,11 +1392,13 @@ describe('StudioPage and useStudioProject', () => {
     });
 
     later.resolve(failure());
-    expect(await screen.findByRole('alert')).toHaveTextContent('conversation.creativeStudio.errors.storage');
+    expect(await screen.findByText('conversation.creativeStudio.errors.storage')).toBeInTheDocument();
 
     earlier.resolve(ok(project('project-1', { name: 'Recovered revision five', revision: 5 })));
     expect(await screen.findByRole('heading', { level: 1, name: 'Recovered revision five' })).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByText('conversation.creativeStudio.errors.storage')).not.toBeInTheDocument()
+    );
   });
 
   it('adopts an earlier authoritative absence after a later overlapping refresh fails', async () => {
@@ -1346,12 +1419,14 @@ describe('StudioPage and useStudioProject', () => {
     });
 
     later.resolve(failure());
-    expect(await screen.findByRole('alert')).toHaveTextContent('conversation.creativeStudio.errors.storage');
+    expect(await screen.findByText('conversation.creativeStudio.errors.storage')).toBeInTheDocument();
 
     earlier.resolve(ok(null));
     expect(await screen.findByText('conversation.creativeStudio.project.notFound')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 1, name: 'Launch film' })).not.toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByText('conversation.creativeStudio.errors.storage')).not.toBeInTheDocument()
+    );
   });
 
   it('does not let an older authoritative absence replace a newer canonical project', async () => {

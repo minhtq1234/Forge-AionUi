@@ -13,7 +13,6 @@ type JsonObject = Record<string, unknown>;
 const localeRoot = new URL('../../../../packages/desktop/src/renderer/services/i18n/locales/', import.meta.url);
 
 const plannedGroups = [
-  'connection',
   'create',
   'draft',
   'empty',
@@ -154,6 +153,16 @@ describe('Creative Studio localization contract', () => {
     for (const key of taskSevenKeys) {
       expect(leaves[key], `Missing conversation.creativeStudio.${key}`).toBeTruthy();
     }
+  });
+
+  it('does not retain Studio connection ownership or App Operations copy', () => {
+    const reference = loadConversationLocale(i18nConfig.referenceLanguage);
+    const creativeStudio = reference.creativeStudio;
+    expect(isJsonObject(creativeStudio)).toBe(true);
+    if (!isJsonObject(creativeStudio)) return;
+
+    expect(creativeStudio.connection).toBeUndefined();
+    expect(JSON.stringify(creativeStudio)).not.toContain('App Operations');
   });
 
   it('keeps every configured locale exactly in parity, non-empty, translated, and placeholder-compatible', () => {
