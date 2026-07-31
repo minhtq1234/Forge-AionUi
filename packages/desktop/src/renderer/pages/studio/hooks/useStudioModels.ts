@@ -17,6 +17,20 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 const STORAGE_ERROR_MESSAGE_KEY = 'conversation.creativeStudio.errors.storage';
 const UPDATE_FAILED_MESSAGE_KEY = 'conversation.creativeStudio.models.updateFailed';
 
+const mediaSelectionKey = (selection: StudioRendererProject['routing']['image']): string =>
+  selection === null ? 'none' : `${selection.providerId}\u0000${selection.adapterId}\u0000${selection.model}`;
+
+const projectCatalogKey = (project: StudioRendererProject | null): string => {
+  if (project === null) return 'none';
+  const storyboard = project.routing.storyboard;
+  return [
+    project.id,
+    storyboard === null ? 'none' : `${storyboard.providerId}\u0000${storyboard.model}`,
+    mediaSelectionKey(project.routing.image),
+    mediaSelectionKey(project.routing.video),
+  ].join('\u0001');
+};
+
 export type UseStudioModelsOptions = {
   project: StudioRendererProject | null;
   refetch: () => Promise<StudioRendererProject | null>;
@@ -50,61 +64,89 @@ export const useStudioModels = ({
   const [pendingRole, setPendingRole] = useState<'storyboard' | 'image' | 'video' | null>(null);
   const mountedRef = useRef(true);
   const requestRef = useRef(0);
+  const catalogRef = useRef(catalog);
   const projectRef = useRef(project);
   const refetchRef = useRef(refetch);
   const beforeMutationRef = useRef(beforeMutation);
   const pendingRoleRef = useRef<'storyboard' | 'image' | 'video' | null>(null);
+  const lastRequestedCatalogKeyRef = useRef<string | null>(null);
+  const refreshInFlightRef = useRef<{ key: string; promise: Promise<void> } | null>(null);
 
   useLayoutEffect(() => {
+    catalogRef.current = catalog;
     projectRef.current = project;
     refetchRef.current = refetch;
     beforeMutationRef.current = beforeMutation;
   });
 
-  const refresh = useCallback(async (): Promise<void> => {
+  const refresh = useCallback((): Promise<void> => {
     const current = projectRef.current;
-    const request = ++requestRef.current;
-    if (current === null) {
-      if (mountedRef.current) {
-        setCatalog(null);
-        setLoading(false);
-        setErrorMessageKey(null);
-      }
-      return;
-    }
+    const key = projectCatalogKey(current);
+    const inFlight = refreshInFlightRef.current;
+    if (inFlight?.key === key) return inFlight.promise;
 
-    if (mountedRef.current) {
-      setLoading(true);
-      setErrorMessageKey(null);
-    }
-    try {
-      const result = await ipcBridge.creativeStudio.listRoutes.invoke({ projectId: current.id });
-      if (!mountedRef.current || requestRef.current !== request || projectRef.current?.id !== current.id) return;
-      if (result.ok === false) {
-        setCatalog(null);
-        setErrorMessageKey(result.error.messageKey);
+    lastRequestedCatalogKeyRef.current = key;
+    const request = ++requestRef.current;
+    const operation = (async (): Promise<void> => {
+      if (current === null) {
+        if (mountedRef.current) {
+          catalogRef.current = null;
+          setCatalog(null);
+          setLoading(false);
+          setErrorMessageKey(null);
+        }
         return;
       }
-      setCatalog(result.data);
-    } catch {
-      if (mountedRef.current && requestRef.current === request && projectRef.current?.id === current.id) {
-        setCatalog(null);
-        setErrorMessageKey(STORAGE_ERROR_MESSAGE_KEY);
+
+      if (mountedRef.current) {
+        setLoading(true);
+        setErrorMessageKey(null);
       }
-    } finally {
-      if (mountedRef.current && requestRef.current === request && projectRef.current?.id === current.id) {
-        setLoading(false);
+      try {
+        const result = await ipcBridge.creativeStudio.listRoutes.invoke({ projectId: current.id });
+        if (!mountedRef.current || requestRef.current !== request || projectRef.current?.id !== current.id) return;
+        if (result.ok === false) {
+          catalogRef.current = null;
+          setCatalog(null);
+          setErrorMessageKey(result.error.messageKey);
+          return;
+        }
+        catalogRef.current = result.data;
+        setCatalog(result.data);
+      } catch {
+        if (mountedRef.current && requestRef.current === request && projectRef.current?.id === current.id) {
+          catalogRef.current = null;
+          setCatalog(null);
+          setErrorMessageKey(STORAGE_ERROR_MESSAGE_KEY);
+        }
+      } finally {
+        if (mountedRef.current && requestRef.current === request && projectRef.current?.id === current.id) {
+          setLoading(false);
+        }
       }
-    }
+    })();
+    refreshInFlightRef.current = { key, promise: operation };
+    void operation.then(
+      () => {
+        if (refreshInFlightRef.current?.promise === operation) refreshInFlightRef.current = null;
+      },
+      () => {
+        if (refreshInFlightRef.current?.promise === operation) refreshInFlightRef.current = null;
+      }
+    );
+    return operation;
   }, []);
 
+  const routingKey = projectCatalogKey(project);
   useEffect(() => {
+    if (lastRequestedCatalogKeyRef.current === routingKey) return;
     requestRef.current += 1;
+    catalogRef.current = null;
     setCatalog(null);
     setErrorMessageKey(null);
     setLoading(project !== null);
     void refresh();
-  }, [project?.id, refresh]);
+  }, [project, refresh, routingKey]);
 
   useEffect(
     () => () => {
@@ -116,24 +158,16 @@ export const useStudioModels = ({
 
   const updateSelection = useCallback(
     async (input: StudioModelSelectionChange): Promise<boolean> => {
-      if (projectRef.current === null || pendingRoleRef.current !== null) return false;
+      const origin = projectRef.current;
+      if (!mountedRef.current || origin === null || pendingRoleRef.current !== null) return false;
+      pendingRoleRef.current = input.role;
+      setPendingRole(input.role);
+      setErrorMessageKey(null);
 
       try {
         if (!(await beforeMutationRef.current())) return false;
-      } catch {
-        if (mountedRef.current) setErrorMessageKey(UPDATE_FAILED_MESSAGE_KEY);
-        return false;
-      }
-
-      const current = projectRef.current;
-      if (current === null || pendingRoleRef.current !== null) return false;
-      pendingRoleRef.current = input.role;
-      if (mountedRef.current) {
-        setPendingRole(input.role);
-        setErrorMessageKey(null);
-      }
-
-      try {
+        if (!mountedRef.current || projectRef.current?.id !== origin.id) return false;
+        const current = projectRef.current;
         const updateModelSelection = ipcBridge.creativeStudio.updateModelSelection.invoke as unknown as (
           request: StudioUpdateModelSelectionRequest
         ) => Promise<StudioCommandResult<StudioRendererProject>>;
@@ -142,12 +176,14 @@ export const useStudioModels = ({
           expectedRevision: current.revision,
           ...input,
         });
+        if (!mountedRef.current || projectRef.current?.id !== origin.id) return false;
         if (result.ok === false) {
           if (result.error.code === 'stale_project') {
             const canonical = await refetchRef.current();
-            if (canonical !== null) projectRef.current = canonical;
+            if (!mountedRef.current || projectRef.current?.id !== origin.id) return false;
+            if (canonical?.id === origin.id) projectRef.current = canonical;
             await refresh();
-            if (mountedRef.current) setErrorMessageKey(result.error.messageKey);
+            if (mountedRef.current && projectRef.current?.id === origin.id) setErrorMessageKey(result.error.messageKey);
           } else if (mountedRef.current) {
             setErrorMessageKey(UPDATE_FAILED_MESSAGE_KEY);
           }
@@ -155,11 +191,12 @@ export const useStudioModels = ({
         }
 
         const canonical = await refetchRef.current();
-        if (canonical !== null) projectRef.current = canonical;
+        if (!mountedRef.current || projectRef.current?.id !== origin.id) return false;
+        if (canonical?.id === origin.id) projectRef.current = canonical;
         await refresh();
         return true;
       } catch {
-        if (mountedRef.current) setErrorMessageKey(UPDATE_FAILED_MESSAGE_KEY);
+        if (mountedRef.current && projectRef.current?.id === origin.id) setErrorMessageKey(UPDATE_FAILED_MESSAGE_KEY);
         return false;
       } finally {
         pendingRoleRef.current = null;
@@ -169,5 +206,14 @@ export const useStudioModels = ({
     [refresh]
   );
 
-  return { catalog, loading, errorMessageKey, pendingRole, refresh, updateSelection };
+  return {
+    get catalog() {
+      return catalogRef.current;
+    },
+    loading,
+    errorMessageKey,
+    pendingRole,
+    refresh,
+    updateSelection,
+  };
 };

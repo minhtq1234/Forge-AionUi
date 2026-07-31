@@ -390,10 +390,14 @@ const StudioProjectShell: React.FC = () => {
     const reviewedProjectId = project.id;
     const reviewedProjectRevision = project.revision;
     try {
-      if (studioModels.catalog === null) {
+      let catalog = studioModels.catalog;
+      if (catalog === null) {
         await studioModels.refresh();
-        setHeaderGenerationIssue('conversation.creativeStudio.models.loading');
-        return;
+        catalog = studioModels.catalog;
+        if (catalog === null) {
+          setHeaderGenerationIssue('conversation.creativeStudio.models.loading');
+          return;
+        }
       }
       const canonical = canonicalProjectRef.current;
       if (canonical?.id !== reviewedProjectId || canonical.revision !== reviewedProjectRevision) {
@@ -401,7 +405,7 @@ const StudioProjectShell: React.FC = () => {
         return;
       }
       const suggestedRoute = (kind: 'image' | 'video') => {
-        const route = studioModels.catalog!.suggestions[kind].route;
+        const route = catalog.suggestions[kind].route;
         return route === null
           ? null
           : {
@@ -412,12 +416,12 @@ const StudioProjectShell: React.FC = () => {
             };
       };
       openBatchReview({
-        catalogVersion: studioModels.catalog.catalogVersion,
+        catalogVersion: catalog.catalogVersion,
         suggestedRoutes: {
           image: suggestedRoute('image'),
           video: suggestedRoute('video'),
         },
-        availableRoutes: studioModels.catalog.automatic,
+        availableRoutes: catalog.automatic,
       });
     } catch {
       setHeaderGenerationIssue('conversation.creativeStudio.errors.provider');

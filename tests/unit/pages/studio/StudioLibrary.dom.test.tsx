@@ -135,6 +135,17 @@ describe('StudioLibrary', () => {
     expect(await screen.findByText('conversation.creativeStudio.empty.title')).toBeInTheDocument();
   });
 
+  it('keeps global Storyboard readiness hidden when the optional probe throws', async () => {
+    bridge.listRoutes.invoke.mockRejectedValue(new Error('bridge unavailable'));
+
+    render(<StudioLibrary />);
+
+    await screen.findByText('conversation.creativeStudio.empty.title');
+    await act(async () => {});
+    expect(screen.queryByText('conversation.creativeStudio.library.readinessLabel')).not.toBeInTheDocument();
+    expect(screen.queryByText('conversation.creativeStudio.library.readinessSetupRequired')).not.toBeInTheDocument();
+  });
+
   it('renders the canonical project summaries returned by the bridge', async () => {
     bridge.listProjects.invoke.mockResolvedValue(ok([summary()]));
 

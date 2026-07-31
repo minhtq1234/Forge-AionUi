@@ -83,9 +83,9 @@ export const StudioLibrary: React.FC = () => {
   const refreshReadiness = useCallback(async (): Promise<void> => {
     try {
       const result = await ipcBridge.creativeStudio.listRoutes.invoke({});
-      if (result.ok) setReadiness(result.data.storyboard.options.length > 0);
+      setReadiness(result.ok ? result.data.storyboard.options.length > 0 : null);
     } catch {
-      setReadiness(false);
+      setReadiness(null);
     }
   }, []);
 

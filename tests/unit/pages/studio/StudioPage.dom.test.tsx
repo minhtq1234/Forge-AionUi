@@ -538,6 +538,32 @@ describe('StudioPage and useStudioProject', () => {
     );
   });
 
+  it('opens the header review with a catalog that becomes ready during refresh', async () => {
+    const opening = scene({ durationSeconds: 5 });
+    bridge.getProject.invoke.mockResolvedValue(
+      ok(
+        project('project-1', {
+          targetDurationSeconds: 5,
+          sceneOrder: [opening.id],
+          scenes: { [opening.id]: opening },
+        })
+      )
+    );
+    bridge.listRoutes.invoke.mockResolvedValueOnce(failure()).mockResolvedValue(ok(routesWithImage()));
+    renderRoute();
+
+    await screen.findAllByText('conversation.creativeStudio.errors.storage');
+    await act(async () => {});
+    fireEvent.click(
+      screen.getAllByRole('button', {
+        name: 'conversation.creativeStudio.review.generateReadyScenes',
+      })[0]!
+    );
+
+    expect(await screen.findByRole('dialog')).toHaveTextContent('conversation.creativeStudio.review.title');
+    expect(screen.queryByText('conversation.creativeStudio.models.loading')).not.toBeInTheDocument();
+  });
+
   it('blocks confirmation when the canonical route constraints reject a single scene', async () => {
     const opening = scene({ durationSeconds: 61 });
     bridge.getProject.invoke.mockResolvedValue(
@@ -649,7 +675,7 @@ describe('StudioPage and useStudioProject', () => {
     expect(bridge.submitScenes.invoke).not.toHaveBeenCalled();
   });
 
-  it('keeps one project catalog owner across canonical project revisions', async () => {
+  it('refreshes the single project catalog owner once when canonical routing changes', async () => {
     let onUpdate: ((event: { projectId: string }) => void) | undefined;
     bridge.projectUpdated.on.mockImplementation((listener: (event: { projectId: string }) => void) => {
       onUpdate = listener;
@@ -697,7 +723,9 @@ describe('StudioPage and useStudioProject', () => {
 
     await act(async () => onUpdate?.({ projectId: 'project-1' }));
     await waitFor(() => expect(bridge.getProject.invoke).toHaveBeenCalledTimes(4));
-    expect(bridge.listRoutes.invoke).toHaveBeenCalledTimes(initialRouteRequestCount);
+    await waitFor(() => expect(bridge.listRoutes.invoke).toHaveBeenCalledTimes(initialRouteRequestCount + 1));
+    await act(async () => {});
+    expect(bridge.listRoutes.invoke).toHaveBeenCalledTimes(initialRouteRequestCount + 1);
   });
 
   it('refreshes a paid review after an external revision and requires a second confirmation', async () => {
@@ -723,7 +751,12 @@ describe('StudioPage and useStudioProject', () => {
       .mockResolvedValueOnce(ok(initial))
       .mockResolvedValueOnce(ok(initial))
       .mockResolvedValue(ok(revised));
-    bridge.listRoutes.invoke.mockResolvedValue(ok(routesWithImage()));
+    bridge.listRoutes.invoke.mockResolvedValueOnce(ok(routesWithImage())).mockResolvedValue(
+      ok({
+        ...routesWithImage(),
+        catalogVersion: 'catalog-2',
+      })
+    );
     renderRoute();
 
     fireEvent.click(
@@ -759,6 +792,7 @@ describe('StudioPage and useStudioProject', () => {
         expect.objectContaining({
           projectId: 'project-1',
           expectedRevision: 3,
+          catalogVersion: 'catalog-2',
         })
       )
     );

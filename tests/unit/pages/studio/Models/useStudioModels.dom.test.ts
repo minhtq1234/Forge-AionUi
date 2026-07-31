@@ -126,6 +126,81 @@ describe('useStudioModels', () => {
     });
   });
 
+  it('allows only one same-tick selection mutation to enter edit flushing', async () => {
+    const flush = deferred<boolean>();
+    const beforeMutation = vi.fn(() => flush.promise);
+    const view = renderHook(() =>
+      useStudioModels({
+        project: project(),
+        refetch: vi.fn(async () => project('project-1', 5)),
+        beforeMutation,
+      })
+    );
+
+    let first!: Promise<boolean>;
+    let second!: Promise<boolean>;
+    act(() => {
+      first = view.result.current.updateSelection({ role: 'storyboard', selection: null });
+      second = view.result.current.updateSelection({ role: 'image', selection: null });
+    });
+
+    expect(beforeMutation).toHaveBeenCalledOnce();
+    await expect(second).resolves.toBe(false);
+
+    flush.resolve(true);
+    await act(() => first);
+
+    expect(bridge.updateModelSelection.invoke).toHaveBeenCalledOnce();
+    expect(bridge.updateModelSelection.invoke).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'project-1', role: 'storyboard' })
+    );
+  });
+
+  it('does not carry a selection mutation to a project entered while edit flushing', async () => {
+    const flush = deferred<boolean>();
+    const beforeMutation = vi.fn(() => flush.promise);
+    const view = renderHook(
+      ({ currentProject }) =>
+        useStudioModels({
+          project: currentProject,
+          refetch: vi.fn(async () => currentProject),
+          beforeMutation,
+        }),
+      { initialProps: { currentProject: project('project-1') } }
+    );
+
+    let update!: Promise<boolean>;
+    act(() => {
+      update = view.result.current.updateSelection({ role: 'storyboard', selection: null });
+    });
+    view.rerender({ currentProject: project('project-2') });
+    flush.resolve(true);
+
+    await expect(update).resolves.toBe(false);
+    expect(bridge.updateModelSelection.invoke).not.toHaveBeenCalled();
+  });
+
+  it('does not mutate after unmount while edit flushing is pending', async () => {
+    const flush = deferred<boolean>();
+    const view = renderHook(() =>
+      useStudioModels({
+        project: project(),
+        refetch: vi.fn(async () => project()),
+        beforeMutation: vi.fn(() => flush.promise),
+      })
+    );
+
+    let update!: Promise<boolean>;
+    act(() => {
+      update = view.result.current.updateSelection({ role: 'storyboard', selection: null });
+    });
+    view.unmount();
+    flush.resolve(true);
+
+    await expect(update).resolves.toBe(false);
+    expect(bridge.updateModelSelection.invoke).not.toHaveBeenCalled();
+  });
+
   it('does not mutate when edit flushing is blocked', async () => {
     const view = renderHook(() =>
       useStudioModels({
@@ -246,5 +321,60 @@ describe('useStudioModels', () => {
 
     expect(bridge.listRoutes.invoke).toHaveBeenCalledTimes(2);
     expect(bridge.listRoutes.invoke).toHaveBeenLastCalledWith({ projectId: 'project-1' });
+  });
+
+  it('makes a successful refresh catalog available to the awaiting caller', async () => {
+    bridge.listRoutes.invoke
+      .mockResolvedValueOnce(failed('provider_error'))
+      .mockResolvedValue(ok(catalog('catalog-2')));
+    const view = renderHook(() =>
+      useStudioModels({
+        project: project(),
+        refetch: vi.fn(async () => project()),
+        beforeMutation: vi.fn(async () => true),
+      })
+    );
+    await waitFor(() => expect(view.result.current.errorMessageKey).not.toBeNull());
+    const capturedResult = view.result.current;
+
+    await act(() => capturedResult.refresh());
+
+    expect(capturedResult.catalog?.catalogVersion).toBe('catalog-2');
+  });
+
+  it('refreshes once when canonical routing changes without refreshing for revision-only changes', async () => {
+    const initial = project();
+    const revisionOnly = project('project-1', 5);
+    const routed = {
+      ...project('project-1', 6),
+      routing: {
+        storyboard: null,
+        image: {
+          providerId: 'provider-image',
+          adapterId: 'weprompt-image-v1' as const,
+          model: 'image-model',
+        },
+        video: null,
+      },
+    };
+    const view = renderHook(
+      ({ currentProject }) =>
+        useStudioModels({
+          project: currentProject,
+          refetch: vi.fn(async () => currentProject),
+          beforeMutation: vi.fn(async () => true),
+        }),
+      { initialProps: { currentProject: initial } }
+    );
+    await waitFor(() => expect(bridge.listRoutes.invoke).toHaveBeenCalledTimes(1));
+
+    view.rerender({ currentProject: revisionOnly });
+    await act(async () => {});
+    expect(bridge.listRoutes.invoke).toHaveBeenCalledTimes(1);
+
+    view.rerender({ currentProject: routed });
+    await waitFor(() => expect(bridge.listRoutes.invoke).toHaveBeenCalledTimes(2));
+    await act(async () => {});
+    expect(bridge.listRoutes.invoke).toHaveBeenCalledTimes(2);
   });
 });
