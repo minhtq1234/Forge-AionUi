@@ -17,10 +17,10 @@ import EditModeModal from '@/renderer/pages/settings/components/EditModeModal';
 import AionScrollArea from '@/renderer/components/base/AionScrollArea';
 import TalkToButlerButton from '@/renderer/components/base/TalkToButlerButton';
 import { useProvidersQuery } from '@/renderer/hooks/agent/useModelProviderList';
-import { useSettingsViewMode } from '../settingsViewContext';
+import { useSettingsViewMode } from '../../settingsViewContext';
 import SettingsPageHeader from '@/renderer/pages/settings/components/SettingsPageHeader';
 import { consumePendingDeepLink } from '@/renderer/hooks/system/useDeepLink';
-import '../model-provider.css';
+import '../../model-provider.css';
 
 /**
  * 获取协议显示标签颜色
