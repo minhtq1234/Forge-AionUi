@@ -10,6 +10,14 @@ import { expect, test } from '../../fixtures';
 import { navigateTo, ROUTES } from '../../helpers';
 import path from 'node:path';
 
+const mainProcessOnlySentinels = [
+  'STUDIO_SECRET_CREDENTIAL_SENTINEL',
+  'https://studio-provider-url-sentinel.invalid/v1',
+  'STUDIO_PROVIDER_JOB_SENTINEL',
+  'STUDIO_RAW_OUTPUT_BODY_SENTINEL',
+  '.studio-raw-output-path-sentinel',
+];
+
 test.describe('Creative Studio workspace', () => {
   test.describe.configure({ timeout: 120_000 });
   test.skip(
@@ -56,9 +64,17 @@ test.describe('Creative Studio workspace', () => {
     });
 
     await test.step('create a project through the Studio library', async () => {
-      await navigateTo(page, ROUTES.studio);
       const studioLibrary = page.getByRole('region', { name: 'Creative Studio' });
-      await expect(studioLibrary).toBeVisible();
+      const openStudioLibrary = async (attempt = 0): Promise<void> => {
+        await navigateTo(page, ROUTES.studio);
+        try {
+          await expect(studioLibrary).toBeVisible({ timeout: 15_000 });
+        } catch (error) {
+          if (attempt >= 1) throw error;
+          await openStudioLibrary(attempt + 1);
+        }
+      };
+      await openStudioLibrary();
 
       const createDialog = page.getByRole('dialog', { name: 'Create a Creative Studio project' });
       const submitCreateProject = async (attempt = 0): Promise<void> => {
@@ -88,22 +104,17 @@ test.describe('Creative Studio workspace', () => {
     });
 
     await test.step('select and persist the project Video model across renderer reload', async () => {
-      const selectVideoModel = async (attempt = 0): Promise<void> => {
-        if (!(await page.getByRole('region', { name: 'Project overview' }).isVisible())) {
-          await page.getByRole('button', { name: projectName }).click();
-          await expect(page.getByRole('region', { name: 'Project overview' })).toBeVisible();
-        }
-        const videoModel = page.getByRole('combobox', { name: 'Video model' });
-        try {
-          await videoModel.click({ timeout: 5_000 });
-          await page.locator('.arco-select-option').filter({ hasText: 'weprompt-e2e-video' }).dispatchEvent('click');
-          await expect(videoModel).toContainText('weprompt-e2e-video');
-        } catch (error) {
-          if (attempt >= 2) throw error;
-          await selectVideoModel(attempt + 1);
-        }
-      };
-      await selectVideoModel();
+      if (!(await page.getByRole('region', { name: 'Project overview' }).isVisible())) {
+        await page.getByRole('button', { name: projectName }).click();
+      }
+      await expect(page.getByRole('region', { name: 'Project overview' })).toBeVisible();
+
+      const videoModel = page.getByRole('combobox', { name: 'Video model' });
+      await videoModel.click();
+      const videoOption = page.locator('.arco-select-option').filter({ hasText: 'weprompt-e2e-video' });
+      await expect(videoOption).toBeVisible();
+      await videoOption.click();
+      await expect(videoModel).toContainText('weprompt-e2e-video');
 
       const projectUrl = page.url();
       await page.reload({ waitUntil: 'domcontentloaded' });
@@ -144,6 +155,8 @@ test.describe('Creative Studio workspace', () => {
       await page.getByRole('button', { name: 'Cancel job' }).click();
       await expect(page.getByText('Cancelled')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Cancel job' })).toHaveCount(0);
+      const rendererText = await page.locator('body').innerText();
+      for (const sentinel of mainProcessOnlySentinels) expect(rendererText).not.toContain(sentinel);
     });
   });
 });

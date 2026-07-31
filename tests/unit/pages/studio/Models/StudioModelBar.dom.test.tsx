@@ -71,11 +71,17 @@ describe('StudioModelBar', () => {
   it('renders three labeled selectors with sanitized model and provider labels', async () => {
     render(<StudioModelBar {...props()} />);
 
-    expect(screen.getByLabelText('conversation.creativeStudio.models.storyboard')).toBeInTheDocument();
-    expect(screen.getByLabelText('conversation.creativeStudio.models.image')).toBeInTheDocument();
-    expect(screen.getByLabelText('conversation.creativeStudio.models.video')).toBeInTheDocument();
+    const storyboard = screen.getByLabelText('conversation.creativeStudio.models.storyboard');
+    const image = screen.getByLabelText('conversation.creativeStudio.models.image');
+    const video = screen.getByLabelText('conversation.creativeStudio.models.video');
+    expect(storyboard).toBeInTheDocument();
+    expect(image).toBeInTheDocument();
+    expect(video).toBeInTheDocument();
+    expect(storyboard.closest('label')).toBeNull();
+    expect(image.closest('label')).toBeNull();
+    expect(video.closest('label')).toBeNull();
 
-    fireEvent.click(screen.getByLabelText('conversation.creativeStudio.models.image'));
+    fireEvent.click(image);
     expect(await screen.findByText(/image-model · image Provider/)).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('weprompt-image-v1');
   });

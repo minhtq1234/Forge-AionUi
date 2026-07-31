@@ -299,13 +299,26 @@ describe('Studio storyboard planner bounds', () => {
 
   it('emits only safe operational metadata', async () => {
     const emitAudit = vi.fn();
-    const planner = createStudioStoryboardPlanner(dependencies({ emitAudit }));
+    const credentialSentinel = 'STUDIO_SECRET_CREDENTIAL_SENTINEL_AUDIT';
+    const providerUrlSentinel = 'https://STUDIO_PROVIDER_URL_SENTINEL.invalid/v1';
+    const rawOutputSentinel = 'STUDIO_RAW_PROVIDER_OUTPUT_SENTINEL_AUDIT';
+    const planner = createStudioStoryboardPlanner(
+      dependencies({
+        emitAudit,
+        listProviders: async () => [provider({ api_key: credentialSentinel, base_url: providerUrlSentinel })],
+        createClient: async () => client(JSON.stringify({ ...validOutput, projectSummary: rawOutputSentinel })),
+      })
+    );
 
     await planner.draft(input, selected);
 
-    expect(JSON.stringify(emitAudit.mock.calls)).not.toMatch(
+    const capturedAuditMetadata = JSON.stringify(emitAudit.mock.calls);
+    expect(capturedAuditMetadata).not.toMatch(
       /must-not-leak|UNTRUSTED_STUDIO_BRIEF|raw provider response|authorization/i
     );
+    expect(capturedAuditMetadata).not.toContain(credentialSentinel);
+    expect(capturedAuditMetadata).not.toContain(providerUrlSentinel);
+    expect(capturedAuditMetadata).not.toContain(rawOutputSentinel);
     expect(emitAudit).toHaveBeenCalledWith(
       expect.objectContaining({
         providerId: 'provider_1',

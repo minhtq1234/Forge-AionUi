@@ -4,11 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { StudioProject, StudioScene, StudioSceneRouteSnapshot } from '@/common/types/project/creativeStudioTypes';
-import { createStudioE2EFakeBundle } from '@process/services/creative-studio/adapters/e2eFakeAdapter';
+import {
+  createStudioE2EFakeBundle,
+  STUDIO_E2E_CREDENTIAL_SENTINEL,
+  STUDIO_E2E_PROVIDER_JOB_SENTINEL,
+  STUDIO_E2E_PROVIDER_URL_SENTINEL,
+  STUDIO_E2E_RAW_OUTPUT_BODY_SENTINEL,
+  STUDIO_E2E_RAW_OUTPUT_PATH_SENTINEL,
+} from '@process/services/creative-studio/adapters/e2eFakeAdapter';
 import { createStudioJobManager, type StudioJobManager } from '@process/services/creative-studio/jobManager';
 import { createStudioMediaStore } from '@process/services/creative-studio/mediaStore';
 import { createStudioProviderResolver } from '@process/services/creative-studio/providerResolver';
@@ -338,9 +345,24 @@ describe('Creative Studio generation lifecycle integration', () => {
       adapterId: imageRoutes[1].adapterId,
       model: imageRoutes[1].model,
     });
-    const persisted = await harness.store.getProject(configured.id);
-    expect(persisted?.jobs.job_acceptance_1.provider.model).toBe('weprompt-e2e-image');
-    expect(persisted?.jobs.job_acceptance_3.provider.model).toBe('weprompt-e2e-image-next');
+    harness.clock.releaseAll();
+    const persisted = await waitFor(async () => {
+      const current = await harness.store.getProject(configured.id);
+      return current &&
+        Object.values(current.jobs).every((job) =>
+          ['succeeded', 'failed', 'cancelled', 'needs_attention'].includes(job.status)
+        )
+        ? current
+        : null;
+    });
+    expect(persisted.jobs.job_acceptance_1.status).toBe('succeeded');
+    expect(persisted.jobs.job_acceptance_1.provider.model).toBe('weprompt-e2e-image');
+    expect(persisted.jobs.job_acceptance_3.provider.model).toBe('weprompt-e2e-image-next');
+    expect(persisted.routing.image).toEqual({
+      providerId: imageRoutes[1].providerId,
+      adapterId: imageRoutes[1].adapterId,
+      model: imageRoutes[1].model,
+    });
   });
 
   it('moves a remote video through queued and running states before selecting a managed output', async () => {
@@ -363,7 +385,7 @@ describe('Creative Studio generation lifecycle integration', () => {
       const job = (await harness.store.getProject(harness.project.id))?.jobs.job_lifecycle;
       return job?.status === 'queued_remote' ? job : null;
     });
-    expect(queued.providerJobId).toBe('e2e_job_1');
+    expect(queued.providerJobId).toBe(`${STUDIO_E2E_PROVIDER_JOB_SENTINEL}_1`);
 
     const firstPoll = await harness.clock.take(2_000);
     firstPoll.release();
@@ -405,11 +427,33 @@ describe('Creative Studio generation lifecycle integration', () => {
     expect(collectForbiddenDtoKeys(completed)).toEqual([]);
     const serialized = JSON.stringify(completed);
     expect(serialized).not.toContain(harness.rootDir);
-    expect(serialized).not.toContain(harness.fake.provider.api_key);
-    expect(serialized).not.toContain(harness.fake.provider.base_url);
+    const projectManifest = await readFile(path.join(harness.rootDir, completed.id, 'project.json'), 'utf8');
     const connectionManifest = await readFile(path.join(harness.rootDir, 'connections.json'), 'utf8');
-    expect(connectionManifest).not.toContain(harness.fake.provider.api_key);
-    expect(connectionManifest).not.toContain(harness.fake.provider.base_url);
+    const exportDirectory = path.join(harness.rootDir, 'safe-export');
+    await mkdir(exportDirectory);
+    const exported = await harness.mediaStore.exportAssetsToDirectory({
+      projectId: completed.id,
+      destinationDirectory: exportDirectory,
+      includeReferences: false,
+      timestamp: '20260731-120000',
+    });
+    const exportedMetadata = await readFile(path.join(exportDirectory, exported.folderName, 'storyboard.json'), 'utf8');
+    const mainProcessOnlySentinels = [
+      STUDIO_E2E_CREDENTIAL_SENTINEL,
+      STUDIO_E2E_PROVIDER_URL_SENTINEL,
+      STUDIO_E2E_RAW_OUTPUT_BODY_SENTINEL,
+      STUDIO_E2E_RAW_OUTPUT_PATH_SENTINEL,
+      harness.rootDir,
+    ];
+    for (const sentinel of mainProcessOnlySentinels) {
+      expect(serialized).not.toContain(sentinel);
+      expect(projectManifest).not.toContain(sentinel);
+      expect(connectionManifest).not.toContain(sentinel);
+      expect(exportedMetadata).not.toContain(sentinel);
+    }
+    expect(projectManifest).toContain(`${STUDIO_E2E_PROVIDER_JOB_SENTINEL}_1`);
+    expect(connectionManifest).not.toContain(STUDIO_E2E_PROVIDER_JOB_SENTINEL);
+    expect(exportedMetadata).not.toContain(STUDIO_E2E_PROVIDER_JOB_SENTINEL);
   });
 
   it('rejects a stale route catalog without persisting or submitting a job', async () => {

@@ -62,30 +62,28 @@ const RoleSelect: React.FC<RoleSelectProps> = ({
   const { t } = useTranslation();
   return (
     <div className='min-w-200px flex-1'>
-      <label className='mb-6px block text-12px font-500 text-t-secondary'>
-        <span>{label}</span>
-        <Select
-          aria-label={label}
-          className='mt-4px w-full'
-          value={value}
-          loading={loading}
-          disabled={disabled || status === 'setup_required'}
-          allowClear={value !== undefined}
-          placeholder={t(
-            status === 'setup_required'
-              ? 'conversation.creativeStudio.models.setupRequired'
-              : 'conversation.creativeStudio.models.selectionRequired'
-          )}
-          onChange={onChange}
-          onClear={onClear}
-        >
-          {options.map((option) => (
-            <Select.Option key={option.value} value={option.value} disabled={option.disabled}>
-              {option.label}
-            </Select.Option>
-          ))}
-        </Select>
-      </label>
+      <span className='mb-6px block text-12px font-500 text-t-secondary'>{label}</span>
+      <Select
+        aria-label={label}
+        className='mt-4px w-full'
+        value={value}
+        loading={loading}
+        disabled={disabled || status === 'setup_required'}
+        allowClear={value !== undefined}
+        placeholder={t(
+          status === 'setup_required'
+            ? 'conversation.creativeStudio.models.setupRequired'
+            : 'conversation.creativeStudio.models.selectionRequired'
+        )}
+        onChange={onChange}
+        onClear={onClear}
+      >
+        {options.map((option) => (
+          <Select.Option key={option.value} value={option.value} disabled={option.disabled}>
+            {option.label}
+          </Select.Option>
+        ))}
+      </Select>
       {status === 'setup_required' && (
         <Button type='text' size='mini' onClick={onOpenSettings}>
           {t('conversation.creativeStudio.models.openSettings')}

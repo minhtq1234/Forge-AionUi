@@ -22,12 +22,21 @@ import type {
 } from './types';
 
 export const STUDIO_E2E_FAKE_PROVIDER_ID = 'weprompt_studio_e2e';
+export const STUDIO_E2E_CREDENTIAL_SENTINEL = 'STUDIO_SECRET_CREDENTIAL_SENTINEL';
+export const STUDIO_E2E_PROVIDER_URL_SENTINEL = 'https://studio-provider-url-sentinel.invalid/v1';
+export const STUDIO_E2E_PROVIDER_JOB_SENTINEL = 'STUDIO_PROVIDER_JOB_SENTINEL';
+export const STUDIO_E2E_RAW_OUTPUT_BODY_SENTINEL = 'STUDIO_RAW_OUTPUT_BODY_SENTINEL';
+export const STUDIO_E2E_RAW_OUTPUT_PATH_SENTINEL = '.studio-raw-output-path-sentinel';
 const STUDIO_E2E_IMAGE_MODEL = 'weprompt-e2e-image';
 const STUDIO_E2E_NEXT_IMAGE_MODEL = 'weprompt-e2e-image-next';
 const STUDIO_E2E_VIDEO_MODEL = 'weprompt-e2e-video';
-const FAKE_FIXTURE_DIRECTORY = '.e2e-studio';
-const IMAGE_BYTES = Buffer.from('89504e470d0a1a0a', 'hex');
-const VIDEO_BYTES = Buffer.from('000000186674797069736f6d0000000069736f6d69736f32', 'hex');
+const FAKE_FIXTURE_DIRECTORY = STUDIO_E2E_RAW_OUTPUT_PATH_SENTINEL;
+const RAW_OUTPUT_SENTINEL_BYTES = Buffer.from(STUDIO_E2E_RAW_OUTPUT_BODY_SENTINEL);
+const IMAGE_BYTES = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), RAW_OUTPUT_SENTINEL_BYTES]);
+const VIDEO_BYTES = Buffer.concat([
+  Buffer.from('000000186674797069736f6d0000000069736f6d69736f32', 'hex'),
+  RAW_OUTPUT_SENTINEL_BYTES,
+]);
 
 export type StudioE2EFakeTask = {
   mediaKind: StudioMediaKind;
@@ -172,7 +181,7 @@ export const createStudioE2EFakeBundle = ({
       signal.throwIfAborted();
       if (!validateRequest(request, provider, mediaKind).ok) throw new StudioE2EFakeAdapterError('unsupported');
       remoteState.taskCounter += 1;
-      const providerJobId = `e2e_job_${remoteState.taskCounter}`;
+      const providerJobId = `${STUDIO_E2E_PROVIDER_JOB_SENTINEL}_${remoteState.taskCounter}`;
       remoteState.tasks.set(providerJobId, {
         mediaKind,
         model: provider.use_model,
@@ -216,8 +225,8 @@ export const createStudioE2EFakeBundle = ({
     id: STUDIO_E2E_FAKE_PROVIDER_ID,
     platform: 'gemini',
     name: 'WePrompt Studio E2E',
-    base_url: 'https://weprompt.invalid/e2e-studio',
-    api_key: 'e2e-memory-only',
+    base_url: STUDIO_E2E_PROVIDER_URL_SENTINEL,
+    api_key: STUDIO_E2E_CREDENTIAL_SENTINEL,
     models: [STUDIO_E2E_IMAGE_MODEL, STUDIO_E2E_NEXT_IMAGE_MODEL, STUDIO_E2E_VIDEO_MODEL],
     enabled: true,
     model_enabled: {

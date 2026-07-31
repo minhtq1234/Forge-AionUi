@@ -20,6 +20,8 @@ import type { CreativeStudioProtocolInstallation } from '@process/services/creat
 import {
   createStudioE2EFakeBundle,
   STUDIO_E2E_FAKE_PROVIDER_ID,
+  STUDIO_E2E_RAW_OUTPUT_BODY_SENTINEL,
+  STUDIO_E2E_RAW_OUTPUT_PATH_SENTINEL,
 } from '@process/services/creative-studio/adapters/e2eFakeAdapter';
 import type { GenerationProviderAdapterRegistry } from '@process/services/creative-studio/adapters';
 import type { StudioJobManager } from '@process/services/creative-studio/jobManager';
@@ -476,10 +478,12 @@ describe('Creative Studio E2E fake adapter', () => {
     if (!completed || completed.status !== 'succeeded') throw new Error('expected successful fake task');
     const output = completed.outputs[0];
     if (!output || output.source.kind !== 'file') throw new Error('expected file-backed fake output');
-    await expect(stat(output.source.path)).resolves.toMatchObject({ size: 24 });
-    await expect(readFile(output.source.path)).resolves.toEqual(
-      Buffer.from('000000186674797069736f6d0000000069736f6d69736f32', 'hex')
-    );
+    await expect(stat(output.source.path)).resolves.toMatchObject({
+      size: 24 + Buffer.byteLength(STUDIO_E2E_RAW_OUTPUT_BODY_SENTINEL),
+    });
+    const outputBytes = await readFile(output.source.path);
+    expect(outputBytes.subarray(0, 24)).toEqual(Buffer.from('000000186674797069736f6d0000000069736f6d69736f32', 'hex'));
+    expect(outputBytes.toString()).toContain(STUDIO_E2E_RAW_OUTPUT_BODY_SENTINEL);
   });
 
   it('confirms queued cancellation without creating an output fixture', async () => {
@@ -516,6 +520,8 @@ describe('Creative Studio E2E fake adapter', () => {
         error: { code: 'unknown' },
       }
     );
-    await expect(stat(path.join(rootDir, '.e2e-studio'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(stat(path.join(rootDir, STUDIO_E2E_RAW_OUTPUT_PATH_SENTINEL))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 });
