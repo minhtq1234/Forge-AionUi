@@ -20,6 +20,7 @@ import { useProvidersQuery } from '@/renderer/hooks/agent/useModelProviderList';
 import { useSettingsViewMode } from '../../settingsViewContext';
 import SettingsPageHeader from '@/renderer/pages/settings/components/SettingsPageHeader';
 import { consumePendingDeepLink } from '@/renderer/hooks/system/useDeepLink';
+import { StudioMediaModelsSection } from './StudioMediaModelsSection';
 import '../../model-provider.css';
 
 /**
@@ -100,8 +101,10 @@ const ModelModalContent: React.FC = () => {
   const isPageMode = viewMode === 'page';
   const [collapseKey, setCollapseKey] = useState<Record<string, boolean>>({});
   const [healthCheckLoading, setHealthCheckLoading] = useState<Record<string, boolean>>({});
+  const [providerRefreshToken, setProviderRefreshToken] = useState(0);
   const { data, mutate } = useProvidersQuery();
   const [message, messageContext] = Message.useMessage();
+  const markProviderCatalogChanged = (): void => setProviderRefreshToken((value) => value + 1);
 
   /**
    * Create when the provider id is new, update otherwise.
@@ -129,6 +132,7 @@ const ModelModalContent: React.FC = () => {
     persistPlatform(platform)
       .then(() => {
         void mutate();
+        markProviderCatalogChanged();
         success();
       })
       .catch((error) => {
@@ -151,6 +155,7 @@ const ModelModalContent: React.FC = () => {
       .invoke({ id })
       .then(() => {
         void mutate();
+        markProviderCatalogChanged();
       })
       .catch((error) => {
         void mutate();
@@ -220,6 +225,7 @@ const ModelModalContent: React.FC = () => {
 
         await ipcBridge.mode.updateProvider.invoke({ id: platform.id, model_health });
         await mutate();
+        markProviderCatalogChanged();
         if (success) {
           Message.success({
             content: `${platform.name} - ${modelName}: ${t('common.success')} (${latency}ms)`,
@@ -260,6 +266,7 @@ const ModelModalContent: React.FC = () => {
 
         await ipcBridge.mode.updateProvider.invoke({ id: platform.id, model_health });
         await mutate();
+        markProviderCatalogChanged();
       } catch (saveError) {
         console.error('Failed to save health check result:', saveError);
       }
@@ -281,6 +288,7 @@ const ModelModalContent: React.FC = () => {
     )
       .then(() => {
         void mutate();
+        markProviderCatalogChanged();
         Message.success({
           content: t('settings.healthStatusCleared'),
           duration: 2000,
@@ -373,7 +381,7 @@ const ModelModalContent: React.FC = () => {
           data-testid='model-header'
           title={t('settings.model')}
           description={t('settings.modelDescription', {
-            defaultValue: 'Configure LLM providers and API keys for use across all assistants.',
+            defaultValue: 'Configure providers and API keys for text, image, and video models.',
           })}
           actions={headerActions}
         />
@@ -625,6 +633,10 @@ const ModelModalContent: React.FC = () => {
             })}
           </div>
         )}
+        <StudioMediaModelsSection
+          providerRefreshToken={providerRefreshToken}
+          onAddProvider={() => addPlatformModalCtrl.open()}
+        />
       </AionScrollArea>
     </div>
   );

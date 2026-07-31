@@ -1,0 +1,469 @@
+/**
+ * @license
+ * Copyright 2025 AionUi (aionui.com)
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import React from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type {
+  StudioCommandResult,
+  StudioConnectionBinding,
+  StudioConnectionCandidate,
+} from '@/common/types/project/creativeStudioTypes';
+import { StudioMediaModelsSection } from '@renderer/components/settings/SettingsModal/contents/ModelModalContent/StudioMediaModelsSection';
+
+const bridge = vi.hoisted(() => ({
+  listConnectionCandidates: { invoke: vi.fn() },
+  listConnections: { invoke: vi.fn() },
+  validateConnection: { invoke: vi.fn() },
+  saveConnection: { invoke: vi.fn() },
+  removeConnection: { invoke: vi.fn() },
+}));
+
+vi.mock('@/common', () => ({ ipcBridge: { creativeStudio: bridge } }));
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+vi.mock('@icon-park/react', () => ({
+  Plus: () => <span aria-hidden='true'>+</span>,
+  Refresh: () => <span aria-hidden='true'>↻</span>,
+}));
+vi.mock('@arco-design/web-react', async () => {
+  const ReactModule = await import('react');
+
+  const Button = ({
+    children,
+    onClick,
+    disabled,
+    loading,
+    long: _long,
+    icon: _icon,
+    status: _status,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    loading?: boolean;
+    long?: boolean;
+    icon?: React.ReactNode;
+    status?: string;
+  }) => (
+    <button disabled={disabled || loading} onClick={onClick} {...props}>
+      {children}
+    </button>
+  );
+  const Modal = ({
+    visible,
+    title,
+    children,
+    footer,
+  }: {
+    visible?: boolean;
+    title?: React.ReactNode;
+    children?: React.ReactNode;
+    footer?: React.ReactNode;
+  }) =>
+    visible ? (
+      <div role='dialog' aria-label={typeof title === 'string' ? title : undefined}>
+        <h2>{title}</h2>
+        {children}
+        {footer}
+      </div>
+    ) : null;
+  const Option = ({ children, value }: { children?: React.ReactNode; value?: string }) => (
+    <option value={value}>{children}</option>
+  );
+  const Select = ({
+    children,
+    value,
+    onChange,
+    disabled,
+    ...props
+  }: {
+    children?: React.ReactNode;
+    value?: string;
+    onChange?: (value: string) => void;
+    disabled?: boolean;
+    ['aria-label']?: string;
+  }) => (
+    <select
+      aria-label={props['aria-label']}
+      value={value ?? ''}
+      disabled={disabled}
+      onChange={(event) => onChange?.(event.target.value)}
+    >
+      <option value='' />
+      {children}
+    </select>
+  );
+  Select.Option = Option;
+
+  return {
+    Alert: ({ content, type }: { content?: React.ReactNode; type?: string }) => (
+      <div role={type === 'error' ? 'alert' : 'status'}>{content}</div>
+    ),
+    AutoComplete: ({
+      value,
+      onChange,
+      disabled,
+      inputProps,
+      data,
+    }: {
+      value?: string;
+      onChange?: (value: string) => void;
+      disabled?: boolean;
+      inputProps?: React.InputHTMLAttributes<HTMLInputElement>;
+      data?: string[];
+    }) => (
+      <>
+        <input
+          {...inputProps}
+          list={data?.length ? 'media-model-options' : undefined}
+          value={value ?? ''}
+          disabled={disabled}
+          onChange={(event) => onChange?.(event.target.value)}
+        />
+        {data?.length ? (
+          <datalist id='media-model-options'>
+            {data.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+        ) : null}
+      </>
+    ),
+    Button,
+    Modal,
+    Popconfirm: ({
+      children,
+      onOk,
+    }: {
+      children: React.ReactElement<{ onClick?: React.MouseEventHandler }>;
+      onOk?: () => void;
+    }) => ReactModule.cloneElement(children, { onClick: () => onOk?.() }),
+    Select,
+    Spin: () => <div role='status'>loading</div>,
+    Tag: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
+  };
+});
+
+const ok = <T,>(data: T): StudioCommandResult<T> => ({ ok: true, data });
+const failure = <T,>(messageKey = 'settings.mediaModels.loadFailed'): StudioCommandResult<T> => ({
+  ok: false,
+  error: { code: 'provider_error', messageKey },
+});
+
+const candidate = (overrides: Partial<StudioConnectionCandidate> = {}): StudioConnectionCandidate => ({
+  providerId: 'provider_safe',
+  providerName: 'Safe Provider',
+  models: [
+    { model: 'open-sora', health: 'available' },
+    { model: 'open-sora-manual', health: 'unknown' },
+  ],
+  ...overrides,
+});
+
+const binding = (overrides: Partial<StudioConnectionBinding> = {}): StudioConnectionBinding => ({
+  schemaVersion: 1,
+  id: 'binding_safe',
+  providerId: 'provider_safe',
+  adapterId: 'weprompt-media-gateway-v1',
+  model: 'open-sora',
+  capabilities: {
+    mediaKinds: ['video'],
+    audioModes: ['none'],
+    aspectRatios: ['16:9'],
+    resolutions: ['720p'],
+    minDurationSeconds: 2,
+    maxDurationSeconds: 12,
+    supportsFirstFrame: true,
+    cancellation: true,
+  },
+  validatedAt: '2026-07-30T00:00:00.000Z',
+  ...overrides,
+});
+
+const openAddEditor = async (): Promise<HTMLElement> => {
+  fireEvent.click(await screen.findByRole('button', { name: 'settings.mediaModels.add' }));
+  return screen.getByRole('dialog', { name: 'settings.mediaModels.addTitle' });
+};
+
+const fillVideoTuple = async (model = 'open-sora-manual'): Promise<HTMLElement> => {
+  const dialog = await openAddEditor();
+  fireEvent.change(within(dialog).getByRole('combobox', { name: 'settings.mediaModels.outputType' }), {
+    target: { value: 'video' },
+  });
+  fireEvent.change(within(dialog).getByRole('combobox', { name: 'settings.mediaModels.provider' }), {
+    target: { value: 'provider_safe' },
+  });
+  fireEvent.change(within(dialog).getByRole('combobox', { name: 'settings.mediaModels.integrationLabel' }), {
+    target: { value: 'settings.mediaModels.integration.selfHostedVideoGateway' },
+  });
+  fireEvent.change(within(dialog).getByRole('combobox', { name: 'settings.mediaModels.model' }), {
+    target: { value: model },
+  });
+  return dialog;
+};
+
+describe('StudioMediaModelsSection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    bridge.listConnectionCandidates.invoke.mockResolvedValue(ok([candidate()]));
+    bridge.listConnections.invoke.mockResolvedValue(ok([binding()]));
+    bridge.validateConnection.invoke.mockResolvedValue(ok(binding({ id: 'validation_only' })));
+    bridge.saveConnection.invoke.mockResolvedValue(ok(binding()));
+    bridge.removeConnection.invoke.mockResolvedValue(ok(true));
+  });
+
+  it('renders friendly binding rows without secrets or adapter IDs', async () => {
+    bridge.listConnectionCandidates.invoke.mockResolvedValue(
+      ok([
+        {
+          ...candidate(),
+          apiKey: 'candidate-secret',
+          baseUrl: 'https://secret.invalid',
+        } as StudioConnectionCandidate,
+      ])
+    );
+    bridge.listConnections.invoke.mockResolvedValue(
+      ok([
+        {
+          ...binding(),
+          authorization: 'Bearer secret',
+          path: '/private/provider.json',
+        } as StudioConnectionBinding,
+      ])
+    );
+
+    render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
+
+    expect(await screen.findByText('open-sora')).toBeInTheDocument();
+    expect(screen.getByText('Safe Provider')).toBeInTheDocument();
+    expect(screen.getByText('settings.mediaModels.integration.selfHostedVideoGateway')).toBeInTheDocument();
+    expect(screen.getByText('settings.mediaModels.silentOutputSupported')).toBeInTheDocument();
+    expect(screen.getByText('settings.mediaModels.video')).toBeInTheDocument();
+    expect(document.querySelector('time')).toHaveAttribute('datetime', '2026-07-30T00:00:00.000Z');
+    expect(
+      screen.queryByText(/weprompt-media-gateway-v1|candidate-secret|Bearer secret|secret\.invalid|private\/provider/)
+    ).toBeNull();
+    expect(document.body.innerHTML).not.toMatch(/weprompt-(?:image|media-gateway)-v1|byteplus-seedance-v1/);
+  });
+
+  it('shows loading, empty inventory, and the provider action', async () => {
+    let resolveCandidates: (value: StudioCommandResult<StudioConnectionCandidate[]>) => void = () => undefined;
+    bridge.listConnectionCandidates.invoke.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCandidates = resolve;
+      })
+    );
+    bridge.listConnections.invoke.mockResolvedValue(ok([]));
+    const onAddProvider = vi.fn();
+    render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={onAddProvider} />);
+
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    resolveCandidates(ok([]));
+    expect(await screen.findByText('settings.mediaModels.empty')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'settings.mediaModels.addProvider' }));
+    expect(onAddProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces list failure and refreshes canonical inventory', async () => {
+    bridge.listConnectionCandidates.invoke.mockResolvedValueOnce(failure()).mockResolvedValueOnce(ok([candidate()]));
+    bridge.listConnections.invoke.mockResolvedValueOnce(ok([])).mockResolvedValueOnce(ok([binding()]));
+    render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('settings.mediaModels.loadFailed');
+    fireEvent.click(screen.getByRole('button', { name: 'settings.mediaModels.refresh' }));
+    expect(await screen.findByText('open-sora')).toBeInTheDocument();
+    expect(bridge.listConnections.invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps bindings for deleted providers visible and refetches after provider changes', async () => {
+    bridge.listConnectionCandidates.invoke.mockResolvedValueOnce(ok([])).mockResolvedValue(ok([candidate()]));
+    const view = render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
+
+    expect(await screen.findByText('settings.mediaModels.unavailable')).toBeInTheDocument();
+    expect(screen.getByText('provider_safe')).toBeInTheDocument();
+    view.rerender(<StudioMediaModelsSection providerRefreshToken={1} onAddProvider={vi.fn()} />);
+    expect(await screen.findByText('Safe Provider')).toBeInTheDocument();
+    expect(bridge.listConnectionCandidates.invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it('filters integrations by output type and offers provider models plus manual entry', async () => {
+    render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
+    const dialog = await openAddEditor();
+    const integration = within(dialog).getByRole('combobox', {
+      name: 'settings.mediaModels.integrationLabel',
+    });
+
+    expect(within(integration).getByText('settings.mediaModels.integration.imageApi')).toBeInTheDocument();
+    expect(within(integration).queryByText('settings.mediaModels.integration.bytePlusSeedance')).toBeNull();
+    expect(dialog.innerHTML).not.toMatch(/weprompt-(?:image|media-gateway)-v1|byteplus-seedance-v1/);
+
+    fireEvent.change(within(dialog).getByRole('combobox', { name: 'settings.mediaModels.outputType' }), {
+      target: { value: 'video' },
+    });
+    expect(within(integration).getByText('settings.mediaModels.integration.bytePlusSeedance')).toBeInTheDocument();
+    expect(
+      within(integration).getByText('settings.mediaModels.integration.selfHostedVideoGateway')
+    ).toBeInTheDocument();
+    expect(within(integration).queryByText('settings.mediaModels.integration.imageApi')).toBeNull();
+
+    fireEvent.change(within(dialog).getByRole('combobox', { name: 'settings.mediaModels.provider' }), {
+      target: { value: 'provider_safe' },
+    });
+    const model = within(dialog).getByRole('combobox', { name: 'settings.mediaModels.model' });
+    expect(model).toHaveAttribute('list');
+    fireEvent.change(model, { target: { value: 'manual-model' } });
+    expect(model).toHaveValue('manual-model');
+  });
+
+  it('saves only the exact tuple after validation and clears validation when a field changes', async () => {
+    const validated = binding({
+      id: 'validation_only',
+      adapterId: 'weprompt-media-gateway-v1',
+      model: 'open-sora-manual',
+    });
+    const saved = binding({
+      id: 'binding_manual',
+      adapterId: 'weprompt-media-gateway-v1',
+      model: 'open-sora-manual',
+    });
+    bridge.listConnections.invoke.mockResolvedValue(ok([]));
+    bridge.validateConnection.invoke.mockResolvedValue(ok(validated));
+    bridge.saveConnection.invoke.mockResolvedValue(ok(saved));
+    render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
+    const dialog = await fillVideoTuple();
+    const save = within(dialog).getByRole('button', { name: 'settings.mediaModels.save' });
+    expect(save).toBeDisabled();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'settings.mediaModels.validate' }));
+    const safeRequest = {
+      providerId: 'provider_safe',
+      adapterId: 'weprompt-media-gateway-v1',
+      model: 'open-sora-manual',
+    };
+    await waitFor(() => expect(bridge.validateConnection.invoke).toHaveBeenCalledExactlyOnceWith(safeRequest));
+    expect(await within(dialog).findByText('settings.mediaModels.validationSuccess')).toBeInTheDocument();
+    expect(save).toBeEnabled();
+
+    fireEvent.change(within(dialog).getByRole('combobox', { name: 'settings.mediaModels.model' }), {
+      target: { value: 'changed' },
+    });
+    expect(save).toBeDisabled();
+    fireEvent.change(within(dialog).getByRole('combobox', { name: 'settings.mediaModels.model' }), {
+      target: { value: 'open-sora-manual' },
+    });
+    expect(save).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'settings.mediaModels.validate' }));
+    await waitFor(() => expect(bridge.validateConnection.invoke).toHaveBeenCalledTimes(2));
+    fireEvent.click(save);
+    await waitFor(() => expect(bridge.saveConnection.invoke).toHaveBeenCalledExactlyOnceWith(safeRequest));
+  });
+
+  it('rejects mismatched validation DTOs and gateways without silent output', async () => {
+    bridge.listConnections.invoke.mockResolvedValue(ok([]));
+    bridge.validateConnection.invoke
+      .mockResolvedValueOnce(ok(binding({ providerId: 'provider_other', model: 'open-sora-manual' })))
+      .mockResolvedValueOnce(
+        ok(
+          binding({
+            model: 'open-sora-manual',
+            capabilities: { mediaKinds: ['video'], audioModes: ['speech'] },
+          })
+        )
+      );
+    render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
+    const dialog = await fillVideoTuple();
+    const validate = within(dialog).getByRole('button', { name: 'settings.mediaModels.validate' });
+    const save = within(dialog).getByRole('button', { name: 'settings.mediaModels.save' });
+
+    fireEvent.click(validate);
+    expect(await within(dialog).findByText('settings.mediaModels.validationFailed')).toBeInTheDocument();
+    expect(save).toBeDisabled();
+    fireEvent.click(validate);
+    await waitFor(() => expect(bridge.validateConnection.invoke).toHaveBeenCalledTimes(2));
+    expect(save).toBeDisabled();
+  });
+
+  it('saves an edited replacement before removing the prior binding', async () => {
+    const calls: string[] = [];
+    bridge.validateConnection.invoke.mockImplementation(async () => {
+      calls.push('validate');
+      return ok(binding({ id: 'validation_only', model: 'replacement' }));
+    });
+    bridge.saveConnection.invoke.mockImplementation(async () => {
+      calls.push('save');
+      return ok(binding({ id: 'binding_replacement', model: 'replacement' }));
+    });
+    bridge.removeConnection.invoke.mockImplementation(async () => {
+      calls.push('remove');
+      return ok(true);
+    });
+    render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
+    const row = await screen.findByRole('listitem', { name: 'open-sora' });
+    fireEvent.click(within(row).getByRole('button', { name: 'settings.mediaModels.edit' }));
+    const dialog = screen.getByRole('dialog', { name: 'settings.mediaModels.editTitle' });
+    expect(within(dialog).getByRole('combobox', { name: 'settings.mediaModels.model' })).toHaveValue('open-sora');
+    fireEvent.change(within(dialog).getByRole('combobox', { name: 'settings.mediaModels.model' }), {
+      target: { value: 'replacement' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'settings.mediaModels.validate' }));
+    const save = within(dialog).getByRole('button', { name: 'settings.mediaModels.save' });
+    await waitFor(() => expect(save).toBeEnabled());
+    fireEvent.click(save);
+    await waitFor(() => expect(bridge.removeConnection.invoke).toHaveBeenCalledWith({ connectionId: 'binding_safe' }));
+    expect(calls).toEqual(['validate', 'save', 'remove']);
+  });
+
+  it('revalidates and saves the same safe tuple', async () => {
+    render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
+    const row = await screen.findByRole('listitem', { name: 'open-sora' });
+    fireEvent.click(within(row).getByRole('button', { name: 'settings.mediaModels.revalidate' }));
+    const request = {
+      providerId: 'provider_safe',
+      adapterId: 'weprompt-media-gateway-v1',
+      model: 'open-sora',
+    };
+
+    await waitFor(() => expect(bridge.validateConnection.invoke).toHaveBeenCalledExactlyOnceWith(request));
+    await waitFor(() => expect(bridge.saveConnection.invoke).toHaveBeenCalledExactlyOnceWith(request));
+  });
+
+  it('removes a binding with only its safe connection ID', async () => {
+    render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
+    const row = await screen.findByRole('listitem', { name: 'open-sora' });
+    fireEvent.click(within(row).getByRole('button', { name: 'settings.mediaModels.remove' }));
+
+    await waitFor(() =>
+      expect(bridge.removeConnection.invoke).toHaveBeenCalledExactlyOnceWith({
+        connectionId: 'binding_safe',
+      })
+    );
+  });
+
+  it('refreshes and shows both records when old-binding removal fails after replacement save', async () => {
+    const replacement = binding({ id: 'binding_replacement', model: 'replacement' });
+    bridge.listConnections.invoke
+      .mockResolvedValueOnce(ok([binding()]))
+      .mockResolvedValue(ok([binding(), replacement]));
+    bridge.validateConnection.invoke.mockResolvedValue(ok(replacement));
+    bridge.saveConnection.invoke.mockResolvedValue(ok(replacement));
+    bridge.removeConnection.invoke.mockResolvedValue(failure('settings.mediaModels.validationFailed'));
+    render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
+    const row = await screen.findByRole('listitem', { name: 'open-sora' });
+    fireEvent.click(within(row).getByRole('button', { name: 'settings.mediaModels.edit' }));
+    const dialog = screen.getByRole('dialog', { name: 'settings.mediaModels.editTitle' });
+    fireEvent.change(within(dialog).getByRole('combobox', { name: 'settings.mediaModels.model' }), {
+      target: { value: 'replacement' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'settings.mediaModels.validate' }));
+    await waitFor(() => expect(bridge.validateConnection.invoke).toHaveBeenCalledTimes(1));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'settings.mediaModels.save' }));
+
+    expect(await screen.findByRole('listitem', { name: 'replacement' })).toBeInTheDocument();
+    expect(screen.getByRole('listitem', { name: 'open-sora' })).toBeInTheDocument();
+    expect(bridge.listConnections.invoke).toHaveBeenCalledTimes(2);
+  });
+});
