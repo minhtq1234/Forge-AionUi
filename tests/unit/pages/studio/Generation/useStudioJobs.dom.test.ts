@@ -13,7 +13,7 @@ import type {
   StudioRendererJob,
   StudioRendererProject,
   StudioScene,
-  StudioSceneRouteSnapshot,
+  StudioSceneGenerationChoice,
 } from '@/common/types/project/creativeStudioTypes';
 import { useStudioJobs } from '@renderer/pages/studio/hooks/useStudioJobs';
 
@@ -56,8 +56,8 @@ const job = (id: string, overrides: Partial<StudioRendererJob> = {}): StudioRend
   sceneId: 'scene-1',
   status: 'queued_local',
   provider: {
+    choiceId: 'choice_video',
     providerId: 'provider-1',
-    adapterId: 'byteplus-seedance-v1',
     model: 'seedance-1-0-pro',
   },
   outputAssetIds: [],
@@ -102,11 +102,9 @@ const project = (
   ...overrides,
 });
 
-const route: StudioSceneRouteSnapshot = {
+const route: StudioSceneGenerationChoice = {
   sceneId: 'scene-1',
-  providerId: 'provider-1',
-  adapterId: 'byteplus-seedance-v1',
-  model: 'seedance-1-0-pro',
+  choiceId: 'choice_video',
   kind: 'video',
 };
 

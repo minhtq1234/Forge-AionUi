@@ -6,11 +6,12 @@
 
 import { ipcBridge } from '@/common';
 import type {
-  StudioConnectionBinding,
   StudioConnectionCandidate,
   StudioConnectionCapabilities,
+  StudioConnectionIntegration,
+  StudioConnectionRecord,
+  StudioConnectionValidationResult,
   StudioMediaKind,
-  StudioProviderAdapterId,
   StudioSaveConnectionRequest,
 } from '@/common/types/project/creativeStudioTypes';
 import { Alert, AutoComplete, Button, Modal, Popconfirm, Select, Spin, Tag } from '@arco-design/web-react';
@@ -18,32 +19,16 @@ import { Plus, Refresh } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-const MEDIA_INTEGRATIONS = [
-  { kind: 'image', adapterId: 'weprompt-image-v1', labelKey: 'settings.mediaModels.integration.imageApi' },
-  {
-    kind: 'video',
-    adapterId: 'byteplus-seedance-v1',
-    labelKey: 'settings.mediaModels.integration.bytePlusSeedance',
-  },
-  {
-    kind: 'video',
-    adapterId: 'weprompt-media-gateway-v1',
-    labelKey: 'settings.mediaModels.integration.selfHostedVideoGateway',
-  },
-] as const;
-
-type MediaIntegration = (typeof MEDIA_INTEGRATIONS)[number];
 type SafeCandidate = Pick<StudioConnectionCandidate, 'providerId' | 'providerName' | 'models'>;
-type SafeBinding = Pick<
-  StudioConnectionBinding,
-  'schemaVersion' | 'id' | 'providerId' | 'adapterId' | 'model' | 'capabilities' | 'validatedAt'
->;
+type SafeIntegration = StudioConnectionIntegration;
+type SafeBinding = StudioConnectionRecord;
+type SafeValidation = StudioConnectionValidationResult;
 type EditorState = {
   visible: boolean;
   original: SafeBinding | null;
   kind: StudioMediaKind;
   providerId: string;
-  adapterId: StudioProviderAdapterId;
+  integrationId: string;
   model: string;
 };
 
@@ -69,36 +54,48 @@ const sanitizeCandidate = (candidate: StudioConnectionCandidate): SafeCandidate 
   models: candidate.models.map(({ model, health }) => ({ model, health })),
 });
 
-const sanitizeBinding = (binding: StudioConnectionBinding): SafeBinding => ({
-  schemaVersion: 1,
-  id: binding.id,
+const sanitizeIntegration = (integration: StudioConnectionIntegration): SafeIntegration => ({
+  integrationId: integration.integrationId,
+  kind: integration.kind,
+  labelKey: integration.labelKey,
+});
+
+const sanitizeBinding = (binding: StudioConnectionRecord): SafeBinding => ({
+  bindingId: binding.bindingId,
   providerId: binding.providerId,
-  adapterId: binding.adapterId,
+  integrationId: binding.integrationId,
+  labelKey: binding.labelKey,
   model: binding.model,
   capabilities: sanitizeCapabilities(binding.capabilities),
   validatedAt: binding.validatedAt,
 });
 
-const integrationFor = (adapterId: StudioProviderAdapterId): MediaIntegration | undefined =>
-  MEDIA_INTEGRATIONS.find((integration) => integration.adapterId === adapterId);
+const sanitizeValidation = (validation: StudioConnectionValidationResult): SafeValidation => ({
+  providerId: validation.providerId,
+  integrationId: validation.integrationId,
+  labelKey: validation.labelKey,
+  model: validation.model,
+  capabilities: sanitizeCapabilities(validation.capabilities),
+  validatedAt: validation.validatedAt,
+});
 
-const integrationForLabel = (labelKey: string): MediaIntegration | undefined =>
-  MEDIA_INTEGRATIONS.find((integration) => integration.labelKey === labelKey);
+const supportsSilentGatewayOutput = (binding: Pick<SafeBinding, 'labelKey' | 'capabilities'>): boolean =>
+  binding.labelKey !== 'selfHostedVideoGateway' || binding.capabilities.audioModes?.includes('none') === true;
 
-const supportsSilentGatewayOutput = (binding: SafeBinding): boolean =>
-  binding.adapterId !== 'weprompt-media-gateway-v1' || binding.capabilities.audioModes?.includes('none') === true;
-
-const tupleMatches = (binding: SafeBinding, request: StudioSaveConnectionRequest): boolean =>
+const tupleMatches = (
+  binding: Pick<SafeBinding, 'providerId' | 'integrationId' | 'model' | 'labelKey' | 'capabilities'>,
+  request: StudioSaveConnectionRequest
+): boolean =>
   binding.providerId === request.providerId &&
-  binding.adapterId === request.adapterId &&
+  binding.integrationId === request.integrationId &&
   binding.model === request.model &&
   supportsSilentGatewayOutput(binding);
 
 const sameTuple = (left: SafeBinding, right: StudioSaveConnectionRequest): boolean =>
-  left.providerId === right.providerId && left.adapterId === right.adapterId && left.model === right.model;
+  left.providerId === right.providerId && left.integrationId === right.integrationId && left.model === right.model;
 
 const replaceCanonicalBinding = (current: SafeBinding[], saved: SafeBinding): SafeBinding[] => [
-  ...current.filter((item) => item.id !== saved.id && !sameTuple(item, saved)),
+  ...current.filter((item) => item.bindingId !== saved.bindingId && !sameTuple(item, saved)),
   saved,
 ];
 
@@ -107,7 +104,7 @@ const emptyEditor = (): EditorState => ({
   original: null,
   kind: 'image',
   providerId: '',
-  adapterId: 'weprompt-image-v1',
+  integrationId: '',
   model: '',
 });
 
@@ -117,9 +114,10 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
 }) => {
   const { t } = useTranslation();
   const [candidates, setCandidates] = useState<SafeCandidate[]>([]);
+  const [integrations, setIntegrations] = useState<SafeIntegration[]>([]);
   const [bindings, setBindings] = useState<SafeBinding[]>([]);
   const [editor, setEditor] = useState<EditorState>(emptyEditor);
-  const [validated, setValidated] = useState<SafeBinding | null>(null);
+  const [validated, setValidated] = useState<SafeValidation | null>(null);
   const [loading, setLoading] = useState(true);
   const [validating, setValidating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -144,7 +142,8 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
         return;
       }
       setCandidates(candidateResult.data.map(sanitizeCandidate));
-      setBindings(bindingResult.data.map(sanitizeBinding));
+      setIntegrations(bindingResult.data.integrations.map(sanitizeIntegration));
+      setBindings(bindingResult.data.connections.map(sanitizeBinding));
     } catch {
       if (sequence === requestSequence.current) setListFailed(true);
     } finally {
@@ -159,21 +158,21 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
     };
   }, [providerRefreshToken, refresh]);
 
-  const integrations = useMemo(
-    () => MEDIA_INTEGRATIONS.filter((integration) => integration.kind === editor.kind),
-    [editor.kind]
+  const availableIntegrations = useMemo(
+    () => integrations.filter((integration) => integration.kind === editor.kind),
+    [editor.kind, integrations]
   );
   const selectedCandidate = candidates.find((candidate) => candidate.providerId === editor.providerId) ?? null;
   const modelOptions = selectedCandidate?.models.map(({ model }) => model) ?? [];
   const request = useMemo<StudioSaveConnectionRequest | null>(() => {
     const normalizedModel = editor.model.trim();
-    if (!editor.providerId || !editor.adapterId || !normalizedModel) return null;
+    if (!editor.providerId || !editor.integrationId || !normalizedModel) return null;
     return {
       providerId: editor.providerId,
-      adapterId: editor.adapterId,
+      integrationId: editor.integrationId,
       model: normalizedModel,
     };
-  }, [editor.adapterId, editor.model, editor.providerId]);
+  }, [editor.integrationId, editor.model, editor.providerId]);
   const validationMatchesRequest = request !== null && validated !== null && tupleMatches(validated, request);
   const busy = validating || saving;
 
@@ -184,18 +183,23 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
   };
 
   const openAdd = (): void => {
-    setEditor({ ...emptyEditor(), visible: true });
+    const firstIntegration = integrations.find((integration) => integration.kind === 'image');
+    setEditor({
+      ...emptyEditor(),
+      visible: true,
+      integrationId: firstIntegration?.integrationId ?? '',
+    });
     resetValidation();
   };
 
   const openEdit = (binding: SafeBinding): void => {
-    const integration = integrationFor(binding.adapterId);
+    const integration = integrations.find((item) => item.integrationId === binding.integrationId);
     setEditor({
       visible: true,
       original: binding,
       kind: integration?.kind ?? 'image',
       providerId: binding.providerId,
-      adapterId: binding.adapterId,
+      integrationId: binding.integrationId,
       model: binding.model,
     });
     resetValidation();
@@ -208,9 +212,9 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
   };
 
   const updateKind = (kind: StudioMediaKind): void => {
-    const firstIntegration = MEDIA_INTEGRATIONS.find((integration) => integration.kind === kind);
+    const firstIntegration = integrations.find((integration) => integration.kind === kind);
     if (!firstIntegration) return;
-    setEditor((current) => ({ ...current, kind, adapterId: firstIntegration.adapterId }));
+    setEditor((current) => ({ ...current, kind, integrationId: firstIntegration.integrationId }));
     resetValidation();
   };
 
@@ -219,8 +223,8 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
     resetValidation();
   };
 
-  const updateAdapter = (adapterId: StudioProviderAdapterId): void => {
-    setEditor((current) => ({ ...current, adapterId }));
+  const updateIntegration = (integrationId: string): void => {
+    setEditor((current) => ({ ...current, integrationId }));
     resetValidation();
   };
 
@@ -229,12 +233,12 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
     resetValidation();
   };
 
-  const validateRequest = async (safeRequest: StudioSaveConnectionRequest): Promise<SafeBinding | null> => {
+  const validateRequest = async (safeRequest: StudioSaveConnectionRequest): Promise<SafeValidation | null> => {
     try {
       const result = await ipcBridge.creativeStudio.validateConnection.invoke(safeRequest);
       if (result.ok === false) return null;
-      const safeBinding = sanitizeBinding(result.data);
-      return tupleMatches(safeBinding, safeRequest) ? safeBinding : null;
+      const safeValidation = sanitizeValidation(result.data);
+      return tupleMatches(safeValidation, safeRequest) ? safeValidation : null;
     } catch {
       return null;
     }
@@ -280,7 +284,7 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
     if (original && !sameTuple(original, request)) {
       try {
         const removeResult = await ipcBridge.creativeStudio.removeConnection.invoke({
-          connectionId: original.id,
+          bindingId: original.bindingId,
         });
         if (removeResult.ok === false || !removeResult.data) {
           setMutationFailed(true);
@@ -290,7 +294,7 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
           setValidated(null);
           return;
         }
-        setBindings((current) => current.filter((item) => item.id !== original.id));
+        setBindings((current) => current.filter((item) => item.bindingId !== original.bindingId));
       } catch {
         setMutationFailed(true);
         await refresh();
@@ -306,12 +310,12 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
   };
 
   const revalidate = async (binding: SafeBinding): Promise<void> => {
-    if (busyConnectionIds.includes(binding.id)) return;
-    setBusyConnectionIds((current) => [...current, binding.id]);
+    if (busyConnectionIds.includes(binding.bindingId)) return;
+    setBusyConnectionIds((current) => [...current, binding.bindingId]);
     setMutationFailed(false);
     const safeRequest: StudioSaveConnectionRequest = {
       providerId: binding.providerId,
-      adapterId: binding.adapterId,
+      integrationId: binding.integrationId,
       model: binding.model,
     };
     const validation = await validateRequest(safeRequest);
@@ -322,26 +326,26 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
     } else {
       setBindings((current) => replaceCanonicalBinding(current, saved));
     }
-    setBusyConnectionIds((current) => current.filter((id) => id !== binding.id));
+    setBusyConnectionIds((current) => current.filter((id) => id !== binding.bindingId));
   };
 
-  const remove = async (connectionId: string): Promise<void> => {
-    if (busyConnectionIds.includes(connectionId)) return;
-    setBusyConnectionIds((current) => [...current, connectionId]);
+  const remove = async (bindingId: string): Promise<void> => {
+    if (busyConnectionIds.includes(bindingId)) return;
+    setBusyConnectionIds((current) => [...current, bindingId]);
     setMutationFailed(false);
     try {
-      const result = await ipcBridge.creativeStudio.removeConnection.invoke({ connectionId });
+      const result = await ipcBridge.creativeStudio.removeConnection.invoke({ bindingId });
       if (result.ok === false || !result.data) {
         setMutationFailed(true);
         await refresh();
       } else {
-        setBindings((current) => current.filter((binding) => binding.id !== connectionId));
+        setBindings((current) => current.filter((binding) => binding.bindingId !== bindingId));
       }
     } catch {
       setMutationFailed(true);
       await refresh();
     } finally {
-      setBusyConnectionIds((current) => current.filter((id) => id !== connectionId));
+      setBusyConnectionIds((current) => current.filter((id) => id !== bindingId));
     }
   };
 
@@ -398,12 +402,12 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
         <ul aria-label={t('settings.mediaModels.title')} className='m-0 flex list-none flex-col gap-8px p-0'>
           {bindings.map((binding) => {
             const candidate = candidates.find((item) => item.providerId === binding.providerId);
-            const integration = integrationFor(binding.adapterId);
+            const integration = integrations.find((item) => item.integrationId === binding.integrationId);
             const kind = integration?.kind ?? binding.capabilities.mediaKinds[0] ?? 'image';
-            const rowBusy = busyConnectionIds.includes(binding.id);
+            const rowBusy = busyConnectionIds.includes(binding.bindingId);
             return (
               <li
-                key={binding.id}
+                key={binding.bindingId}
                 aria-label={binding.model}
                 className='rounded-8px border border-border-2 bg-fill-1 p-12px'
               >
@@ -421,7 +425,9 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
                       )}
                     </dd>
                     <dt className='text-11px text-t-tertiary'>{t('settings.mediaModels.integrationLabel')}</dt>
-                    <dd className='m-0 text-12px text-t-primary'>{integration ? t(integration.labelKey) : null}</dd>
+                    <dd className='m-0 text-12px text-t-primary'>
+                      {t(`settings.mediaModels.integration.${binding.labelKey}`)}
+                    </dd>
                     <dt className='text-11px text-t-tertiary'>{t('settings.mediaModels.model')}</dt>
                     <dd className='m-0 break-all text-12px text-t-primary'>{binding.model}</dd>
                     <dt className='text-11px text-t-tertiary'>{t('settings.mediaModels.validatedAt')}</dt>
@@ -436,14 +442,17 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
                     <Button size='mini' loading={rowBusy} disabled={rowBusy} onClick={() => void revalidate(binding)}>
                       {t('settings.mediaModels.revalidate')}
                     </Button>
-                    <Popconfirm title={t('settings.mediaModels.removeConfirm')} onOk={() => void remove(binding.id)}>
+                    <Popconfirm
+                      title={t('settings.mediaModels.removeConfirm')}
+                      onOk={() => void remove(binding.bindingId)}
+                    >
                       <Button size='mini' status='danger' disabled={rowBusy}>
                         {t('settings.mediaModels.remove')}
                       </Button>
                     </Popconfirm>
                   </div>
                 </div>
-                {supportsSilentGatewayOutput(binding) && binding.adapterId === 'weprompt-media-gateway-v1' && (
+                {supportsSilentGatewayOutput(binding) && binding.labelKey === 'selfHostedVideoGateway' && (
                   <div className='mt-8px'>
                     <Tag color='green'>{t('settings.mediaModels.silentOutputSupported')}</Tag>
                   </div>
@@ -496,16 +505,13 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
             {t('settings.mediaModels.integrationLabel')}
             <Select
               aria-label={t('settings.mediaModels.integrationLabel')}
-              value={integrationFor(editor.adapterId)?.labelKey}
+              value={editor.integrationId || undefined}
               disabled={busy}
-              onChange={(value) => {
-                const integration = integrationForLabel(String(value));
-                if (integration) updateAdapter(integration.adapterId);
-              }}
+              onChange={(value) => updateIntegration(String(value))}
             >
-              {integrations.map((integration) => (
-                <Select.Option key={integration.adapterId} value={integration.labelKey}>
-                  {t(integration.labelKey)}
+              {availableIntegrations.map((integration) => (
+                <Select.Option key={integration.integrationId} value={integration.integrationId}>
+                  {t(`settings.mediaModels.integration.${integration.labelKey}`)}
                 </Select.Option>
               ))}
             </Select>

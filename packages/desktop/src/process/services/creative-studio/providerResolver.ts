@@ -25,8 +25,13 @@ export type StudioProviderResolverDeps = {
 };
 
 export type StudioGenerationRouteCatalog = {
-  routes: StudioRouteCatalogEntry[];
+  routes: StudioGenerationRoute[];
   generationCatalogVersion: string;
+};
+
+/** Main-only route. The renderer receives the opaque choiceId projection. */
+export type StudioGenerationRoute = StudioRouteCatalogEntry & {
+  adapterId: StudioProviderAdapterId;
 };
 
 export type StudioProviderResolver = {
@@ -49,6 +54,15 @@ const isSafeProviderId = (value: string): boolean => SAFE_ID.test(value);
 const isSafeModel = (value: string): boolean =>
   value.length > 0 && value.length <= 256 && value === value.trim() && !Array.from(value).some(isUnsafeTextCharacter);
 
+/** Creates a stable opaque renderer choice without exposing the adapter tuple. */
+export const createStudioMediaChoiceId = (route: StudioProviderRef & { kind: StudioMediaKind }): string =>
+  `choice_${createHash('sha256')
+    .update(
+      `studio-media-choice-v1\u0000${route.providerId}\u0000${route.adapterId}\u0000${route.model}\u0000${route.kind}`
+    )
+    .digest('hex')
+    .slice(0, 24)}`;
+
 const sanitizedProviderName = (provider: IProvider): string => {
   const normalized = Array.from(provider.name, (character) => (isUnsafeTextCharacter(character) ? ' ' : character))
     .join('')
@@ -64,7 +78,7 @@ const available = (provider: IProvider, model: string): boolean =>
   provider.model_health?.[model]?.status !== 'unhealthy' &&
   provider.api_key.trim().length > 0;
 
-const modelHealth = (provider: IProvider, model: string): StudioRouteCatalogEntry['health'] => {
+const modelHealth = (provider: IProvider, model: string): StudioGenerationRoute['health'] => {
   if (!available(provider, model)) return 'unavailable';
   return provider.model_health?.[model]?.status === 'healthy' ? 'available' : 'unknown';
 };
@@ -118,13 +132,13 @@ const bindingMediaKind = (binding: StudioConnectionBinding): StudioMediaKind | n
     : null;
 };
 
-const routeIdentity = (route: StudioRouteCatalogEntry): string =>
+const routeIdentity = (route: StudioGenerationRoute): string =>
   `${route.adapterId}\u0000${route.providerId}\u0000${route.model}\u0000${route.kind}`;
 
 const resolveBindingRoute = (
   binding: StudioConnectionBinding,
   providers: IProvider[]
-): StudioRouteCatalogEntry | null => {
+): StudioGenerationRoute | null => {
   const provider = providers.find((candidate) => candidate.id === binding.providerId);
   const kind = bindingMediaKind(binding);
   if (
@@ -151,6 +165,12 @@ const resolveBindingRoute = (
         : bindingConstraints(binding.capabilities);
   if (!constraints || !constraints.silentOutput) return null;
   return {
+    choiceId: createStudioMediaChoiceId({
+      providerId: provider.id,
+      adapterId: binding.adapterId,
+      model: binding.model,
+      kind,
+    }),
     providerId: provider.id,
     providerName: sanitizedProviderName(provider),
     model: binding.model,
@@ -184,7 +204,7 @@ export const createStudioProviderResolver = (deps: StudioProviderResolverDeps): 
 
   const listGenerationRoutes = async (): Promise<StudioGenerationRouteCatalog> => {
     const [providers, connections] = await Promise.all([deps.listProviders(), deps.listConnections()]);
-    const uniqueRoutes = new Map<string, StudioRouteCatalogEntry>();
+    const uniqueRoutes = new Map<string, StudioGenerationRoute>();
     for (const binding of connections) {
       const route = resolveBindingRoute(binding, providers);
       if (route && !uniqueRoutes.has(routeIdentity(route))) {
@@ -194,15 +214,18 @@ export const createStudioProviderResolver = (deps: StudioProviderResolverDeps): 
     const routes = [...uniqueRoutes.values()].toSorted((left, right) =>
       routeIdentity(left).localeCompare(routeIdentity(right))
     );
-    const stable = routes.map(({ providerId, providerName, adapterId, model, health, kind, constraints }) => ({
-      providerId,
-      providerName,
-      adapterId,
-      model,
-      health,
-      kind,
-      constraints,
-    }));
+    const stable = routes.map(
+      ({ choiceId, providerId, providerName, adapterId, model, health, kind, constraints }) => ({
+        choiceId,
+        providerId,
+        providerName,
+        adapterId,
+        model,
+        health,
+        kind,
+        constraints,
+      })
+    );
     return {
       routes,
       generationCatalogVersion: createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 16),

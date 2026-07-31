@@ -16,9 +16,9 @@ import type {
   StudioMediaKind,
   StudioProject,
   StudioProviderAdapterId,
+  StudioProviderRef,
   StudioRetryDownloadRequest,
   StudioRetryJobRequest,
-  StudioSceneRouteSnapshot,
   StudioSubmitScenesRequest,
 } from '@/common/types/project/creativeStudioTypes';
 import type {
@@ -60,12 +60,21 @@ export type StudioJobManagerDeps = {
 };
 
 export type StudioJobManager = {
-  submitScenes(input: StudioSubmitScenesRequest): Promise<StudioJob[]>;
+  submitScenes(input: StudioResolvedSubmitScenesRequest): Promise<StudioJob[]>;
   cancelJob(input: StudioJobRequest): Promise<StudioJob>;
   retryJob(input: StudioRetryJobRequest): Promise<StudioJob>;
   retryDownload(input: StudioRetryDownloadRequest): Promise<StudioJob>;
   resumePendingJobs(): Promise<void>;
   dispose(): Promise<void>;
+};
+
+export type StudioResolvedSceneRouteSnapshot = StudioProviderRef & {
+  sceneId: string;
+  kind: StudioMediaKind;
+};
+
+export type StudioResolvedSubmitScenesRequest = Omit<StudioSubmitScenesRequest, 'routes'> & {
+  routes: StudioResolvedSceneRouteSnapshot[];
 };
 
 export type StudioJobManagerErrorCode =
@@ -241,7 +250,7 @@ const routeMatches = (
     model: string;
     kind: StudioMediaKind;
   },
-  route: StudioSceneRouteSnapshot
+  route: StudioResolvedSceneRouteSnapshot
 ): boolean =>
   candidate.providerId === route.providerId &&
   candidate.adapterId === route.adapterId &&
@@ -402,7 +411,7 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
   const resolveProvider = async (
     project: StudioProject,
     sceneId: string,
-    route: StudioSceneRouteSnapshot,
+    route: StudioResolvedSceneRouteSnapshot,
     catalogVersion?: string
   ): Promise<PreparedSubmission> => {
     const scene = project.scenes[sceneId];
@@ -497,7 +506,7 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
         sceneId: scene.id,
         ...job.provider,
         kind: scene.mediaKind,
-      } satisfies StudioSceneRouteSnapshot;
+      } satisfies StudioResolvedSceneRouteSnapshot;
       if (!(await deps.providerResolver.isGenerationRouteAvailable(route))) return null;
       const provider = (await deps.listProviders()).find((candidate) => candidate.id === job.provider.providerId);
       const adapter = deps.adapters.get(job.provider.adapterId);
@@ -949,7 +958,7 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
     }
   };
 
-  const submitScenes = async (input: StudioSubmitScenesRequest): Promise<StudioJob[]> => {
+  const submitScenes = async (input: StudioResolvedSubmitScenesRequest): Promise<StudioJob[]> => {
     if (disposed) throw new StudioJobManagerError('invalid_request');
     const project = await requireExpectedProject(input.projectId, input.expectedRevision);
     if (disposed) throw new StudioJobManagerError('invalid_request');
@@ -967,7 +976,7 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
     ) {
       invalidRequest();
     }
-    const routeByScene = new Map<string, StudioSceneRouteSnapshot>();
+    const routeByScene = new Map<string, StudioResolvedSceneRouteSnapshot>();
     for (const route of input.routes) {
       if (
         !input.sceneIds.includes(route.sceneId) ||
@@ -1153,7 +1162,7 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
       sceneId: scene.id,
       ...previous.provider,
       kind: scene.mediaKind,
-    } satisfies StudioSceneRouteSnapshot;
+    } satisfies StudioResolvedSceneRouteSnapshot;
     const prepared = await resolveProvider(project, scene.id, route);
     if (disposed) throw new StudioJobManagerError('invalid_request');
     const persisted = await persistPreparedJobs(project, [prepared], input.expectedRevision, {

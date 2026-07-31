@@ -100,11 +100,7 @@ const VALID_PAYLOADS = {
     projectId: 'project_1',
     expectedRevision: 2,
     role: 'video',
-    selection: {
-      providerId: 'provider_1',
-      adapterId: 'weprompt-media-gateway-v1',
-      model: 'open-sora',
-    },
+    selection: { choiceId: 'binding_1' },
   },
   'creative-studio.update-project': { projectId: 'project_1', expectedRevision: 1, name: 'Changed launch film' },
   'creative-studio.delete-project': { projectId: 'project_1', expectedRevision: 1 },
@@ -144,9 +140,7 @@ const VALID_PAYLOADS = {
     routes: [
       {
         sceneId: 'scene_1',
-        providerId: 'provider_1',
-        adapterId: 'weprompt-media-gateway-v1',
-        model: 'open-sora',
+        choiceId: 'binding_1',
         kind: 'video',
       },
     ],
@@ -163,15 +157,15 @@ const VALID_PAYLOADS = {
   'creative-studio.list-connections': undefined,
   'creative-studio.validate-connection': {
     providerId: 'provider_1',
-    adapterId: 'weprompt-media-gateway-v1',
+    integrationId: 'integration_x5T8cW1h',
     model: 'open-sora',
   },
   'creative-studio.save-connection': {
     providerId: 'provider_1',
-    adapterId: 'weprompt-media-gateway-v1',
+    integrationId: 'integration_x5T8cW1h',
     model: 'open-sora',
   },
-  'creative-studio.remove-connection': { connectionId: 'binding_1' },
+  'creative-studio.remove-connection': { bindingId: 'binding_1' },
   'creative-studio.list-routes': { projectId: 'project_1' },
   'app-operations.cancel': { operation_id: 'operation-1' },
   'office-artifact.get-state': {
@@ -500,19 +494,34 @@ const INVALID_PAYLOADS = [
   [
     'creative-studio.validate-connection',
     'provider id traversal',
-    { providerId: '../provider', adapterId: 'weprompt-image-v1', model: 'image' },
+    { providerId: '../provider', integrationId: 'integration_g7Q2mB4p', model: 'image' },
+  ],
+  [
+    'creative-studio.validate-connection',
+    'renderer supplied adapter identity',
+    {
+      providerId: 'provider_1',
+      integrationId: 'integration_g7Q2mB4p',
+      adapterId: 'weprompt-image-v1',
+      model: 'image',
+    },
   ],
   [
     'creative-studio.validate-connection',
     'renderer supplied provider URL',
-    { providerId: 'provider_1', adapterId: 'weprompt-image-v1', model: 'image', baseUrl: 'https://secret.invalid' },
+    {
+      providerId: 'provider_1',
+      integrationId: 'integration_g7Q2mB4p',
+      model: 'image',
+      baseUrl: 'https://secret.invalid',
+    },
   ],
   [
     'creative-studio.save-connection',
     'renderer supplied credential',
-    { providerId: 'provider_1', adapterId: 'weprompt-image-v1', model: 'image', apiKey: 'secret' },
+    { providerId: 'provider_1', integrationId: 'integration_g7Q2mB4p', model: 'image', apiKey: 'secret' },
   ],
-  ['creative-studio.remove-connection', 'connection traversal', { connectionId: '../binding_1' }],
+  ['creative-studio.remove-connection', 'connection traversal', { bindingId: '../binding_1' }],
   ['creative-studio.list-routes', 'project traversal', { projectId: '../project_1' }],
   [
     'creative-studio.propose-storyboard',
@@ -562,13 +571,10 @@ const INVALID_PAYLOADS = [
   ],
   [
     'creative-studio.update-model-selection',
-    'provider id traversal',
+    'choice id traversal',
     {
       ...VALID_PAYLOADS['creative-studio.update-model-selection'],
-      selection: {
-        ...VALID_PAYLOADS['creative-studio.update-model-selection'].selection,
-        providerId: '../provider_1',
-      },
+      selection: { choiceId: '../binding_1' },
     },
   ],
   [
@@ -602,38 +608,37 @@ const INVALID_PAYLOADS = [
   ],
   [
     'creative-studio.update-model-selection',
-    'media selection without adapter',
+    'media selection without opaque choice',
     {
       projectId: 'project_1',
       expectedRevision: 2,
       role: 'video',
-      selection: { providerId: 'provider_1', model: 'open-sora' },
+      selection: {},
     },
   ],
   [
     'creative-studio.update-model-selection',
-    'image role with video adapter',
+    'media selection with adapter identity',
     {
       projectId: 'project_1',
       expectedRevision: 2,
       role: 'image',
       selection: {
-        providerId: 'provider_1',
+        choiceId: 'binding_1',
         adapterId: 'weprompt-media-gateway-v1',
-        model: 'image-model',
       },
     },
   ],
   [
     'creative-studio.update-model-selection',
-    'video role with image adapter',
+    'media selection with provider and model override',
     {
       projectId: 'project_1',
       expectedRevision: 2,
       role: 'video',
       selection: {
+        choiceId: 'binding_1',
         providerId: 'provider_1',
-        adapterId: 'weprompt-image-v1',
         model: 'video-model',
       },
     },
@@ -642,22 +647,20 @@ const INVALID_PAYLOADS = [
     'creative-studio.update-model-selection',
     'overlong model',
     {
-      ...VALID_PAYLOADS['creative-studio.update-model-selection'],
-      selection: {
-        ...VALID_PAYLOADS['creative-studio.update-model-selection'].selection,
-        model: 'x'.repeat(257),
-      },
+      projectId: 'project_1',
+      expectedRevision: 2,
+      role: 'storyboard',
+      selection: { providerId: 'provider_1', model: 'x'.repeat(257) },
     },
   ],
   [
     'creative-studio.update-model-selection',
     'control character in model',
     {
-      ...VALID_PAYLOADS['creative-studio.update-model-selection'],
-      selection: {
-        ...VALID_PAYLOADS['creative-studio.update-model-selection'].selection,
-        model: 'open\u0000sora',
-      },
+      projectId: 'project_1',
+      expectedRevision: 2,
+      role: 'storyboard',
+      selection: { providerId: 'provider_1', model: 'open\u0000sora' },
     },
   ],
   [
@@ -779,6 +782,19 @@ const INVALID_PAYLOADS = [
         {
           ...VALID_PAYLOADS['creative-studio.submit-scenes'].routes[0],
           sceneId: 'scene_2',
+        },
+      ],
+    },
+  ],
+  [
+    'creative-studio.submit-scenes',
+    'renderer supplied adapter identity',
+    {
+      ...VALID_PAYLOADS['creative-studio.submit-scenes'],
+      routes: [
+        {
+          ...VALID_PAYLOADS['creative-studio.submit-scenes'].routes[0],
+          adapterId: 'weprompt-media-gateway-v1',
         },
       ],
     },

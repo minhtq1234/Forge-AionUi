@@ -120,8 +120,8 @@ const sanitizeJob = (candidate: StudioRendererJob): StudioRendererJob => {
     sceneId: candidate.sceneId,
     status: candidate.status,
     provider: {
+      choiceId: candidate.provider.choiceId,
       providerId: candidate.provider.providerId,
-      adapterId: candidate.provider.adapterId,
       model: candidate.provider.model,
     },
     outputAssetIds: [...candidate.outputAssetIds],

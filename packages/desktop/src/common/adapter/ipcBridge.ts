@@ -71,7 +71,9 @@ import type {
   StudioRendererProject,
   StudioImportOutcome,
   StudioExportOutcome,
-  StudioConnectionBinding,
+  StudioConnectionInventory,
+  StudioConnectionRecord,
+  StudioConnectionValidationResult,
   StudioConnectionCandidate,
   StudioListRoutesRequest,
   StudioRemoveConnectionRequest,
@@ -1070,14 +1072,14 @@ export const creativeStudio = {
   listConnectionCandidates: bridge.buildProvider<StudioCommandResult<StudioConnectionCandidate[]>, void>(
     'creative-studio.list-connection-candidates'
   ),
-  listConnections: bridge.buildProvider<StudioCommandResult<StudioConnectionBinding[]>, void>(
+  listConnections: bridge.buildProvider<StudioCommandResult<StudioConnectionInventory>, void>(
     'creative-studio.list-connections'
   ),
   validateConnection: bridge.buildProvider<
-    StudioCommandResult<StudioConnectionBinding>,
+    StudioCommandResult<StudioConnectionValidationResult>,
     StudioValidateConnectionRequest
   >('creative-studio.validate-connection'),
-  saveConnection: bridge.buildProvider<StudioCommandResult<StudioConnectionBinding>, StudioSaveConnectionRequest>(
+  saveConnection: bridge.buildProvider<StudioCommandResult<StudioConnectionRecord>, StudioSaveConnectionRequest>(
     'creative-studio.save-connection'
   ),
   removeConnection: bridge.buildProvider<StudioCommandResult<boolean>, StudioRemoveConnectionRequest>(

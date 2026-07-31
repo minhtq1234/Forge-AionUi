@@ -8,7 +8,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { StudioSceneRouteSnapshot } from '@/common/types/project/creativeStudioTypes';
+import type { GenerationReviewRouteSnapshot } from '@renderer/pages/studio/components/Generation/GenerationControls';
 import {
   GenerationReviewModal,
   type GenerationReviewModalProps,
@@ -30,18 +30,18 @@ const route = (
   sceneId: string,
   kind: 'image' | 'video',
   providerId: string,
-  adapterId: StudioSceneRouteSnapshot['adapterId'],
+  choiceId: string,
   model: string
-): StudioSceneRouteSnapshot => ({
+): GenerationReviewRouteSnapshot => ({
   sceneId,
   kind,
   providerId,
-  adapterId,
+  choiceId,
   model,
 });
 
-const imageRoute = route('scene-image', 'image', 'provider_image', 'weprompt-image-v1', 'image-model-v1');
-const videoRoute = route('scene-video', 'video', 'provider_video', 'byteplus-seedance-v1', 'seedance-1-5-pro');
+const imageRoute = route('scene-image', 'image', 'provider_image', 'choice_image', 'image-model-v1');
+const videoRoute = route('scene-video', 'video', 'provider_video', 'choice_video', 'seedance-1-5-pro');
 
 const mixedScenes = (): GenerationReviewScene[] => [
   {
@@ -152,12 +152,12 @@ describe('GenerationReviewModal', () => {
     fireEvent.click(confirm);
     expect(onConfirm).toHaveBeenCalledExactlyOnceWith({
       sceneIds: ['scene-video'],
-      routes: [videoRoute],
+      routes: [{ sceneId: 'scene-video', choiceId: 'choice_video', kind: 'video' }],
     });
   });
 
   it('keeps an invalid route visible while missing or invalid routes disable confirmation', () => {
-    const staleRoute = route('scene-video', 'video', 'provider_stale', 'weprompt-media-gateway-v1', 'open-sora-stale');
+    const staleRoute = route('scene-video', 'video', 'provider_stale', 'choice_stale', 'open-sora-stale');
     render(
       <GenerationReviewModal
         {...createProps({

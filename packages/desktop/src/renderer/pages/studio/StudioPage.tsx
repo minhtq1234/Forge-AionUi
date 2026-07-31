@@ -15,7 +15,7 @@ import type {
   StudioRouteCatalog,
   StudioRouteCatalogEntry,
   StudioScene,
-  StudioSceneRouteSnapshot,
+  StudioSceneGenerationChoice,
   StudioSelectVariationRequest,
 } from '@/common/types/project/creativeStudioTypes';
 
@@ -25,6 +25,7 @@ import {
   GenerationReviewModal,
   type GenerationBatchReviewRequest,
   type GenerationReviewScene,
+  type GenerationReviewRouteSnapshot,
   type GenerationSingleReviewRequest,
   SceneTimeline,
   SceneInspector,
@@ -49,13 +50,13 @@ type GenerationReviewState = {
 };
 
 const routeIdentity = (
-  route: Pick<StudioRouteCatalogEntry | StudioSceneRouteSnapshot, 'providerId' | 'adapterId' | 'model' | 'kind'>
-): string => `${route.providerId}\u0000${route.adapterId}\u0000${route.model}\u0000${route.kind}`;
+  route: Pick<StudioRouteCatalogEntry | GenerationReviewRouteSnapshot, 'choiceId' | 'kind'>
+): string => `${route.choiceId}\u0000${route.kind}`;
 
 const routeIsCompatible = (
   project: StudioRendererProject,
   scene: StudioScene,
-  route: StudioSceneRouteSnapshot,
+  route: GenerationReviewRouteSnapshot,
   availableRoutes: readonly StudioRouteCatalogEntry[]
 ): boolean => {
   const catalogRoute = availableRoutes.find((candidate) => routeIdentity(candidate) === routeIdentity(route));
@@ -82,7 +83,7 @@ const routeIsCompatible = (
 const toReviewScene = (
   project: StudioRendererProject,
   scene: StudioScene,
-  route: StudioSceneRouteSnapshot | null,
+  route: GenerationReviewRouteSnapshot | null,
   availableRoutes: readonly StudioRouteCatalogEntry[],
   routeStatus?: 'valid' | 'invalid' | 'missing'
 ): GenerationReviewScene => {
@@ -115,14 +116,14 @@ const catalogEntries = (catalog: StudioRouteCatalog): StudioRouteCatalogEntry[] 
 const projectRouteSnapshot = (
   project: StudioRendererProject,
   scene: Pick<StudioScene, 'id' | 'mediaKind'>
-): StudioSceneRouteSnapshot | null => {
+): GenerationReviewRouteSnapshot | null => {
   const selected = project.routing[scene.mediaKind];
   return selected === null
     ? null
     : {
         sceneId: scene.id,
+        choiceId: selected.choiceId,
         providerId: selected.providerId,
-        adapterId: selected.adapterId,
         model: selected.model,
         kind: scene.mediaKind,
       };
@@ -411,8 +412,8 @@ const StudioProjectShell: React.FC = () => {
           ? null
           : {
               route: {
+                choiceId: route.choiceId,
                 providerId: route.providerId,
-                adapterId: route.adapterId,
                 model: route.model,
                 kind,
               },
@@ -436,7 +437,7 @@ const StudioProjectShell: React.FC = () => {
   }, [generationBlocked, headerBatchLoading, openBatchReview, project, readyScenes.length, studioModels]);
 
   const confirmGeneration = useCallback(
-    async ({ sceneIds, routes }: { sceneIds: string[]; routes: StudioSceneRouteSnapshot[] }): Promise<void> => {
+    async ({ sceneIds, routes }: { sceneIds: string[]; routes: StudioSceneGenerationChoice[] }): Promise<void> => {
       if (
         generationReview?.catalogVersion === null ||
         generationReview === null ||

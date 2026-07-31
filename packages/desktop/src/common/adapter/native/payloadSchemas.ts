@@ -193,20 +193,7 @@ const studioTextModelSelectionSchema = z
     model: studioModelSchema,
   })
   .strict();
-const studioImageModelSelectionSchema = z
-  .object({
-    providerId: safeIdSchema,
-    adapterId: z.literal('weprompt-image-v1'),
-    model: studioModelSchema,
-  })
-  .strict();
-const studioVideoModelSelectionSchema = z
-  .object({
-    providerId: safeIdSchema,
-    adapterId: z.enum(['byteplus-seedance-v1', 'weprompt-media-gateway-v1']),
-    model: studioModelSchema,
-  })
-  .strict();
+const studioMediaModelSelectionSchema = z.object({ choiceId: safeIdSchema }).strict();
 const storyboardSelectionSchema = z
   .object({
     projectId: safeIdSchema,
@@ -220,7 +207,7 @@ const imageSelectionSchema = z
     projectId: safeIdSchema,
     expectedRevision: studioExpectedRevisionSchema,
     role: z.literal('image'),
-    selection: studioImageModelSelectionSchema.nullable(),
+    selection: studioMediaModelSelectionSchema.nullable(),
   })
   .strict();
 const videoSelectionSchema = z
@@ -228,7 +215,7 @@ const videoSelectionSchema = z
     projectId: safeIdSchema,
     expectedRevision: studioExpectedRevisionSchema,
     role: z.literal('video'),
-    selection: studioVideoModelSelectionSchema.nullable(),
+    selection: studioMediaModelSelectionSchema.nullable(),
   })
   .strict();
 const studioUpdateModelSelectionSchema = z.discriminatedUnion('role', [
@@ -236,20 +223,17 @@ const studioUpdateModelSelectionSchema = z.discriminatedUnion('role', [
   imageSelectionSchema,
   videoSelectionSchema,
 ]);
-const studioProviderAdapterSchema = z.enum(['weprompt-image-v1', 'byteplus-seedance-v1', 'weprompt-media-gateway-v1']);
 const studioConnectionSchema = z
   .object({
     providerId: safeIdSchema,
-    adapterId: studioProviderAdapterSchema,
+    integrationId: safeIdSchema,
     model: z.string().trim().min(1).max(256),
   })
   .strict();
 const studioSceneRouteSnapshotSchema = z
   .object({
     sceneId: safeIdSchema,
-    providerId: safeIdSchema,
-    adapterId: studioProviderAdapterSchema,
-    model: z.string().trim().min(1).max(256),
+    choiceId: safeIdSchema,
     kind: z.enum(['image', 'video']),
   })
   .strict();
@@ -442,7 +426,7 @@ export const nativeBridgePayloadSchemas = {
   'creative-studio.list-connections': voidPayloadSchema,
   'creative-studio.validate-connection': studioConnectionSchema,
   'creative-studio.save-connection': studioConnectionSchema,
-  'creative-studio.remove-connection': z.object({ connectionId: safeIdSchema }).strict(),
+  'creative-studio.remove-connection': z.object({ bindingId: safeIdSchema }).strict(),
   'creative-studio.list-routes': z.object({ projectId: safeIdSchema.optional() }).strict().optional(),
   'office-artifact.get-state': z.object(officeArtifactRequestShape).strict(),
   'office-artifact.prepare-preview': z.object(officeArtifactRequestShape).strict(),

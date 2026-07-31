@@ -71,8 +71,8 @@ const project = (id = 'project-1', overrides: Partial<StudioRendererProject> = {
   routing: {
     storyboard: null,
     image: {
+      choiceId: 'choice_image',
       providerId: 'provider-image',
-      adapterId: 'weprompt-image-v1',
       model: 'image-model',
     },
     video: null,
@@ -105,8 +105,8 @@ const job = (id: string, overrides: Partial<StudioRendererJob> = {}): StudioRend
   sceneId: 'scene-1',
   status: 'succeeded',
   provider: {
+    choiceId: 'choice_image',
     providerId: 'provider-image',
-    adapterId: 'weprompt-image-v1',
     model: 'image-model',
   },
   outputAssetIds: [],
@@ -152,11 +152,11 @@ const routes = (): StudioRouteCatalog => ({
 });
 
 const imageRoute = (overrides: Partial<StudioRouteCatalogEntry> = {}): StudioRouteCatalogEntry => ({
+  choiceId: 'choice_image',
   providerId: 'provider-image',
   providerName: 'Image provider',
   model: 'image-model',
   health: 'available',
-  adapterId: 'weprompt-image-v1',
   kind: 'image',
   constraints: {
     aspectRatios: ['16:9'],
@@ -174,8 +174,8 @@ const routesWithImage = (route = imageRoute()): StudioRouteCatalog => ({
   image: {
     status: 'ready',
     selected: {
+      choiceId: route.choiceId,
       providerId: route.providerId,
-      adapterId: route.adapterId,
       model: route.model,
     },
     options: [route],
@@ -405,8 +405,8 @@ describe('StudioPage and useStudioProject', () => {
     };
     const firstJob = job('job-1', {
       provider: {
+        choiceId: 'choice_video',
         providerId: 'provider-video',
-        adapterId: 'weprompt-media-gateway-v1',
         model: 'video-model',
       },
       outputAssetIds: [videoAsset.id, firstPoster.id],
@@ -483,9 +483,7 @@ describe('StudioPage and useStudioProject', () => {
         routes: [
           {
             sceneId: 'scene-1',
-            providerId: 'provider-image',
-            adapterId: 'weprompt-image-v1',
-            model: 'image-model',
+            choiceId: 'choice_image',
             kind: 'image',
           },
         ],
@@ -531,16 +529,12 @@ describe('StudioPage and useStudioProject', () => {
         routes: [
           {
             sceneId: 'scene-1',
-            providerId: 'provider-image',
-            adapterId: 'weprompt-image-v1',
-            model: 'image-model',
+            choiceId: 'choice_image',
             kind: 'image',
           },
           {
             sceneId: 'scene-2',
-            providerId: 'provider-image',
-            adapterId: 'weprompt-image-v1',
-            model: 'image-model',
+            choiceId: 'choice_image',
             kind: 'image',
           },
         ],
@@ -711,8 +705,8 @@ describe('StudioPage and useStudioProject', () => {
       routing: {
         storyboard: null,
         image: {
+          choiceId: 'choice_image',
           providerId: 'provider-image',
-          adapterId: 'weprompt-image-v1',
           model: 'image-model',
         },
         video: null,
@@ -762,17 +756,17 @@ describe('StudioPage and useStudioProject', () => {
       routing: {
         storyboard: null,
         image: {
+          choiceId: 'choice_image_new',
           providerId: 'provider-image-new',
-          adapterId: 'weprompt-media-gateway-v1',
           model: 'image-model-new',
         },
         video: null,
       },
     });
     const revisedRoute = imageRoute({
+      choiceId: 'choice_image_new',
       providerId: 'provider-image-new',
       providerName: 'New image provider',
-      adapterId: 'weprompt-media-gateway-v1',
       model: 'image-model-new',
     });
     bridge.getProject.invoke
@@ -826,9 +820,7 @@ describe('StudioPage and useStudioProject', () => {
           routes: [
             {
               sceneId: 'scene-1',
-              providerId: 'provider-image-new',
-              adapterId: 'weprompt-media-gateway-v1',
-              model: 'image-model-new',
+              choiceId: 'choice_image_new',
               kind: 'image',
             },
           ],
@@ -945,17 +937,17 @@ describe('StudioPage and useStudioProject', () => {
       routing: {
         storyboard: null,
         image: {
+          choiceId: 'choice_image_new',
           providerId: 'provider-image-new',
-          adapterId: 'weprompt-media-gateway-v1',
           model: 'image-model-new',
         },
         video: null,
       },
     });
     const refreshedRoute = imageRoute({
+      choiceId: 'choice_image_new',
       providerId: 'provider-image-new',
       providerName: 'New image provider',
-      adapterId: 'weprompt-media-gateway-v1',
       model: 'image-model-new',
     });
     bridge.getProject.invoke
@@ -1001,9 +993,7 @@ describe('StudioPage and useStudioProject', () => {
       routes: [
         {
           sceneId: 'scene-1',
-          providerId: 'provider-image-new',
-          adapterId: 'weprompt-media-gateway-v1',
-          model: 'image-model-new',
+          choiceId: 'choice_image_new',
           kind: 'image',
         },
       ],

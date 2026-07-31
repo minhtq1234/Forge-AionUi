@@ -254,7 +254,7 @@ describe('useStudioModels', () => {
     const updated = await act(() =>
       view.result.current.updateSelection({
         role: 'video',
-        selection: { providerId: 'video', adapterId: 'byteplus-seedance-v1', model: 'seedance' },
+        selection: { choiceId: 'choice_video' },
       })
     );
 
@@ -344,8 +344,8 @@ describe('useStudioModels', () => {
       routing: {
         storyboard: null,
         image: {
+          choiceId: 'choice_image',
           providerId: 'provider-image',
-          adapterId: 'weprompt-image-v1' as const,
           model: 'image-model',
         },
         video: null,

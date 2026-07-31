@@ -7,13 +7,14 @@
 import type {
   StudioAspectRatio,
   StudioCommandErrorCode,
+  StudioMediaChoiceRef,
   StudioMediaKind,
   StudioRendererJob,
   StudioRendererProject,
   StudioResolution,
   StudioRouteCatalog,
   StudioRouteCatalogEntry,
-  StudioSceneRouteSnapshot,
+  StudioSceneGenerationChoice,
 } from '@/common/types/project/creativeStudioTypes';
 import { Alert, Button, Progress, Spin } from '@arco-design/web-react';
 import { Attention, CheckOne, CloseOne, Loading, Refresh, Time } from '@icon-park/react';
@@ -30,14 +31,17 @@ export type GenerationControlScene = {
 
 export type GenerationSingleReviewRequest = {
   sceneId: string;
-  route: StudioSceneRouteSnapshot | null;
+  route: GenerationReviewRouteSnapshot | null;
   routeStatus: 'valid' | 'invalid' | 'missing';
   catalogVersion: string | null;
   availableRoutes: StudioRouteCatalogEntry[];
 };
 
+export type GenerationReviewRouteSnapshot = StudioSceneGenerationChoice &
+  Pick<StudioMediaChoiceRef, 'providerId' | 'model'>;
+
 export type GenerationResolvedRoute = {
-  route: Omit<StudioSceneRouteSnapshot, 'sceneId'>;
+  route: Omit<GenerationReviewRouteSnapshot, 'sceneId'>;
   routeStatus: 'valid' | 'invalid';
 };
 
@@ -80,11 +84,11 @@ export type GenerationControlsProps = {
 };
 
 const copyCatalogEntry = (route: StudioRouteCatalogEntry): StudioRouteCatalogEntry => ({
+  choiceId: route.choiceId,
   providerId: route.providerId,
   providerName: route.providerName,
   model: route.model,
   health: route.health,
-  adapterId: route.adapterId,
   kind: route.kind,
   constraints: {
     aspectRatios: [...route.constraints.aspectRatios],
@@ -131,15 +135,11 @@ const resolvePersistedRoute = (
   const selected = project.routing[kind];
   if (selected === null) return null;
   const catalogRoute = catalog?.[kind].options.find(
-    (candidate) =>
-      candidate.kind === kind &&
-      candidate.providerId === selected.providerId &&
-      candidate.adapterId === selected.adapterId &&
-      candidate.model === selected.model
+    (candidate) => candidate.kind === kind && candidate.choiceId === selected.choiceId
   );
   const route = {
+    choiceId: selected.choiceId,
     providerId: selected.providerId,
-    adapterId: selected.adapterId,
     model: selected.model,
     kind,
   };

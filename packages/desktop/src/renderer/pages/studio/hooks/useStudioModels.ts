@@ -7,10 +7,8 @@
 import { ipcBridge } from '@/common';
 import type {
   StudioModelSelectionChange,
-  StudioCommandResult,
   StudioRendererProject,
   StudioRouteCatalog,
-  StudioUpdateModelSelectionRequest,
 } from '@/common/types/project/creativeStudioTypes';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
@@ -18,7 +16,7 @@ const STORAGE_ERROR_MESSAGE_KEY = 'conversation.creativeStudio.errors.storage';
 const UPDATE_FAILED_MESSAGE_KEY = 'conversation.creativeStudio.models.updateFailed';
 
 const mediaSelectionKey = (selection: StudioRendererProject['routing']['image']): string =>
-  selection === null ? 'none' : `${selection.providerId}\u0000${selection.adapterId}\u0000${selection.model}`;
+  selection === null ? 'none' : selection.choiceId;
 
 const projectCatalogKey = (project: StudioRendererProject | null): string => {
   if (project === null) return 'none';
@@ -168,10 +166,7 @@ export const useStudioModels = ({
         if (!(await beforeMutationRef.current())) return false;
         if (!mountedRef.current || projectRef.current?.id !== origin.id) return false;
         const current = projectRef.current;
-        const updateModelSelection = ipcBridge.creativeStudio.updateModelSelection.invoke as unknown as (
-          request: StudioUpdateModelSelectionRequest
-        ) => Promise<StudioCommandResult<StudioRendererProject>>;
-        const result = await updateModelSelection({
+        const result = await ipcBridge.creativeStudio.updateModelSelection.invoke({
           projectId: current.id,
           expectedRevision: current.revision,
           ...input,

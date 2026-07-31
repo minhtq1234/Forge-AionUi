@@ -40,6 +40,13 @@ export type StudioTextModelOption = StudioTextModelRef & {
   health: 'available' | 'unknown';
 };
 
+/** Main-issued media choice identity plus renderer-safe display metadata. */
+export type StudioMediaChoiceRef = {
+  choiceId: string;
+  providerId: string;
+  model: string;
+};
+
 /** An app-managed asset identity, deliberately not a filesystem path or URL. */
 export type StudioManagedAssetRef = {
   collection: 'assets' | 'imports' | 'thumbnails';
@@ -101,8 +108,9 @@ export type StudioJob = {
   updatedAt: string;
 };
 
-/** Renderer-facing job metadata. Provider task identity and charge idempotency stay in main. */
-export type StudioRendererJob = Omit<StudioJob, 'idempotencyKey' | 'providerJobId'> & {
+/** Renderer-facing job metadata. Provider task, adapter, and charge identities stay in main. */
+export type StudioRendererJob = Omit<StudioJob, 'provider' | 'idempotencyKey' | 'providerJobId'> & {
+  provider: StudioMediaChoiceRef;
   /** Main-derived recovery capability; never exposes the durable provider task identity. */
   canRetryDownload: boolean;
 };
@@ -163,9 +171,16 @@ export type StudioProject = {
   updatedAt: string;
 };
 
-/** Renderer-facing project metadata with every nested job sanitized. */
-export type StudioRendererProject = Omit<StudioProject, 'jobs'> & {
+export type StudioRendererRoutingPreferences = {
+  storyboard: StudioTextModelRef | null;
+  image: StudioMediaChoiceRef | null;
+  video: StudioMediaChoiceRef | null;
+};
+
+/** Renderer-facing project metadata with nested jobs and media selections sanitized. */
+export type StudioRendererProject = Omit<StudioProject, 'jobs' | 'routing'> & {
   jobs: Record<string, StudioRendererJob>;
+  routing: StudioRendererRoutingPreferences;
 };
 
 export type StudioProjectSummary = {
@@ -225,11 +240,11 @@ export type StudioConnectionCandidate = {
 };
 
 export type StudioRouteCatalogEntry = {
+  choiceId: string;
   providerId: string;
   providerName: string;
   model: string;
   health: 'available' | 'unknown' | 'unavailable';
-  adapterId: StudioProviderAdapterId;
   kind: StudioMediaKind;
   constraints: StudioRouteConstraints;
 };
@@ -265,6 +280,31 @@ export type StudioConnectionBinding = {
   validatedAt: string;
 };
 
+export type StudioConnectionIntegrationLabelKey = 'imageApi' | 'bytePlusSeedance' | 'selfHostedVideoGateway';
+
+export type StudioConnectionIntegration = {
+  integrationId: string;
+  kind: StudioMediaKind;
+  labelKey: StudioConnectionIntegrationLabelKey;
+};
+
+export type StudioConnectionRecord = {
+  bindingId: string;
+  providerId: string;
+  integrationId: string;
+  labelKey: StudioConnectionIntegrationLabelKey;
+  model: string;
+  capabilities: StudioConnectionCapabilities;
+  validatedAt: string;
+};
+
+export type StudioConnectionInventory = {
+  integrations: StudioConnectionIntegration[];
+  connections: StudioConnectionRecord[];
+};
+
+export type StudioConnectionValidationResult = Omit<StudioConnectionRecord, 'bindingId'>;
+
 export type StudioModelAvailability = 'ready' | 'selection_required' | 'setup_required' | 'unavailable';
 
 export type StudioRouteCatalog = {
@@ -275,12 +315,12 @@ export type StudioRouteCatalog = {
   };
   image: {
     status: StudioModelAvailability;
-    selected: StudioProviderRef | null;
+    selected: StudioMediaChoiceRef | null;
     options: StudioRouteCatalogEntry[];
   };
   video: {
     status: StudioModelAvailability;
-    selected: StudioProviderRef | null;
+    selected: StudioMediaChoiceRef | null;
     options: StudioRouteCatalogEntry[];
   };
   catalogVersion: string;
@@ -339,12 +379,14 @@ export type StudioModelSelectionChange =
     }
   | {
       role: 'image' | 'video';
-      selection: StudioProviderRef | null;
+      selection: Pick<StudioMediaChoiceRef, 'choiceId'> | null;
     };
 
 export type StudioUpdateModelSelectionRequest = StudioProjectRequest & {
   expectedRevision: number;
-} & StudioModelSelectionChange;
+  role: StudioModelSelectionChange['role'];
+  selection: StudioTextModelRef | Pick<StudioMediaChoiceRef, 'choiceId'> | null;
+};
 
 export type StudioUpdateSceneRequest = StudioProjectRequest & {
   sceneId: string;
@@ -380,18 +422,16 @@ export type StudioRetryJobRequest = StudioJobRequest & {
 
 export type StudioRetryDownloadRequest = StudioJobRequest;
 
-export type StudioSceneRouteSnapshot = {
+export type StudioSceneGenerationChoice = {
   sceneId: string;
-  providerId: string;
-  adapterId: StudioProviderAdapterId;
-  model: string;
+  choiceId: string;
   kind: StudioMediaKind;
 };
 
 export type StudioSubmitScenesRequest = StudioProjectRequest & {
   sceneIds: string[];
   expectedRevision: number;
-  routes: StudioSceneRouteSnapshot[];
+  routes: StudioSceneGenerationChoice[];
   catalogVersion: string;
 };
 
@@ -408,13 +448,13 @@ export type StudioListRoutesRequest = { projectId?: string };
 
 export type StudioValidateConnectionRequest = {
   providerId: string;
-  adapterId: StudioProviderAdapterId;
+  integrationId: string;
   model: string;
 };
 
 export type StudioSaveConnectionRequest = StudioValidateConnectionRequest;
 
-export type StudioRemoveConnectionRequest = { connectionId: string };
+export type StudioRemoveConnectionRequest = { bindingId: string };
 
 export type StudioImportOutcome = { status: 'imported'; asset: StudioAsset } | { status: 'cancelled' };
 
@@ -446,9 +486,11 @@ export type StudioDesktopApi = {
   retryDownload(input: StudioRetryDownloadRequest): Promise<StudioCommandResult<StudioRendererJob>>;
   chooseAndExportAssets(input: StudioChooseAndExportAssetsRequest): Promise<StudioCommandResult<StudioExportOutcome>>;
   listConnectionCandidates(): Promise<StudioCommandResult<StudioConnectionCandidate[]>>;
-  listConnections(): Promise<StudioCommandResult<StudioConnectionBinding[]>>;
-  validateConnection(input: StudioValidateConnectionRequest): Promise<StudioCommandResult<StudioConnectionBinding>>;
-  saveConnection(input: StudioSaveConnectionRequest): Promise<StudioCommandResult<StudioConnectionBinding>>;
+  listConnections(): Promise<StudioCommandResult<StudioConnectionInventory>>;
+  validateConnection(
+    input: StudioValidateConnectionRequest
+  ): Promise<StudioCommandResult<StudioConnectionValidationResult>>;
+  saveConnection(input: StudioSaveConnectionRequest): Promise<StudioCommandResult<StudioConnectionRecord>>;
   removeConnection(input: StudioRemoveConnectionRequest): Promise<StudioCommandResult<boolean>>;
   listRoutes(input?: StudioListRoutesRequest): Promise<StudioCommandResult<StudioRouteCatalog>>;
 };

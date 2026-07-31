@@ -8,8 +8,9 @@ import type {
   StudioAspectRatio,
   StudioMediaKind,
   StudioResolution,
-  StudioSceneRouteSnapshot,
+  StudioSceneGenerationChoice,
 } from '@/common/types/project/creativeStudioTypes';
+import type { GenerationReviewRouteSnapshot } from './GenerationControls';
 import { Alert, Button, Modal, Tag } from '@arco-design/web-react';
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -19,7 +20,7 @@ type ActionResult = void | Promise<unknown>;
 export type GenerationReviewRoute =
   | {
       status: 'valid' | 'invalid';
-      snapshot: StudioSceneRouteSnapshot;
+      snapshot: GenerationReviewRouteSnapshot;
       providerName: string | null;
     }
   | {
@@ -38,7 +39,7 @@ export type GenerationReviewScene = {
 
 export type GenerationReviewConfirmation = {
   sceneIds: string[];
-  routes: StudioSceneRouteSnapshot[];
+  routes: StudioSceneGenerationChoice[];
 };
 
 export type GenerationReviewModalProps = {
@@ -96,7 +97,7 @@ export const GenerationReviewModal: React.FC<GenerationReviewModalProps> = ({
     const validRoutes = scenes
       .filter((scene) => scene.route.status === 'valid' && routeMatchesScene(scene))
       .map((scene) => scene.route.snapshot)
-      .filter((route): route is StudioSceneRouteSnapshot => route !== null);
+      .filter((route): route is GenerationReviewRouteSnapshot => route !== null);
 
     return {
       totalDurationSeconds,
@@ -118,7 +119,7 @@ export const GenerationReviewModal: React.FC<GenerationReviewModalProps> = ({
     if (!review.canConfirm || submissionBlocked || submitting) return;
     void onConfirm({
       sceneIds: scenes.map((scene) => scene.id),
-      routes: review.validRoutes,
+      routes: review.validRoutes.map(({ sceneId, choiceId, kind }) => ({ sceneId, choiceId, kind })),
     });
   };
 

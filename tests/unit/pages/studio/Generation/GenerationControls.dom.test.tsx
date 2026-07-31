@@ -31,11 +31,11 @@ vi.mock('react-i18next', () => ({
 }));
 
 const imageRoute = (overrides: Partial<StudioRouteCatalogEntry> = {}): StudioRouteCatalogEntry => ({
+  choiceId: 'choice_image',
   providerId: 'provider_image',
   providerName: 'Image Provider',
   model: 'image-model-v1',
   health: 'available',
-  adapterId: 'weprompt-image-v1',
   kind: 'image',
   constraints: {
     aspectRatios: ['16:9'],
@@ -66,8 +66,8 @@ const catalog = (overrides: Partial<StudioRouteCatalog> = {}): StudioRouteCatalo
     image: {
       status: 'ready',
       selected: {
+        choiceId: suggested.choiceId,
         providerId: suggested.providerId,
-        adapterId: suggested.adapterId,
         model: suggested.model,
       },
       options: [suggested],
@@ -94,8 +94,8 @@ const project = (overrides: Partial<StudioRendererProject> = {}): StudioRenderer
   routing: {
     storyboard: null,
     image: {
+      choiceId: 'choice_image',
       providerId: 'provider_image',
-      adapterId: 'weprompt-image-v1',
       model: 'image-model-v1',
     },
     video: null,
@@ -111,8 +111,8 @@ const job = (overrides: Partial<StudioRendererJob>): StudioRendererJob => ({
   sceneId: 'scene-1',
   status: 'running',
   provider: {
+    choiceId: 'choice_video',
     providerId: 'provider_video',
-    adapterId: 'byteplus-seedance-v1',
     model: 'seedance-1-5-pro',
   },
   outputAssetIds: [],
@@ -298,9 +298,9 @@ describe('GenerationControls', () => {
 
   it('matches persisted image and video selections only against their corresponding catalogs for batch review', () => {
     const video = imageRoute({
+      choiceId: 'choice_video',
       providerId: 'provider_video',
       providerName: 'Video Provider',
-      adapterId: 'byteplus-seedance-v1',
       model: 'video-model-v1',
       kind: 'video',
     });
@@ -310,8 +310,8 @@ describe('GenerationControls', () => {
           storyboard: null,
           image: project().routing.image,
           video: {
+            choiceId: video.choiceId,
             providerId: video.providerId,
-            adapterId: video.adapterId,
             model: video.model,
           },
         },
@@ -320,8 +320,8 @@ describe('GenerationControls', () => {
         video: {
           status: 'ready',
           selected: {
+            choiceId: video.choiceId,
             providerId: video.providerId,
-            adapterId: video.adapterId,
             model: video.model,
           },
           options: [video],

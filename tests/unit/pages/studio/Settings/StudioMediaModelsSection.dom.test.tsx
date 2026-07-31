@@ -10,8 +10,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   StudioCommandResult,
-  StudioConnectionBinding,
   StudioConnectionCandidate,
+  StudioConnectionInventory,
+  StudioConnectionRecord,
+  StudioConnectionValidationResult,
 } from '@/common/types/project/creativeStudioTypes';
 import { StudioMediaModelsSection } from '@renderer/components/settings/SettingsModal/contents/ModelModalContent/StudioMediaModelsSection';
 
@@ -164,11 +166,21 @@ const candidate = (overrides: Partial<StudioConnectionCandidate> = {}): StudioCo
   ...overrides,
 });
 
-const binding = (overrides: Partial<StudioConnectionBinding> = {}): StudioConnectionBinding => ({
-  schemaVersion: 1,
-  id: 'binding_safe',
+const IMAGE_INTEGRATION_ID = 'integration_g7Q2mB4p';
+const SEEDANCE_INTEGRATION_ID = 'integration_r9L3vN6k';
+const GATEWAY_INTEGRATION_ID = 'integration_x5T8cW1h';
+
+const integrations: StudioConnectionInventory['integrations'] = [
+  { integrationId: IMAGE_INTEGRATION_ID, kind: 'image', labelKey: 'imageApi' },
+  { integrationId: SEEDANCE_INTEGRATION_ID, kind: 'video', labelKey: 'bytePlusSeedance' },
+  { integrationId: GATEWAY_INTEGRATION_ID, kind: 'video', labelKey: 'selfHostedVideoGateway' },
+];
+
+const binding = (overrides: Partial<StudioConnectionRecord> = {}): StudioConnectionRecord => ({
+  bindingId: 'binding_safe',
   providerId: 'provider_safe',
-  adapterId: 'weprompt-media-gateway-v1',
+  integrationId: GATEWAY_INTEGRATION_ID,
+  labelKey: 'selfHostedVideoGateway',
   model: 'open-sora',
   capabilities: {
     mediaKinds: ['video'],
@@ -182,6 +194,24 @@ const binding = (overrides: Partial<StudioConnectionBinding> = {}): StudioConnec
   },
   validatedAt: '2026-07-30T00:00:00.000Z',
   ...overrides,
+});
+
+const validation = (overrides: Partial<StudioConnectionValidationResult> = {}): StudioConnectionValidationResult => {
+  const record = binding();
+  return {
+    providerId: record.providerId,
+    integrationId: record.integrationId,
+    labelKey: record.labelKey,
+    model: record.model,
+    capabilities: record.capabilities,
+    validatedAt: record.validatedAt,
+    ...overrides,
+  };
+};
+
+const inventory = (connections: StudioConnectionRecord[] = [binding()]): StudioConnectionInventory => ({
+  integrations,
+  connections,
 });
 
 const openAddEditor = async (): Promise<HTMLElement> => {
@@ -198,7 +228,7 @@ const fillVideoTuple = async (model = 'open-sora-manual'): Promise<HTMLElement> 
     target: { value: 'provider_safe' },
   });
   fireEvent.change(within(dialog).getByRole('combobox', { name: 'settings.mediaModels.integrationLabel' }), {
-    target: { value: 'settings.mediaModels.integration.selfHostedVideoGateway' },
+    target: { value: GATEWAY_INTEGRATION_ID },
   });
   fireEvent.change(within(dialog).getByRole('combobox', { name: 'settings.mediaModels.model' }), {
     target: { value: model },
@@ -210,8 +240,8 @@ describe('StudioMediaModelsSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     bridge.listConnectionCandidates.invoke.mockResolvedValue(ok([candidate()]));
-    bridge.listConnections.invoke.mockResolvedValue(ok([binding()]));
-    bridge.validateConnection.invoke.mockResolvedValue(ok(binding({ id: 'validation_only' })));
+    bridge.listConnections.invoke.mockResolvedValue(ok(inventory()));
+    bridge.validateConnection.invoke.mockResolvedValue(ok(validation()));
     bridge.saveConnection.invoke.mockResolvedValue(ok(binding()));
     bridge.removeConnection.invoke.mockResolvedValue(ok(true));
   });
@@ -227,13 +257,15 @@ describe('StudioMediaModelsSection', () => {
       ])
     );
     bridge.listConnections.invoke.mockResolvedValue(
-      ok([
-        {
-          ...binding(),
-          authorization: 'Bearer secret',
-          path: '/private/provider.json',
-        } as StudioConnectionBinding,
-      ])
+      ok(
+        inventory([
+          {
+            ...binding(),
+            authorization: 'Bearer secret',
+            path: '/private/provider.json',
+          } as StudioConnectionRecord,
+        ])
+      )
     );
 
     render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
@@ -257,7 +289,7 @@ describe('StudioMediaModelsSection', () => {
         resolveCandidates = resolve;
       })
     );
-    bridge.listConnections.invoke.mockResolvedValue(ok([]));
+    bridge.listConnections.invoke.mockResolvedValue(ok(inventory([])));
     const onAddProvider = vi.fn();
     render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={onAddProvider} />);
 
@@ -270,7 +302,7 @@ describe('StudioMediaModelsSection', () => {
 
   it('surfaces list failure and refreshes canonical inventory', async () => {
     bridge.listConnectionCandidates.invoke.mockResolvedValueOnce(failure()).mockResolvedValueOnce(ok([candidate()]));
-    bridge.listConnections.invoke.mockResolvedValueOnce(ok([])).mockResolvedValueOnce(ok([binding()]));
+    bridge.listConnections.invoke.mockResolvedValueOnce(ok(inventory([]))).mockResolvedValueOnce(ok(inventory()));
     render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('settings.mediaModels.loadFailed');
@@ -322,17 +354,14 @@ describe('StudioMediaModelsSection', () => {
   });
 
   it('saves only the exact tuple after validation and clears validation when a field changes', async () => {
-    const validated = binding({
-      id: 'validation_only',
-      adapterId: 'weprompt-media-gateway-v1',
+    const validated = validation({
       model: 'open-sora-manual',
     });
     const saved = binding({
-      id: 'binding_manual',
-      adapterId: 'weprompt-media-gateway-v1',
+      bindingId: 'binding_manual',
       model: 'open-sora-manual',
     });
-    bridge.listConnections.invoke.mockResolvedValue(ok([]));
+    bridge.listConnections.invoke.mockResolvedValue(ok(inventory([])));
     bridge.validateConnection.invoke.mockResolvedValue(ok(validated));
     bridge.saveConnection.invoke.mockResolvedValue(ok(saved));
     render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
@@ -343,7 +372,7 @@ describe('StudioMediaModelsSection', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'settings.mediaModels.validate' }));
     const safeRequest = {
       providerId: 'provider_safe',
-      adapterId: 'weprompt-media-gateway-v1',
+      integrationId: GATEWAY_INTEGRATION_ID,
       model: 'open-sora-manual',
     };
     await waitFor(() => expect(bridge.validateConnection.invoke).toHaveBeenCalledExactlyOnceWith(safeRequest));
@@ -365,12 +394,12 @@ describe('StudioMediaModelsSection', () => {
   });
 
   it('rejects mismatched validation DTOs and gateways without silent output', async () => {
-    bridge.listConnections.invoke.mockResolvedValue(ok([]));
+    bridge.listConnections.invoke.mockResolvedValue(ok(inventory([])));
     bridge.validateConnection.invoke
-      .mockResolvedValueOnce(ok(binding({ providerId: 'provider_other', model: 'open-sora-manual' })))
+      .mockResolvedValueOnce(ok(validation({ providerId: 'provider_other', model: 'open-sora-manual' })))
       .mockResolvedValueOnce(
         ok(
-          binding({
+          validation({
             model: 'open-sora-manual',
             capabilities: { mediaKinds: ['video'], audioModes: ['speech'] },
           })
@@ -393,11 +422,11 @@ describe('StudioMediaModelsSection', () => {
     const calls: string[] = [];
     bridge.validateConnection.invoke.mockImplementation(async () => {
       calls.push('validate');
-      return ok(binding({ id: 'validation_only', model: 'replacement' }));
+      return ok(validation({ model: 'replacement' }));
     });
     bridge.saveConnection.invoke.mockImplementation(async () => {
       calls.push('save');
-      return ok(binding({ id: 'binding_replacement', model: 'replacement' }));
+      return ok(binding({ bindingId: 'binding_replacement', model: 'replacement' }));
     });
     bridge.removeConnection.invoke.mockImplementation(async () => {
       calls.push('remove');
@@ -415,18 +444,18 @@ describe('StudioMediaModelsSection', () => {
     const save = within(dialog).getByRole('button', { name: 'settings.mediaModels.save' });
     await waitFor(() => expect(save).toBeEnabled());
     fireEvent.click(save);
-    await waitFor(() => expect(bridge.removeConnection.invoke).toHaveBeenCalledWith({ connectionId: 'binding_safe' }));
+    await waitFor(() => expect(bridge.removeConnection.invoke).toHaveBeenCalledWith({ bindingId: 'binding_safe' }));
     expect(calls).toEqual(['validate', 'save', 'remove']);
   });
 
   it('revalidates to one canonical visible row when save returns a replacement ID', async () => {
-    bridge.saveConnection.invoke.mockResolvedValue(ok(binding({ id: 'binding_revalidated' })));
+    bridge.saveConnection.invoke.mockResolvedValue(ok(binding({ bindingId: 'binding_revalidated' })));
     render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
     const row = await screen.findByRole('listitem', { name: 'open-sora' });
     fireEvent.click(within(row).getByRole('button', { name: 'settings.mediaModels.revalidate' }));
     const request = {
       providerId: 'provider_safe',
-      adapterId: 'weprompt-media-gateway-v1',
+      integrationId: GATEWAY_INTEGRATION_ID,
       model: 'open-sora',
     };
 
@@ -436,7 +465,7 @@ describe('StudioMediaModelsSection', () => {
   });
 
   it('same-tuple edit replaces the visible row instead of duplicating it', async () => {
-    bridge.saveConnection.invoke.mockResolvedValue(ok(binding({ id: 'binding_edited' })));
+    bridge.saveConnection.invoke.mockResolvedValue(ok(binding({ bindingId: 'binding_edited' })));
     render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
     const row = await screen.findByRole('listitem', { name: 'open-sora' });
     fireEvent.click(within(row).getByRole('button', { name: 'settings.mediaModels.edit' }));
@@ -456,17 +485,17 @@ describe('StudioMediaModelsSection', () => {
 
     await waitFor(() =>
       expect(bridge.removeConnection.invoke).toHaveBeenCalledExactlyOnceWith({
-        connectionId: 'binding_safe',
+        bindingId: 'binding_safe',
       })
     );
   });
 
   it('refreshes and shows both records when old-binding removal fails after replacement save', async () => {
-    const replacement = binding({ id: 'binding_replacement', model: 'replacement' });
+    const replacement = binding({ bindingId: 'binding_replacement', model: 'replacement' });
     bridge.listConnections.invoke
-      .mockResolvedValueOnce(ok([binding()]))
-      .mockResolvedValue(ok([binding(), replacement]));
-    bridge.validateConnection.invoke.mockResolvedValue(ok(replacement));
+      .mockResolvedValueOnce(ok(inventory()))
+      .mockResolvedValue(ok(inventory([binding(), replacement])));
+    bridge.validateConnection.invoke.mockResolvedValue(ok(validation({ model: 'replacement' })));
     bridge.saveConnection.invoke.mockResolvedValue(ok(replacement));
     bridge.removeConnection.invoke.mockResolvedValue(failure('settings.mediaModels.validationFailed'));
     render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);

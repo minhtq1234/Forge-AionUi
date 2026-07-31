@@ -115,7 +115,7 @@ describe('initCreativeStudioBridge', () => {
         retryJob: vi.fn(),
         retryDownload: vi.fn(),
         listConnectionCandidates: vi.fn(async () => []),
-        listConnections: vi.fn(async () => []),
+        listConnections: vi.fn(async () => ({ integrations: [], connections: [] })),
         validateConnection: vi.fn(),
         saveConnection: vi.fn(),
         removeConnection: vi.fn(),
@@ -218,9 +218,7 @@ describe('initCreativeStudioBridge', () => {
       routes: [
         {
           sceneId: 'scene_1',
-          providerId: 'provider_1',
-          adapterId: 'weprompt-media-gateway-v1',
-          model: 'open-sora',
+          choiceId: 'choice_video',
           kind: 'video',
         },
       ],
@@ -290,17 +288,26 @@ describe('initCreativeStudioBridge', () => {
           models: [{ model: 'open-sora', health: 'available' as const }],
         },
       ]),
-      listConnections: vi.fn(async () => [
-        {
-          schemaVersion: 1 as const,
-          id: 'binding_1',
-          providerId: 'provider_1',
-          adapterId: 'weprompt-media-gateway-v1' as const,
-          model: 'open-sora',
-          capabilities: { mediaKinds: ['video' as const], audioModes: ['none'] },
-          validatedAt: '2026-07-30T00:00:00.000Z',
-        },
-      ]),
+      listConnections: vi.fn(async () => ({
+        integrations: [
+          {
+            integrationId: 'integration_x5T8cW1h',
+            kind: 'video' as const,
+            labelKey: 'selfHostedVideoGateway' as const,
+          },
+        ],
+        connections: [
+          {
+            bindingId: 'binding_1',
+            providerId: 'provider_1',
+            integrationId: 'integration_x5T8cW1h',
+            labelKey: 'selfHostedVideoGateway' as const,
+            model: 'open-sora',
+            capabilities: { mediaKinds: ['video' as const], audioModes: ['none'] },
+            validatedAt: '2026-07-30T00:00:00.000Z',
+          },
+        ],
+      })),
       validateConnection: vi.fn(async () => {
         throw new CreativeStudioServiceError('provider_error');
       }),
@@ -316,7 +323,7 @@ describe('initCreativeStudioBridge', () => {
     await expect(candidates(undefined)).resolves.toEqual({ ok: true, data: await service.listConnectionCandidates() });
     await expect(connections(undefined)).resolves.toEqual({ ok: true, data: await service.listConnections() });
     await expect(
-      validate({ providerId: 'provider_1', adapterId: 'weprompt-media-gateway-v1', model: 'open-sora' })
+      validate({ providerId: 'provider_1', integrationId: 'integration_x5T8cW1h', model: 'open-sora' })
     ).resolves.toEqual({
       ok: false,
       error: { code: 'provider_error', messageKey: 'conversation.creativeStudio.errors.provider' },

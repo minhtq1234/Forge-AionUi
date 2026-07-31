@@ -19,6 +19,9 @@ import type {
   StudioAsset,
   StudioConnectionBinding,
   StudioConnectionCandidate,
+  StudioConnectionInventory,
+  StudioConnectionRecord,
+  StudioConnectionValidationResult,
   StudioExportItem,
   StudioListRoutesRequest,
   StudioRemoveConnectionRequest,
@@ -33,6 +36,7 @@ import type {
   StudioRetryJobRequest,
   StudioSubmitScenesRequest,
   StudioModelAvailability,
+  StudioMediaChoiceRef,
   StudioProviderRef,
   StudioRouteCatalogEntry,
   StudioTextModelOption,
@@ -41,9 +45,11 @@ import type {
 } from '@/common/types/project/creativeStudioTypes';
 import { CreativeStudioStoreError, type CreativeStudioStore } from '@process/services/creative-studio/store';
 import type {
+  StudioGenerationRoute,
   StudioGenerationRouteCatalog,
   StudioProviderResolver,
 } from '@process/services/creative-studio/providerResolver';
+import { createStudioMediaChoiceId } from '@process/services/creative-studio/providerResolver';
 import type { GenerationProviderAdapterRegistry } from '@process/services/creative-studio/adapters';
 import type { StudioJobManager } from '@process/services/creative-studio/jobManager';
 import type { IProvider } from '@/common/config/storage';
@@ -65,6 +71,31 @@ const NONTERMINAL_JOB_STATUSES: ReadonlySet<StudioJob['status']> = new Set([
   'running',
   'needs_attention',
 ]);
+const MEDIA_INTEGRATIONS = [
+  {
+    integrationId: 'integration_g7Q2mB4p',
+    adapterId: 'weprompt-image-v1',
+    kind: 'image',
+    labelKey: 'imageApi',
+  },
+  {
+    integrationId: 'integration_r9L3vN6k',
+    adapterId: 'byteplus-seedance-v1',
+    kind: 'video',
+    labelKey: 'bytePlusSeedance',
+  },
+  {
+    integrationId: 'integration_x5T8cW1h',
+    adapterId: 'weprompt-media-gateway-v1',
+    kind: 'video',
+    labelKey: 'selfHostedVideoGateway',
+  },
+] as const satisfies ReadonlyArray<{
+  integrationId: string;
+  adapterId: StudioConnectionBinding['adapterId'];
+  kind: 'image' | 'video';
+  labelKey: 'imageApi' | 'bytePlusSeedance' | 'selfHostedVideoGateway';
+}>;
 
 export type CreativeStudioService = {
   listProjects(): Promise<StudioProjectSummary[]>;
@@ -92,9 +123,9 @@ export type CreativeStudioService = {
     includeReferences: boolean;
   }): Promise<{ folderName: string; exported: StudioExportItem[]; missingSceneIds: string[] }>;
   listConnectionCandidates(): Promise<StudioConnectionCandidate[]>;
-  listConnections(): Promise<StudioConnectionBinding[]>;
-  validateConnection(input: StudioValidateConnectionRequest): Promise<StudioConnectionBinding>;
-  saveConnection(input: StudioSaveConnectionRequest): Promise<StudioConnectionBinding>;
+  listConnections(): Promise<StudioConnectionInventory>;
+  validateConnection(input: StudioValidateConnectionRequest): Promise<StudioConnectionValidationResult>;
+  saveConnection(input: StudioSaveConnectionRequest): Promise<StudioConnectionRecord>;
   removeConnection(input: StudioRemoveConnectionRequest): Promise<boolean>;
   listRoutes(input?: StudioListRoutesRequest): Promise<StudioRouteCatalog>;
   updateModelSelection(input: StudioUpdateModelSelectionRequest): Promise<StudioRendererProject>;
@@ -107,7 +138,7 @@ export type CreativeStudioServiceDeps = {
   createSceneId?: () => string;
   createConnectionId?: () => string;
   providerResolver?: StudioProviderResolver;
-  validateConnection?: (input: StudioValidateConnectionRequest) => Promise<StudioConnectionBinding>;
+  validateConnection?: (input: StudioInternalConnectionRequest) => Promise<StudioConnectionBinding>;
   listProviders?: () => Promise<IProvider[]>;
   adapterRegistry?: GenerationProviderAdapterRegistry;
   jobManager?: StudioJobManager;
@@ -124,6 +155,12 @@ export type CreativeStudioServiceDeps = {
       includeReferences: boolean;
     }): Promise<{ folderName: string; exported: StudioExportItem[]; missingSceneIds: string[] }>;
   };
+};
+
+type StudioInternalConnectionRequest = {
+  providerId: string;
+  adapterId: StudioConnectionBinding['adapterId'];
+  model: string;
 };
 
 /** A safe, stable service error that can cross only through the bridge error mapper. */
@@ -197,7 +234,7 @@ const providerIsAvailable = (provider: IProvider, model: string, requireListedMo
   (!requireListedModel || provider.models.includes(model));
 
 const sanitizedCapabilities = (
-  adapterId: StudioValidateConnectionRequest['adapterId'],
+  adapterId: StudioInternalConnectionRequest['adapterId'],
   model: string,
   capabilities: Record<string, unknown> | undefined
 ): StudioConnectionBinding['capabilities'] => {
@@ -311,13 +348,11 @@ const assertSubmitScenesInput = (input: StudioSubmitScenesRequest): void => {
       !isSafeId(route.sceneId) ||
       !selectedSceneIds.has(route.sceneId) ||
       routedSceneIds.has(route.sceneId) ||
-      !isSafeId(route.providerId) ||
-      !['weprompt-image-v1', 'byteplus-seedance-v1', 'weprompt-media-gateway-v1'].includes(route.adapterId) ||
+      !isSafeId(route.choiceId) ||
       !MEDIA_KINDS.has(route.kind)
     ) {
       throw invalid('Invalid Studio generation route');
     }
-    assertText(route.model, 256, 'route model', true);
     routedSceneIds.add(route.sceneId);
   }
 };
@@ -333,12 +368,24 @@ const assertScene = (scene: StudioEditableScene): void => {
   if (scene.referenceAssetId !== null) assertSafeId(scene.referenceAssetId, 'reference asset id');
 };
 
+const mediaKindForProviderRef = (provider: StudioProviderRef): 'image' | 'video' =>
+  provider.adapterId === 'weprompt-image-v1' ? 'image' : 'video';
+
+const toRendererMediaChoice = (
+  provider: StudioProviderRef,
+  kind: 'image' | 'video' = mediaKindForProviderRef(provider)
+): StudioMediaChoiceRef => ({
+  choiceId: createStudioMediaChoiceId({ ...provider, kind }),
+  providerId: provider.providerId,
+  model: provider.model,
+});
+
 const toRendererJob = (job: StudioJob): StudioRendererJob => ({
   id: job.id,
   projectId: job.projectId,
   sceneId: job.sceneId,
   status: job.status,
-  provider: { ...job.provider },
+  provider: toRendererMediaChoice(job.provider),
   outputAssetIds: [...job.outputAssetIds],
   error: job.error === null ? null : { ...job.error },
   canRetryDownload: job.status === 'failed' && job.error?.code === 'download_failed' && job.providerJobId !== null,
@@ -400,7 +447,11 @@ const toRendererProject = (project: StudioProject): StudioRendererProject => ({
     Object.entries(project.assets).map(([assetId, asset]) => [assetId, toRendererAsset(asset)])
   ),
   jobs: Object.fromEntries(Object.entries(project.jobs).map(([jobId, job]) => [jobId, toRendererJob(job)])),
-  routing: structuredClone(project.routing),
+  routing: {
+    storyboard: project.routing.storyboard === null ? null : { ...project.routing.storyboard },
+    image: project.routing.image === null ? null : toRendererMediaChoice(project.routing.image, 'image'),
+    video: project.routing.video === null ? null : toRendererMediaChoice(project.routing.video, 'video'),
+  },
   createdAt: project.createdAt,
   updatedAt: project.updatedAt,
 });
@@ -418,7 +469,7 @@ const modelStatus = (
       ? 'setup_required'
       : 'selection_required';
 
-const mediaRouteMatches = (route: StudioRouteCatalogEntry, selected: StudioProviderRef): boolean =>
+const mediaRouteMatches = (route: StudioGenerationRoute, selected: StudioProviderRef): boolean =>
   route.providerId === selected.providerId && route.adapterId === selected.adapterId && route.model === selected.model;
 
 const textModelMatches = (option: StudioTextModelOption, selected: StudioTextModelRef): boolean =>
@@ -450,7 +501,49 @@ const sanitizedStoryboardOptions = (options: StudioTextModelOption[]): StudioTex
   );
 };
 
-const routeSupportsProject = (route: StudioRouteCatalogEntry, project: StudioProject | null): boolean => {
+const toRendererRoute = (route: StudioGenerationRoute): StudioRouteCatalogEntry => ({
+  choiceId: route.choiceId,
+  providerId: route.providerId,
+  providerName: route.providerName,
+  model: route.model,
+  health: route.health,
+  kind: route.kind,
+  constraints: {
+    aspectRatios: [...route.constraints.aspectRatios],
+    resolutions: [...route.constraints.resolutions],
+    minDurationSeconds: route.constraints.minDurationSeconds,
+    maxDurationSeconds: route.constraints.maxDurationSeconds,
+    supportsFirstFrame: route.constraints.supportsFirstFrame,
+    silentOutput: route.constraints.silentOutput,
+  },
+});
+
+const integrationForId = (integrationId: string) =>
+  MEDIA_INTEGRATIONS.find((integration) => integration.integrationId === integrationId);
+
+const integrationForAdapter = (adapterId: StudioConnectionBinding['adapterId']) =>
+  MEDIA_INTEGRATIONS.find((integration) => integration.adapterId === adapterId);
+
+const toConnectionRecord = (binding: StudioConnectionBinding): StudioConnectionRecord => {
+  const integration = integrationForAdapter(binding.adapterId);
+  if (!integration) throw new CreativeStudioStoreError('storage_error', 'Unknown Studio connection integration');
+  return {
+    bindingId: binding.id,
+    providerId: binding.providerId,
+    integrationId: integration.integrationId,
+    labelKey: integration.labelKey,
+    model: binding.model,
+    capabilities: sanitizedCapabilities(binding.adapterId, binding.model, binding.capabilities),
+    validatedAt: binding.validatedAt,
+  };
+};
+
+const toConnectionValidation = (binding: StudioConnectionBinding): StudioConnectionValidationResult => {
+  const { bindingId: _bindingId, ...validation } = toConnectionRecord(binding);
+  return validation;
+};
+
+const routeSupportsProject = (route: StudioGenerationRoute, project: StudioProject | null): boolean => {
   if (route.health === 'unavailable' || !route.constraints.silentOutput) return false;
   if (project === null) return true;
   if (
@@ -496,20 +589,22 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
       throw new CreativeStudioServiceError('provider_error');
     }
     storyboardOptions = sanitizedStoryboardOptions(storyboardOptions);
-    const imageOptions = generation.routes.filter(
+    const imageRoutes = generation.routes.filter(
       (route) => route.kind === 'image' && routeSupportsProject(route, project)
     );
-    const videoOptions = generation.routes.filter(
+    const videoRoutes = generation.routes.filter(
       (route) => route.kind === 'video' && routeSupportsProject(route, project)
     );
+    const imageOptions = imageRoutes.map(toRendererRoute);
+    const videoOptions = videoRoutes.map(toRendererRoute);
     const selected = project?.routing ?? { storyboard: null, image: null, video: null };
     const storyboardSelectionAvailable =
       selected.storyboard !== null &&
       storyboardOptions.some((option) => textModelMatches(option, selected.storyboard!));
     const imageSelectionAvailable =
-      selected.image !== null && imageOptions.some((route) => mediaRouteMatches(route, selected.image!));
+      selected.image !== null && imageRoutes.some((route) => mediaRouteMatches(route, selected.image!));
     const videoSelectionAvailable =
-      selected.video !== null && videoOptions.some((route) => mediaRouteMatches(route, selected.video!));
+      selected.video !== null && videoRoutes.some((route) => mediaRouteMatches(route, selected.video!));
     const storyboard = {
       status: modelStatus(selected.storyboard, storyboardOptions.length, storyboardSelectionAvailable),
       selected: selected.storyboard,
@@ -517,12 +612,12 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
     };
     const image = {
       status: modelStatus(selected.image, imageOptions.length, imageSelectionAvailable),
-      selected: selected.image,
+      selected: selected.image === null ? null : toRendererMediaChoice(selected.image, 'image'),
       options: imageOptions,
     };
     const video = {
       status: modelStatus(selected.video, videoOptions.length, videoSelectionAvailable),
-      selected: selected.video,
+      selected: selected.video === null ? null : toRendererMediaChoice(selected.video, 'video'),
       options: videoOptions,
     };
     const catalogVersion = createHash('sha256')
@@ -534,7 +629,7 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
             model,
             health,
           })),
-          media: generation.routes,
+          media: [...imageOptions, ...videoOptions],
         })
       )
       .digest('hex')
@@ -547,6 +642,60 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
         video,
         catalogVersion,
       },
+    };
+  };
+
+  const validateConnectionBinding = async (
+    input: StudioValidateConnectionRequest
+  ): Promise<StudioConnectionBinding> => {
+    assertSafeId(input.providerId, 'provider id');
+    assertSafeId(input.integrationId, 'integration id');
+    assertText(input.model, 256, 'connection model', true);
+    const integration = integrationForId(input.integrationId);
+    if (!integration) throw invalid('Invalid Studio integration');
+    const normalizedInput: StudioInternalConnectionRequest = {
+      providerId: input.providerId,
+      adapterId: integration.adapterId,
+      model: input.model.trim(),
+    };
+    if (deps.validateConnection) {
+      const validated = await deps.validateConnection(normalizedInput);
+      if (
+        validated.providerId !== normalizedInput.providerId ||
+        validated.adapterId !== normalizedInput.adapterId ||
+        validated.model.trim() !== normalizedInput.model
+      ) {
+        throw new CreativeStudioServiceError('provider_error');
+      }
+      return { ...validated, model: normalizedInput.model };
+    }
+    if (!deps.listProviders || !deps.adapterRegistry) throw new CreativeStudioServiceError('invalid_route');
+    let providers: IProvider[];
+    try {
+      providers = await deps.listProviders();
+    } catch {
+      throw new CreativeStudioServiceError('provider_error');
+    }
+    const provider = providers.find((candidate) => candidate.id === normalizedInput.providerId);
+    if (!provider || !providerIsAvailable(provider, normalizedInput.model, false)) {
+      throw new CreativeStudioServiceError('invalid_route');
+    }
+    const adapter = deps.adapterRegistry.get(normalizedInput.adapterId);
+    if (!adapter) throw new CreativeStudioServiceError('invalid_route');
+    const validation = await adapter.validateConnection(
+      { model: normalizedInput.model },
+      provider,
+      new AbortController().signal
+    );
+    if (!validation.ok) throw new CreativeStudioServiceError('provider_error');
+    return {
+      schemaVersion: 1,
+      id: 'validation_only',
+      providerId: provider.id,
+      adapterId: adapter.id,
+      model: normalizedInput.model,
+      capabilities: sanitizedCapabilities(adapter.id, normalizedInput.model, validation.capabilities),
+      validatedAt: new Date().toISOString(),
     };
   };
 
@@ -672,15 +821,15 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
         throw invalid('Invalid Studio model role');
       }
       if (input.selection !== null) {
-        assertSafeId(input.selection.providerId, 'provider id');
-        assertText(input.selection.model, 256, 'model', true);
-        if (
-          input.role !== 'storyboard' &&
-          !['weprompt-image-v1', 'byteplus-seedance-v1', 'weprompt-media-gateway-v1'].includes(
-            input.selection.adapterId
-          )
-        ) {
-          throw invalid('Invalid Studio adapter');
+        if (input.role === 'storyboard') {
+          if (!('providerId' in input.selection) || !('model' in input.selection)) {
+            throw invalid('Invalid Studio storyboard model selection');
+          }
+          assertSafeId(input.selection.providerId, 'provider id');
+          assertText(input.selection.model, 256, 'model', true);
+        } else {
+          if (!('choiceId' in input.selection)) throw invalid('Invalid Studio media choice');
+          assertSafeId(input.selection.choiceId, 'media choice id');
         }
       }
       const project = await deps.store.getProject(input.projectId);
@@ -695,6 +844,9 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
         selection = null;
         isAvailable = true;
       } else if (input.role === 'storyboard') {
+        if (!('providerId' in input.selection) || !('model' in input.selection)) {
+          throw invalid('Invalid Studio storyboard model selection');
+        }
         const storyboardSelection: StudioTextModelRef = {
           providerId: input.selection.providerId,
           model: input.selection.model,
@@ -702,15 +854,24 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
         selection = storyboardSelection;
         isAvailable = built.catalog.storyboard.options.some((option) => textModelMatches(option, storyboardSelection));
       } else {
-        const mediaSelection: StudioProviderRef = {
-          providerId: input.selection.providerId,
-          adapterId: input.selection.adapterId,
-          model: input.selection.model,
-        };
-        selection = mediaSelection;
-        isAvailable = built.catalog[input.role].options.some(
-          (route) => route.kind === input.role && mediaRouteMatches(route, mediaSelection)
+        if (!('choiceId' in input.selection)) throw invalid('Invalid Studio media choice');
+        const choiceId = input.selection.choiceId;
+        const catalogSelection = built.catalog[input.role].options.find(
+          (route) => route.kind === input.role && route.choiceId === choiceId
         );
+        const resolved = built.generation.routes.find(
+          (route) =>
+            catalogSelection !== undefined && route.kind === input.role && route.choiceId === catalogSelection.choiceId
+        );
+        selection =
+          resolved === undefined
+            ? null
+            : {
+                providerId: resolved.providerId,
+                adapterId: resolved.adapterId,
+                model: resolved.model,
+              };
+        isAvailable = resolved !== undefined;
       }
       if (!isAvailable) throw new CreativeStudioServiceError('invalid_route');
       return notify(
@@ -891,9 +1052,29 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
       if (input.catalogVersion !== built.catalog.catalogVersion) {
         throw new CreativeStudioServiceError('invalid_route');
       }
+      const resolvedRoutes = input.routes.map((choice) => {
+        const scene = project.scenes[choice.sceneId];
+        const available = built.catalog[choice.kind].options.some(
+          (option) => option.kind === choice.kind && option.choiceId === choice.choiceId
+        );
+        const route = built.generation.routes.find(
+          (candidate) => candidate.kind === choice.kind && candidate.choiceId === choice.choiceId
+        );
+        if (scene?.mediaKind !== choice.kind || !available || route === undefined) {
+          throw new CreativeStudioServiceError('invalid_route');
+        }
+        return {
+          sceneId: choice.sceneId,
+          providerId: route.providerId,
+          adapterId: route.adapterId,
+          model: route.model,
+          kind: route.kind,
+        };
+      });
       return (
         await deps.jobManager.submitScenes({
           ...input,
+          routes: resolvedRoutes,
           catalogVersion: built.generation.generationCatalogVersion,
         })
       ).map(toRendererJob);
@@ -953,52 +1134,24 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
       }
     },
 
-    async listConnections(): Promise<StudioConnectionBinding[]> {
-      return deps.store.listConnections();
-    },
-
-    async validateConnection(input: StudioValidateConnectionRequest): Promise<StudioConnectionBinding> {
-      assertSafeId(input.providerId, 'provider id');
-      assertText(input.model, 256, 'connection model', true);
-      const normalizedInput = { ...input, model: input.model.trim() };
-      if (!['weprompt-image-v1', 'byteplus-seedance-v1', 'weprompt-media-gateway-v1'].includes(input.adapterId)) {
-        throw invalid('Invalid Studio adapter');
-      }
-      if (deps.validateConnection) {
-        const validated = await deps.validateConnection(normalizedInput);
-        return { ...validated, model: normalizedInput.model };
-      }
-      if (!deps.listProviders || !deps.adapterRegistry) throw new CreativeStudioServiceError('invalid_route');
-      let providers: IProvider[];
-      try {
-        providers = await deps.listProviders();
-      } catch {
-        throw new CreativeStudioServiceError('provider_error');
-      }
-      const provider = providers.find((candidate) => candidate.id === normalizedInput.providerId);
-      if (!provider || !providerIsAvailable(provider, normalizedInput.model, false))
-        throw new CreativeStudioServiceError('invalid_route');
-      const adapter = deps.adapterRegistry.get(input.adapterId);
-      if (!adapter) throw new CreativeStudioServiceError('invalid_route');
-      const validation = await adapter.validateConnection(
-        { model: normalizedInput.model },
-        provider,
-        new AbortController().signal
-      );
-      if (!validation.ok) throw new CreativeStudioServiceError('provider_error');
+    async listConnections(): Promise<StudioConnectionInventory> {
+      const connections = (await deps.store.listConnections()).map(toConnectionRecord);
       return {
-        schemaVersion: 1,
-        id: 'validation_only',
-        providerId: provider.id,
-        adapterId: adapter.id,
-        model: normalizedInput.model,
-        capabilities: sanitizedCapabilities(adapter.id, normalizedInput.model, validation.capabilities),
-        validatedAt: new Date().toISOString(),
+        integrations: MEDIA_INTEGRATIONS.map(({ integrationId, kind, labelKey }) => ({
+          integrationId,
+          kind,
+          labelKey,
+        })),
+        connections,
       };
     },
 
-    async saveConnection(input: StudioSaveConnectionRequest): Promise<StudioConnectionBinding> {
-      const validated = await this.validateConnection(input);
+    async validateConnection(input: StudioValidateConnectionRequest): Promise<StudioConnectionValidationResult> {
+      return toConnectionValidation(await validateConnectionBinding(input));
+    },
+
+    async saveConnection(input: StudioSaveConnectionRequest): Promise<StudioConnectionRecord> {
+      const validated = await validateConnectionBinding(input);
       const binding: StudioConnectionBinding = {
         ...validated,
         schemaVersion: 1,
@@ -1007,12 +1160,12 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
       if (!isSafeId(binding.id)) {
         throw new CreativeStudioStoreError('storage_error', 'Unable to allocate Studio connection identity');
       }
-      return deps.store.saveConnection(binding);
+      return toConnectionRecord(await deps.store.saveConnection(binding));
     },
 
     async removeConnection(input: StudioRemoveConnectionRequest): Promise<boolean> {
-      assertSafeId(input.connectionId, 'connection id');
-      return deps.store.removeConnection(input.connectionId);
+      assertSafeId(input.bindingId, 'connection id');
+      return deps.store.removeConnection(input.bindingId);
     },
 
     async listRoutes(input: StudioListRoutesRequest = {}): Promise<StudioRouteCatalog> {

@@ -30,6 +30,7 @@ import {
   createCreativeStudioService,
   type CreativeStudioService,
 } from '@process/services/creative-studio/creativeStudioService';
+import { createStudioMediaChoiceId } from '@process/services/creative-studio/providerResolver';
 import {
   StudioStoryboardPlannerError,
   type StudioStoryboardPlanner,
@@ -99,24 +100,70 @@ const storyboardOptions: StudioTextModelOption[] = [
 
 const routeOption = (
   kind: 'image' | 'video',
-  overrides: Partial<StudioRouteCatalogEntry> = {}
-): StudioRouteCatalogEntry => ({
-  providerId: 'provider_1',
-  providerName: 'Provider One',
-  adapterId: kind === 'image' ? 'weprompt-image-v1' : 'weprompt-media-gateway-v1',
-  model: `${kind}-model`,
-  health: 'available',
-  kind,
-  constraints: {
-    aspectRatios: ['16:9'],
-    resolutions: ['1080p'],
-    minDurationSeconds: 1,
-    maxDurationSeconds: 12,
-    supportsFirstFrame: true,
-    silentOutput: true,
-  },
-  ...overrides,
-});
+  overrides: Partial<StudioRouteCatalogEntry & { adapterId: 'weprompt-image-v1' | 'weprompt-media-gateway-v1' }> = {}
+): StudioRouteCatalogEntry & { adapterId: 'weprompt-image-v1' | 'weprompt-media-gateway-v1' } => {
+  const route = {
+    providerId: 'provider_1',
+    providerName: 'Provider One',
+    adapterId: kind === 'image' ? ('weprompt-image-v1' as const) : ('weprompt-media-gateway-v1' as const),
+    model: `${kind}-model`,
+    health: 'available' as const,
+    kind,
+    constraints: {
+      aspectRatios: ['16:9'],
+      resolutions: ['1080p'],
+      minDurationSeconds: 1,
+      maxDurationSeconds: 12,
+      supportsFirstFrame: true,
+      silentOutput: true,
+    },
+    ...overrides,
+  };
+  return {
+    ...route,
+    choiceId:
+      overrides.choiceId ??
+      createStudioMediaChoiceId({
+        providerId: route.providerId,
+        adapterId: route.adapterId,
+        model: route.model,
+        kind: route.kind,
+      }),
+  };
+};
+
+const KNOWN_ADAPTER_SENTINEL = 'weprompt-media-gateway-v1';
+const GATEWAY_INTEGRATION_ID = 'integration_x5T8cW1h';
+
+type RendererBoundaryLeak = {
+  path: string;
+  reason: 'adapter_key' | 'adapter_value';
+};
+
+const collectRendererBoundaryLeaks = (
+  value: unknown,
+  valuePath = '$',
+  found: RendererBoundaryLeak[] = []
+): RendererBoundaryLeak[] => {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => collectRendererBoundaryLeaks(item, `${valuePath}[${index}]`, found));
+    return found;
+  }
+  if (typeof value !== 'object' || value === null) {
+    if (value === KNOWN_ADAPTER_SENTINEL) found.push({ path: valuePath, reason: 'adapter_value' });
+    return found;
+  }
+  for (const [key, nested] of Object.entries(value)) {
+    const nestedPath = `${valuePath}.${key}`;
+    if (key === 'adapterId') found.push({ path: nestedPath, reason: 'adapter_key' });
+    collectRendererBoundaryLeaks(nested, nestedPath, found);
+  }
+  return found;
+};
+
+const expectRendererBoundaryToHideAdapters = (value: unknown): void => {
+  expect(collectRendererBoundaryLeaks(value)).toEqual([]);
+};
 
 type SelectionService = CreativeStudioService & {
   updateModelSelection(input: StudioUpdateModelSelectionRequest): Promise<StudioRendererProject>;
@@ -222,8 +269,15 @@ describe('CreativeStudioService', () => {
         dispose: vi.fn(),
       },
     } as unknown as Parameters<typeof createCreativeStudioService>[0]);
-    const project = await generationService.createProject(makeInput());
+    const createdProject = await generationService.createProject(makeInput());
+    const project = await generationService.updateScene({
+      projectId: createdProject.id,
+      expectedRevision: createdProject.revision,
+      sceneId: 'scene_1',
+      scene: makeScene('scene_1'),
+    });
     const catalog = await generationService.listRoutes({ projectId: project.id });
+    const reviewedRoute = catalog.video.options[0]!;
     const submitInput = {
       projectId: project.id,
       expectedRevision: project.revision,
@@ -232,9 +286,7 @@ describe('CreativeStudioService', () => {
       routes: [
         {
           sceneId: 'scene_1',
-          providerId: 'provider_1',
-          adapterId: 'weprompt-media-gateway-v1' as const,
-          model: 'open-sora',
+          choiceId: reviewedRoute.choiceId,
           kind: 'video' as const,
         },
       ],
@@ -248,8 +300,19 @@ describe('CreativeStudioService', () => {
     await generationService.retryDownload(jobInput);
 
     expect(submitScenes).toHaveBeenCalledWith({
-      ...submitInput,
+      projectId: project.id,
+      expectedRevision: project.revision,
+      sceneIds: ['scene_1'],
       catalogVersion: 'generation-v1',
+      routes: [
+        {
+          sceneId: 'scene_1',
+          providerId: 'provider_1',
+          adapterId: 'weprompt-media-gateway-v1',
+          model: 'open-sora',
+          kind: 'video',
+        },
+      ],
     });
     expect(cancelJob).toHaveBeenCalledWith(jobInput);
     expect(retryJob).toHaveBeenCalledWith(retryInput);
@@ -299,11 +362,11 @@ describe('CreativeStudioService', () => {
 
     const binding = await connectionService.saveConnection({
       providerId: 'provider_1',
-      adapterId: 'weprompt-media-gateway-v1',
+      integrationId: GATEWAY_INTEGRATION_ID,
       model: 'open-sora',
     });
 
-    expect(binding.id).toBe('binding_1');
+    expect(binding.bindingId).toBe('binding_1');
     expect((await connectionService.getProject(project.id))?.routing.video).toBeNull();
   });
 
@@ -323,9 +386,93 @@ describe('CreativeStudioService', () => {
       onProjectUpdated,
     });
 
-    await expect(reloaded.listConnections()).resolves.toMatchObject([{ id: 'binding_stale' }]);
-    await expect(reloaded.removeConnection({ connectionId: 'binding_stale' })).resolves.toBe(true);
-    await expect(reloaded.listConnections()).resolves.toEqual([]);
+    await expect(reloaded.listConnections()).resolves.toMatchObject({
+      connections: [{ bindingId: 'binding_stale' }],
+    });
+    await expect(reloaded.removeConnection({ bindingId: 'binding_stale' })).resolves.toBe(true);
+    await expect(reloaded.listConnections()).resolves.toMatchObject({ connections: [] });
+  });
+
+  it('uses opaque Settings binding and integration identities for inventory and every mutation result', async () => {
+    const connectionStore = createCreativeStudioStore({ rootDir });
+    await connectionStore.saveConnection({
+      schemaVersion: 1,
+      id: 'binding_existing',
+      providerId: 'provider_1',
+      adapterId: KNOWN_ADAPTER_SENTINEL,
+      model: 'open-sora',
+      capabilities: { mediaKinds: ['video'], audioModes: ['none'] },
+      validatedAt: '2026-07-30T00:00:00.000Z',
+    });
+    const validateInternalConnection = vi.fn(
+      async (input: { providerId: string; adapterId: typeof KNOWN_ADAPTER_SENTINEL; model: string }) => ({
+        schemaVersion: 1 as const,
+        id: 'validation_only',
+        providerId: input.providerId,
+        adapterId: input.adapterId,
+        model: input.model,
+        capabilities: { mediaKinds: ['video' as const], audioModes: ['none'] },
+        validatedAt: '2026-07-30T00:00:00.000Z',
+      })
+    );
+    const connectionService = createCreativeStudioService({
+      store: connectionStore,
+      onProjectUpdated,
+      storyboardPlanner: makePlanner(),
+      createConnectionId: () => 'binding_saved',
+      validateConnection: validateInternalConnection,
+    });
+
+    const inventory = await connectionService.listConnections();
+    const validated = await connectionService.validateConnection({
+      providerId: 'provider_1',
+      integrationId: GATEWAY_INTEGRATION_ID,
+      model: 'open-sora',
+    });
+    const saved = await connectionService.saveConnection({
+      providerId: 'provider_1',
+      integrationId: GATEWAY_INTEGRATION_ID,
+      model: 'open-sora',
+    });
+    const removed = await connectionService.removeConnection({ bindingId: saved.bindingId });
+
+    expect(inventory).toMatchObject({
+      integrations: expect.arrayContaining([
+        {
+          integrationId: GATEWAY_INTEGRATION_ID,
+          kind: 'video',
+          labelKey: 'selfHostedVideoGateway',
+        },
+      ]),
+      connections: [
+        expect.objectContaining({
+          bindingId: 'binding_existing',
+          integrationId: GATEWAY_INTEGRATION_ID,
+          providerId: 'provider_1',
+          model: 'open-sora',
+        }),
+      ],
+    });
+    expect(validated).toMatchObject({
+      integrationId: GATEWAY_INTEGRATION_ID,
+      providerId: 'provider_1',
+      model: 'open-sora',
+    });
+    expect(saved).toMatchObject({
+      bindingId: 'binding_saved',
+      integrationId: GATEWAY_INTEGRATION_ID,
+      providerId: 'provider_1',
+      model: 'open-sora',
+    });
+    expect(validateInternalConnection).toHaveBeenCalledWith({
+      providerId: 'provider_1',
+      adapterId: KNOWN_ADAPTER_SENTINEL,
+      model: 'open-sora',
+    });
+    expect(removed).toBe(true);
+    for (const rendererDto of [inventory, validated, saved]) {
+      expectRendererBoundaryToHideAdapters(rendererDto);
+    }
   });
 
   it('validates, normalizes, sanitizes, and saves a manual gateway model absent from chat discovery', async () => {
@@ -371,7 +518,7 @@ describe('CreativeStudioService', () => {
 
     const saved = await connectionService.saveConnection({
       providerId: 'provider_1',
-      adapterId: 'weprompt-media-gateway-v1',
+      integrationId: GATEWAY_INTEGRATION_ID,
       model: '  open-sora-manual  ',
     });
 
@@ -381,7 +528,7 @@ describe('CreativeStudioService', () => {
       expect.any(AbortSignal)
     );
     expect(saved).toMatchObject({
-      id: 'binding_manual',
+      bindingId: 'binding_manual',
       model: 'open-sora-manual',
       capabilities: {
         mediaKinds: ['video'],
@@ -436,7 +583,7 @@ describe('CreativeStudioService', () => {
     await expect(
       connectionService.validateConnection({
         providerId: 'provider_1',
-        adapterId: 'weprompt-media-gateway-v1',
+        integrationId: GATEWAY_INTEGRATION_ID,
         model: 'open-sora-manual',
       })
     ).rejects.toMatchObject({ code: 'invalid_route' });
@@ -753,7 +900,7 @@ describe('CreativeStudioService', () => {
     ).rejects.toMatchObject({ code: 'invalid_payload' });
   });
 
-  it('omits provider identities and idempotency keys from every service project and job result', async () => {
+  it('recursively removes adapter identity and provider internals from project, job, and catalog DTOs', async () => {
     const internalJob: StudioJob = {
       id: 'job_1',
       projectId: 'project_1',
@@ -878,9 +1025,7 @@ describe('CreativeStudioService', () => {
         routes: [
           {
             sceneId: 'scene_1',
-            providerId: 'provider_1',
-            adapterId: 'weprompt-media-gateway-v1',
-            model: 'model_1',
+            choiceId: routeOption('video', { model: 'model_1' }).choiceId,
             kind: 'video',
           },
         ],
@@ -907,7 +1052,10 @@ describe('CreativeStudioService', () => {
       expect(result).not.toHaveProperty('providerJobId');
       expect(result).not.toHaveProperty('idempotencyKey');
     }
-    const rendererPayloads = JSON.stringify([projectResult, updatedProjectResult, sanitizedJobResults]);
+    for (const rendererDto of [projectResult, updatedProjectResult, sanitizedJobResults, catalog]) {
+      expectRendererBoundaryToHideAdapters(rendererDto);
+    }
+    const rendererPayloads = JSON.stringify([projectResult, updatedProjectResult, sanitizedJobResults, catalog]);
     for (const sentinel of Object.values(STUDIO_E2E_BOUNDARY_SENTINELS)) {
       expect(rendererPayloads).not.toContain(sentinel);
     }
@@ -1346,6 +1494,54 @@ describe('CreativeStudioService', () => {
       });
     });
 
+    it('reloads an unavailable media selection as an explicit opaque choice while preserving its internal adapter', async () => {
+      const harness = await createCatalogHarness();
+      const persisted = await harness.store.updateProject(harness.project.id, (current) => ({
+        ...current,
+        routing: {
+          ...current.routing,
+          video: {
+            providerId: 'provider_removed',
+            adapterId: KNOWN_ADAPTER_SENTINEL,
+            model: 'retired-video-model',
+          },
+        },
+      }));
+      const reloadedStore = createCreativeStudioStore({ rootDir });
+      const reloaded = createCreativeStudioService({
+        store: reloadedStore,
+        onProjectUpdated,
+        storyboardPlanner: makePlanner(),
+        providerResolver: {
+          listConnectionCandidates: async () => [],
+          listGenerationRoutes: async () => ({ routes: [], generationCatalogVersion: 'generation-v2' }),
+          isGenerationRouteAvailable: async () => false,
+        },
+      } as unknown as Parameters<typeof createCreativeStudioService>[0]);
+
+      const rendererProject = await reloaded.getProject(persisted.id);
+      const catalog = await reloaded.listRoutes({ projectId: persisted.id });
+      const internalProject = await reloadedStore.getProject(persisted.id);
+
+      expect(rendererProject?.routing.video).toMatchObject({
+        choiceId: expect.stringMatching(/^choice_[A-Za-z0-9_-]+$/),
+        providerId: 'provider_removed',
+        model: 'retired-video-model',
+      });
+      expect(catalog.video).toMatchObject({
+        status: 'unavailable',
+        selected: rendererProject?.routing.video,
+        options: [],
+      });
+      expect(internalProject?.routing.video).toEqual({
+        providerId: 'provider_removed',
+        adapterId: KNOWN_ADAPTER_SENTINEL,
+        model: 'retired-video-model',
+      });
+      expectRendererBoundaryToHideAdapters(rendererProject);
+      expectRendererBoundaryToHideAdapters(catalog);
+    });
+
     it('projects storyboard options to safe public fields before returning the catalog', async () => {
       const harness = await createCatalogHarness();
       harness.listModels.mockResolvedValue([
@@ -1385,6 +1581,7 @@ describe('CreativeStudioService', () => {
 
     it('rejects a media selection whose kind or exact adapter identity does not match the role', async () => {
       const harness = await createCatalogHarness();
+      const catalog = await harness.service.listRoutes({ projectId: harness.project.id });
 
       await expect(
         harness.service.updateModelSelection({
@@ -1392,9 +1589,7 @@ describe('CreativeStudioService', () => {
           expectedRevision: harness.project.revision,
           role: 'image',
           selection: {
-            providerId: 'provider_1',
-            adapterId: 'weprompt-media-gateway-v1',
-            model: 'video-model',
+            choiceId: catalog.video.options[0]!.choiceId,
           },
         })
       ).rejects.toMatchObject({ code: 'invalid_route' });
@@ -1417,9 +1612,7 @@ describe('CreativeStudioService', () => {
           expectedRevision: withScene.revision,
           role: 'video',
           selection: {
-            providerId: 'provider_1',
-            adapterId: 'weprompt-media-gateway-v1',
-            model: 'video-model',
+            choiceId: routeOption('video').choiceId,
           },
         })
       ).rejects.toMatchObject({ code: 'invalid_route' });
@@ -1558,9 +1751,7 @@ describe('CreativeStudioService', () => {
           routes: [
             {
               sceneId: 'scene_1',
-              providerId: 'provider_1',
-              adapterId: 'weprompt-image-v1',
-              model: 'image-model',
+              choiceId: routeOption('image').choiceId,
               kind: 'image',
             },
           ],

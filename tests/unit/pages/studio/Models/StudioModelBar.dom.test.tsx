@@ -17,11 +17,11 @@ const mediaRoute = (
   kind: 'image' | 'video',
   overrides: Partial<StudioRouteCatalogEntry> = {}
 ): StudioRouteCatalogEntry => ({
+  choiceId: `choice_${kind}`,
   providerId: `${kind}-provider`,
   providerName: `${kind} Provider`,
   model: `${kind}-model`,
   health: 'available',
-  adapterId: kind === 'image' ? 'weprompt-image-v1' : 'byteplus-seedance-v1',
   kind,
   constraints: {
     aspectRatios: ['16:9'],
@@ -146,9 +146,7 @@ describe('StudioModelBar', () => {
     expect(onSelectionChange).toHaveBeenCalledExactlyOnceWith({
       role: 'image',
       selection: {
-        providerId: 'image-provider',
-        adapterId: 'weprompt-image-v1',
-        model: 'image-model',
+        choiceId: 'choice_image',
       },
     });
     expect(onSelectionChange).not.toHaveBeenCalledWith(

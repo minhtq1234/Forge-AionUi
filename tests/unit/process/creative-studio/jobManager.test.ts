@@ -8,19 +8,18 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { IProvider } from '@/common/config/storage';
-import type {
-  StudioProject,
-  StudioRouteConstraints,
-  StudioScene,
-  StudioSceneRouteSnapshot,
-} from '@/common/types/project/creativeStudioTypes';
+import type { StudioProject, StudioRouteConstraints, StudioScene } from '@/common/types/project/creativeStudioTypes';
 import type { StudioGenerationRouteCatalog } from '@process/services/creative-studio/providerResolver';
 import type {
   GenerationProviderAdapter,
   ProviderJobSnapshot,
   ProviderSubmitResult,
 } from '@process/services/creative-studio/adapters';
-import { createStudioJobManager, type StudioJobManager } from '@process/services/creative-studio/jobManager';
+import {
+  createStudioJobManager,
+  type StudioJobManager,
+  type StudioResolvedSceneRouteSnapshot,
+} from '@process/services/creative-studio/jobManager';
 import { createStudioMediaStore, type StudioMediaStore } from '@process/services/creative-studio/mediaStore';
 import { createCreativeStudioStore, type CreativeStudioStore } from '@process/services/creative-studio/store';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -37,7 +36,7 @@ const provider: IProvider = {
   models: ['image-model'],
 };
 
-const route: StudioSceneRouteSnapshot = {
+const route: StudioResolvedSceneRouteSnapshot = {
   sceneId: 'scene_1',
   providerId: provider.id,
   adapterId: 'weprompt-image-v1',
@@ -45,7 +44,7 @@ const route: StudioSceneRouteSnapshot = {
   kind: 'image',
 };
 
-const selectionFor = (candidate: StudioSceneRouteSnapshot) => ({
+const selectionFor = (candidate: StudioResolvedSceneRouteSnapshot) => ({
   providerId: candidate.providerId,
   adapterId: candidate.adapterId,
   model: candidate.model,
@@ -58,7 +57,7 @@ const incompatibleConstraints: Array<[string, Partial<StudioRouteConstraints>]> 
   ['maximum duration', { maxDurationSeconds: 4 }],
 ];
 
-const catalog = (routes: StudioSceneRouteSnapshot[] = [route]): StudioGenerationRouteCatalog => ({
+const catalog = (routes: StudioResolvedSceneRouteSnapshot[] = [route]): StudioGenerationRouteCatalog => ({
   routes: routes.map((candidate) => ({
     providerId: candidate.providerId,
     providerName: 'Provider',
@@ -137,7 +136,7 @@ const harnesses: Harness[] = [];
 
 type HarnessOptions = {
   scenes?: StudioScene[];
-  routes?: StudioSceneRouteSnapshot[];
+  routes?: StudioResolvedSceneRouteSnapshot[];
   provider?: IProvider;
   jobIds?: string[];
   idempotencyKeys?: string[];
@@ -159,7 +158,7 @@ const createHarness = async (adapter: GenerationProviderAdapter, options: Harnes
   const scenes = options.scenes ?? [scene()];
   const routes = options.routes ?? [route];
   const selectedProvider = options.provider ?? provider;
-  const selectedRoute = (kind: StudioSceneRouteSnapshot['kind']) => {
+  const selectedRoute = (kind: StudioResolvedSceneRouteSnapshot['kind']) => {
     const candidate = routes.find((routeCandidate) => routeCandidate.kind === kind);
     return candidate ? selectionFor(candidate) : null;
   };
@@ -876,7 +875,7 @@ describe('StudioJobManager scheduling', () => {
       })
     );
     const routes = scenes.map(
-      (candidate): StudioSceneRouteSnapshot => ({
+      (candidate): StudioResolvedSceneRouteSnapshot => ({
         sceneId: candidate.id,
         providerId: selectedProvider.id,
         adapterId,
@@ -1084,7 +1083,7 @@ describe('StudioJobManager cancellation', () => {
       scene({ id: 'scene_2', visualPrompt: 'second', mediaKind: 'video', durationSeconds: 4 }),
     ];
     const routes = scenes.map(
-      (candidate): StudioSceneRouteSnapshot => ({
+      (candidate): StudioResolvedSceneRouteSnapshot => ({
         sceneId: candidate.id,
         providerId: selectedProvider.id,
         adapterId: 'weprompt-media-gateway-v1',
@@ -1141,7 +1140,7 @@ describe('StudioJobManager cancellation', () => {
 
   it('discards a provider success that arrives after confirmed queued cancellation', async () => {
     const selectedProvider = { ...provider, models: ['video-model'] };
-    const videoRoute: StudioSceneRouteSnapshot = {
+    const videoRoute: StudioResolvedSceneRouteSnapshot = {
       sceneId: 'scene_1',
       providerId: selectedProvider.id,
       adapterId: 'weprompt-media-gateway-v1',
@@ -1219,7 +1218,7 @@ describe('StudioJobManager cancellation', () => {
 
   it('returns a typed refusal for running work without calling provider cancellation', async () => {
     const selectedProvider = { ...provider, models: ['video-model'] };
-    const videoRoute: StudioSceneRouteSnapshot = {
+    const videoRoute: StudioResolvedSceneRouteSnapshot = {
       sceneId: 'scene_1',
       providerId: selectedProvider.id,
       adapterId: 'weprompt-media-gateway-v1',
@@ -1278,7 +1277,7 @@ describe('StudioJobManager cancellation', () => {
 
   it('records confirmed cancellation when polling advances queued work during the cancel call', async () => {
     const selectedProvider = { ...provider, models: ['video-model'] };
-    const videoRoute: StudioSceneRouteSnapshot = {
+    const videoRoute: StudioResolvedSceneRouteSnapshot = {
       sceneId: 'scene_1',
       providerId: selectedProvider.id,
       adapterId: 'weprompt-media-gateway-v1',
@@ -1999,7 +1998,7 @@ describe('StudioJobManager recovery', () => {
         visualPrompt: 'Second video',
       }),
     ];
-    const routes: StudioSceneRouteSnapshot[] = scenes.map((candidate) => ({
+    const routes: StudioResolvedSceneRouteSnapshot[] = scenes.map((candidate) => ({
       sceneId: candidate.id,
       providerId: selectedProvider.id,
       adapterId: 'weprompt-media-gateway-v1',
@@ -2370,7 +2369,7 @@ describe('StudioJobManager video poster outputs', () => {
     name: 'Video provider',
     models: ['video-model'],
   };
-  const videoRoute: StudioSceneRouteSnapshot = {
+  const videoRoute: StudioResolvedSceneRouteSnapshot = {
     sceneId: 'scene_1',
     providerId: videoProvider.id,
     adapterId: 'weprompt-media-gateway-v1',

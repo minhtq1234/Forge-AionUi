@@ -23,12 +23,15 @@ import type {
   StudioAsset,
   StudioConnectionBinding,
   StudioConnectionCandidate,
+  StudioConnectionInventory,
+  StudioConnectionRecord,
+  StudioConnectionValidationResult,
   StudioCommandResult,
   StudioDesktopApi,
   StudioJob,
   StudioProject,
   StudioProjectSummary,
-  StudioProviderRef,
+  StudioMediaChoiceRef,
   StudioRendererJob,
   StudioRendererProject,
   StudioRouteCatalog,
@@ -839,16 +842,19 @@ describe('creative studio renderer DTO contract', () => {
       | 'bytes'
       | 'base64'
       | 'providerJobId'
-      | 'idempotencyKey';
+      | 'idempotencyKey'
+      | 'adapterId';
     type KeysOfUnion<Value> = Value extends unknown ? keyof Value : never;
     type RendererDto =
       | StudioRendererProject
       | StudioProjectSummary
       | StudioAsset
       | StudioRendererJob
-      | StudioProviderRef
+      | StudioMediaChoiceRef
       | StudioRouteCatalog
-      | StudioConnectionBinding
+      | StudioConnectionRecord
+      | StudioConnectionInventory
+      | StudioConnectionValidationResult
       | StudioConnectionCandidate;
     type RendererProjectKeys = KeysOfUnion<RendererDto>;
     type NoForbiddenRendererFields = Extract<RendererProjectKeys, ForbiddenRendererField>;

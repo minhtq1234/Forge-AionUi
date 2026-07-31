@@ -5,8 +5,8 @@
  */
 
 import type {
+  StudioMediaChoiceRef,
   StudioModelSelectionChange,
-  StudioProviderRef,
   StudioRouteCatalog,
   StudioRouteCatalogEntry,
   StudioTextModelOption,
@@ -32,8 +32,7 @@ export type StudioModelBarProps = {
 
 const optionLabel = (model: string, providerName: string): string => `${model} · ${providerName}`;
 const textIdentity = (route: StudioTextModelRef): string => `${route.providerId}\u0000${route.model}`;
-const mediaIdentity = (route: StudioProviderRef): string =>
-  `${route.providerId}\u0000${route.adapterId}\u0000${route.model}`;
+const mediaIdentity = (route: StudioMediaChoiceRef): string => route.choiceId;
 
 type RoleSelectProps = {
   role: ModelRole;
@@ -141,7 +140,7 @@ export const StudioModelBar: React.FC<StudioModelBarProps> = ({
 
   const mediaOptions = (
     options: StudioRouteCatalogEntry[],
-    selected: StudioProviderRef | null
+    selected: StudioMediaChoiceRef | null
   ): RoleSelectProps['options'] => {
     const result: RoleSelectProps['options'] = options.map((route) => ({
       value: mediaIdentity(route),
@@ -172,11 +171,7 @@ export const StudioModelBar: React.FC<StudioModelBarProps> = ({
     if (selection === undefined) return;
     void onSelectionChange({
       role,
-      selection: {
-        providerId: selection.providerId,
-        adapterId: selection.adapterId,
-        model: selection.model,
-      },
+      selection: { choiceId: selection.choiceId },
     });
   };
 

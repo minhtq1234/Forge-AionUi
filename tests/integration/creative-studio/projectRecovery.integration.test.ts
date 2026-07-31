@@ -8,7 +8,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { IProvider } from '@/common/config/storage';
-import type { StudioProject, StudioScene, StudioSceneRouteSnapshot } from '@/common/types/project/creativeStudioTypes';
+import type { StudioProject, StudioScene } from '@/common/types/project/creativeStudioTypes';
 import {
   createStudioE2EFakeBundle,
   createStudioE2EFakeRemoteState,
@@ -16,7 +16,11 @@ import {
   type StudioE2EFakeRemoteState,
 } from '@process/services/creative-studio/adapters/e2eFakeAdapter';
 import { createCreativeStudioService } from '@process/services/creative-studio/creativeStudioService';
-import { createStudioJobManager, type StudioJobManager } from '@process/services/creative-studio/jobManager';
+import {
+  createStudioJobManager,
+  type StudioJobManager,
+  type StudioResolvedSceneRouteSnapshot,
+} from '@process/services/creative-studio/jobManager';
 import { createStudioMediaStore } from '@process/services/creative-studio/mediaStore';
 import {
   createStudioProviderResolver,
@@ -105,8 +109,8 @@ type RecoveryHarness = {
   rootDir: string;
   fake: ReturnType<typeof createStudioE2EFakeBundle>;
   project: StudioProject;
-  route: StudioSceneRouteSnapshot;
-  newerImageRoute: StudioSceneRouteSnapshot;
+  route: StudioResolvedSceneRouteSnapshot;
+  newerImageRoute: StudioResolvedSceneRouteSnapshot;
   catalog: StudioGenerationRouteCatalog;
   manager: StudioJobManager;
   clock: ControlledPollClock;
@@ -150,14 +154,14 @@ const createHarness = async (): Promise<RecoveryHarness> => {
   const imageRoute = imageRoutes[0];
   const newerImage = imageRoutes[1];
   if (!imageRoute || !newerImage) throw new Error('E2E fake Image A/B routes were not resolved');
-  const route: StudioSceneRouteSnapshot = {
+  const route: StudioResolvedSceneRouteSnapshot = {
     sceneId: scene.id,
     providerId: imageRoute.providerId,
     adapterId: imageRoute.adapterId,
     model: imageRoute.model,
     kind: imageRoute.kind,
   };
-  const newerImageRoute: StudioSceneRouteSnapshot = {
+  const newerImageRoute: StudioResolvedSceneRouteSnapshot = {
     sceneId: scene.id,
     providerId: newerImage.providerId,
     adapterId: newerImage.adapterId,
@@ -445,9 +449,7 @@ describe('Creative Studio project recovery integration', () => {
         expectedRevision: project.revision,
         role: 'image',
         selection: {
-          providerId: imageRouteA.providerId,
-          adapterId: imageRouteA.adapterId,
-          model: imageRouteA.model,
+          choiceId: imageRouteA.choiceId,
         },
       });
       await beforeRestart.runtime.service.submitScenes({
@@ -457,9 +459,7 @@ describe('Creative Studio project recovery integration', () => {
         routes: [
           {
             sceneId: scene.id,
-            providerId: imageRouteA.providerId,
-            adapterId: imageRouteA.adapterId,
-            model: imageRouteA.model,
+            choiceId: imageRouteA.choiceId,
             kind: imageRouteA.kind,
           },
         ],
@@ -477,14 +477,12 @@ describe('Creative Studio project recovery integration', () => {
         expectedRevision: activeProject.revision,
         role: 'image',
         selection: {
-          providerId: imageRouteB.providerId,
-          adapterId: imageRouteB.adapterId,
-          model: imageRouteB.model,
+          choiceId: imageRouteB.choiceId,
         },
       });
       expect(withNewerImageSelection.jobs.job_runtime_recovery.provider).toEqual({
+        choiceId: imageRouteA.choiceId,
         providerId: imageRouteA.providerId,
-        adapterId: imageRouteA.adapterId,
         model: imageRouteA.model,
       });
       await beforeRestart.clock.take(2_000);
@@ -536,12 +534,12 @@ describe('Creative Studio project recovery integration', () => {
         projectId: project.id,
         jobProvider: {
           providerId: imageRouteA.providerId,
-          adapterId: imageRouteA.adapterId,
+          adapterId: 'weprompt-image-v1',
           model: imageRouteA.model,
         },
         imageSelection: {
           providerId: imageRouteB.providerId,
-          adapterId: imageRouteB.adapterId,
+          adapterId: 'weprompt-image-v1',
           model: imageRouteB.model,
         },
       });
