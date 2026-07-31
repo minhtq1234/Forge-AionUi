@@ -164,7 +164,12 @@ export const createStudioStoryboardPlanner = (
   let disposePromise: Promise<void> | undefined;
 
   const listModels = async (): Promise<StudioTextModelOption[]> => {
-    const providers = await dependencies.listProviders();
+    let providers: IProvider[];
+    try {
+      providers = await dependencies.listProviders();
+    } catch {
+      throw new StudioStoryboardPlannerError('provider_request_failed');
+    }
     return providers.flatMap((provider) =>
       provider.models
         .filter((model) => isEligibleTextModel(provider, model))
@@ -175,6 +180,14 @@ export const createStudioStoryboardPlanner = (
           health: provider.model_health?.[model]?.status === 'healthy' ? ('available' as const) : ('unknown' as const),
         }))
     );
+  };
+
+  const emitAuditSafely = (event: StudioStoryboardAuditEvent): void => {
+    try {
+      dependencies.emitAudit(event);
+    } catch {
+      // Observability must never alter a planner result or its bounded error.
+    }
   };
 
   const execute = async (
@@ -289,7 +302,7 @@ export const createStudioStoryboardPlanner = (
       throw normalized;
     } finally {
       clearTimeout(deadlineId);
-      dependencies.emitAudit({
+      emitAuditSafely({
         promptVersion: STUDIO_STORYBOARD_PROMPT_VERSION,
         providerId: model.providerId,
         model: model.model,

@@ -124,6 +124,21 @@ describe('Studio storyboard planner model eligibility', () => {
     ]);
   });
 
+  it('normalizes provider discovery failures without exposing backend details', async () => {
+    const planner = createStudioStoryboardPlanner(
+      dependencies({
+        listProviders: async () => {
+          throw new Error('must-not-leak raw backend response');
+        },
+      })
+    );
+
+    await expect(planner.listModels()).rejects.toMatchObject({
+      code: 'provider_request_failed',
+      message: 'provider_request_failed',
+    });
+  });
+
   it.each([
     ['deleted', []],
     ['disabled provider', [provider({ enabled: false })]],
@@ -299,5 +314,35 @@ describe('Studio storyboard planner bounds', () => {
         status: 'succeeded',
       })
     );
+  });
+
+  it('does not let a throwing audit sink reject a successful draft', async () => {
+    const planner = createStudioStoryboardPlanner(
+      dependencies({
+        emitAudit: () => {
+          throw new Error('audit sink unavailable');
+        },
+      })
+    );
+
+    await expect(planner.draft(input, selected)).resolves.toEqual(validOutput);
+  });
+
+  it('does not let a throwing audit sink replace a normalized planner error', async () => {
+    const planner = createStudioStoryboardPlanner(
+      dependencies({
+        createClient: async () => ({
+          createChatCompletion: vi.fn().mockRejectedValue(providerError(401)),
+        }),
+        emitAudit: () => {
+          throw new Error('audit sink unavailable');
+        },
+      })
+    );
+
+    await expect(planner.draft(input, selected)).rejects.toMatchObject({
+      code: 'provider_auth_failed',
+      message: 'provider_auth_failed',
+    });
   });
 });
