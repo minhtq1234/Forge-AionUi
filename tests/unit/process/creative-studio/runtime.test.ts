@@ -19,9 +19,10 @@ import {
 import type { CreativeStudioProtocolInstallation } from '@process/services/creative-studio/mediaProtocol';
 import {
   createStudioE2EFakeBundle,
+  STUDIO_E2E_BOUNDARY_SENTINELS,
+  STUDIO_E2E_FAKE_FIXTURE_DIRECTORY,
   STUDIO_E2E_FAKE_PROVIDER_ID,
   STUDIO_E2E_RAW_OUTPUT_BODY_SENTINEL,
-  STUDIO_E2E_RAW_OUTPUT_PATH_SENTINEL,
 } from '@process/services/creative-studio/adapters/e2eFakeAdapter';
 import type { GenerationProviderAdapterRegistry } from '@process/services/creative-studio/adapters';
 import type { StudioJobManager } from '@process/services/creative-studio/jobManager';
@@ -359,11 +360,13 @@ describe('Creative Studio runtime identity and lifecycle', () => {
 
   it('logs only a stable error name when backend-ready recovery rejects', async () => {
     const logError = vi.fn();
+    const rawFailure = new Error(Object.values(STUDIO_E2E_BOUNDARY_SENTINELS).join(' | '));
+    Object.assign(rawFailure, STUDIO_E2E_BOUNDARY_SENTINELS);
 
     resumeCreativeStudioAfterBackendReady(
       {
         onBackendReady: async () => {
-          throw new Error('signed-url-or-provider-body-must-not-be-logged');
+          throw rawFailure;
         },
       },
       logError
@@ -372,6 +375,10 @@ describe('Creative Studio runtime identity and lifecycle', () => {
     await Promise.resolve();
 
     expect(logError).toHaveBeenCalledWith('[CreativeStudio] Failed to resume pending jobs:', 'Error');
+    const serializedLog = JSON.stringify(logError.mock.calls);
+    for (const sentinel of Object.values(STUDIO_E2E_BOUNDARY_SENTINELS)) {
+      expect(serializedLog).not.toContain(sentinel);
+    }
   });
 });
 
@@ -520,7 +527,7 @@ describe('Creative Studio E2E fake adapter', () => {
         error: { code: 'unknown' },
       }
     );
-    await expect(stat(path.join(rootDir, STUDIO_E2E_RAW_OUTPUT_PATH_SENTINEL))).rejects.toMatchObject({
+    await expect(stat(path.join(rootDir, STUDIO_E2E_FAKE_FIXTURE_DIRECTORY))).rejects.toMatchObject({
       code: 'ENOENT',
     });
   });

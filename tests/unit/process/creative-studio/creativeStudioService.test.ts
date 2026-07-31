@@ -6,7 +6,7 @@
  * @vitest-environment node
  */
 
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,6 +23,7 @@ import type {
 } from '@/common/types/project/creativeStudioTypes';
 import type { IProvider } from '@/common/config/storage';
 import type { GenerationProviderAdapter } from '@process/services/creative-studio/adapters';
+import { STUDIO_E2E_BOUNDARY_SENTINELS } from '@process/services/creative-studio/adapters/e2eFakeAdapter';
 import type { CreativeStudioStoreError } from '@process/services/creative-studio/store';
 import { createCreativeStudioStore } from '@process/services/creative-studio/store';
 import {
@@ -339,7 +340,7 @@ describe('CreativeStudioService', () => {
         maxDurationSeconds: 20,
         supportsFirstFrame: true,
         cancellation: true,
-        rawProviderField: 'must-not-persist',
+        rawProviderField: STUDIO_E2E_BOUNDARY_SENTINELS,
       },
     }));
     const adapter: GenerationProviderAdapter = {
@@ -355,10 +356,11 @@ describe('CreativeStudioService', () => {
       id: 'provider_1',
       platform: 'custom',
       name: 'Gateway',
-      base_url: 'https://gateway.example',
-      api_key: 'secret',
+      base_url: STUDIO_E2E_BOUNDARY_SENTINELS.providerUrl,
+      api_key: STUDIO_E2E_BOUNDARY_SENTINELS.credential,
       models: [],
     };
+    Object.assign(manualProvider, STUDIO_E2E_BOUNDARY_SENTINELS);
     const connectionService = createCreativeStudioService({
       store: createCreativeStudioStore({ rootDir }),
       onProjectUpdated,
@@ -393,6 +395,13 @@ describe('CreativeStudioService', () => {
       },
     });
     expect(saved.capabilities).not.toHaveProperty('rawProviderField');
+    const exposedConnections = await connectionService.listConnections();
+    const storedConnections = await readFile(path.join(rootDir, 'connections.json'), 'utf8');
+    for (const sentinel of Object.values(STUDIO_E2E_BOUNDARY_SENTINELS)) {
+      expect(JSON.stringify(saved)).not.toContain(sentinel);
+      expect(JSON.stringify(exposedConnections)).not.toContain(sentinel);
+      expect(storedConnections).not.toContain(sentinel);
+    }
   });
 
   it('does not validate a manual model after its provider is disabled', async () => {
@@ -745,9 +754,6 @@ describe('CreativeStudioService', () => {
   });
 
   it('omits provider identities and idempotency keys from every service project and job result', async () => {
-    const providerJobSentinel = 'STUDIO_PROVIDER_JOB_SENTINEL_RENDERER';
-    const rawPathSentinel = '/private/STUDIO_RAW_OUTPUT_PATH_SENTINEL/provider-primary.mp4';
-    const rawUrlSentinel = 'https://provider.invalid/STUDIO_RAW_OUTPUT_URL_SENTINEL/signed-poster.png';
     const internalJob: StudioJob = {
       id: 'job_1',
       projectId: 'project_1',
@@ -755,7 +761,7 @@ describe('CreativeStudioService', () => {
       status: 'queued_remote',
       provider: { providerId: 'provider_1', adapterId: 'weprompt-media-gateway-v1', model: 'model_1' },
       idempotencyKey: 'secret_idempotency_key',
-      providerJobId: providerJobSentinel,
+      providerJobId: STUDIO_E2E_BOUNDARY_SENTINELS.providerJobId,
       outputAssetIds: [],
       error: null,
       retryOfJobId: null,
@@ -796,6 +802,7 @@ describe('CreativeStudioService', () => {
       next.jobs.job_1 = internalJob;
       return next;
     });
+    Object.assign(internalJob, STUDIO_E2E_BOUNDARY_SENTINELS);
     const submitScenes = vi.fn(async () => [internalJob]);
     const cancelJob = vi.fn(async () => internalJob);
     const retryJob = vi.fn(async () => nonRetryableDownloadJob);
@@ -823,6 +830,7 @@ describe('CreativeStudioService', () => {
     } as unknown as Parameters<typeof createCreativeStudioService>[0]);
 
     const forgedProject = (await projectStore.getProject('project_1'))!;
+    Object.assign(forgedProject.jobs.job_1, STUDIO_E2E_BOUNDARY_SENTINELS);
     (forgedProject.scenes.scene_1 as StudioScene & { providerJobId?: string }).providerJobId = 'scene-provider-secret';
     forgedProject.assets.asset_1 = {
       id: 'asset_1',
@@ -835,7 +843,7 @@ describe('CreativeStudioService', () => {
       sha256: '1'.repeat(64),
       createdAt: forgedProject.createdAt,
       idempotencyKey: 'asset-provider-secret',
-      sourcePath: rawPathSentinel,
+      sourcePath: STUDIO_E2E_BOUNDARY_SENTINELS.rawOutputPath,
     } as StudioAsset & { idempotencyKey: string; sourcePath: string };
     forgedProject.assets.asset_poster = {
       id: 'asset_poster',
@@ -847,7 +855,7 @@ describe('CreativeStudioService', () => {
       byteSize: 1,
       sha256: '2'.repeat(64),
       createdAt: forgedProject.createdAt,
-      sourceUrl: rawUrlSentinel,
+      sourceUrl: STUDIO_E2E_BOUNDARY_SENTINELS.providerUrl,
     } as StudioAsset & { sourceUrl: string };
     forgedProject.jobs.job_1.outputAssetIds = ['asset_1', 'asset_poster'];
     forgedProject.scenes.scene_1.assetIds = ['asset_1', 'asset_poster'];
@@ -900,9 +908,9 @@ describe('CreativeStudioService', () => {
       expect(result).not.toHaveProperty('idempotencyKey');
     }
     const rendererPayloads = JSON.stringify([projectResult, updatedProjectResult, sanitizedJobResults]);
-    expect(rendererPayloads).not.toContain(providerJobSentinel);
-    expect(rendererPayloads).not.toContain(rawPathSentinel);
-    expect(rendererPayloads).not.toContain(rawUrlSentinel);
+    for (const sentinel of Object.values(STUDIO_E2E_BOUNDARY_SENTINELS)) {
+      expect(rendererPayloads).not.toContain(sentinel);
+    }
   });
 
   it('rejects a reordered list that is not an exact project scene permutation', async () => {

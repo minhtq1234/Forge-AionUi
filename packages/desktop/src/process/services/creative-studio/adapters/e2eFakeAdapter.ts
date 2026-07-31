@@ -17,6 +17,7 @@ import type {
   GenerationProviderAdapter,
   ProviderJobSnapshot,
   ProviderOutput,
+  ProviderSubmitResult,
   StudioGenerationRequest,
   StudioRouteValidation,
 } from './types';
@@ -26,11 +27,19 @@ export const STUDIO_E2E_CREDENTIAL_SENTINEL = 'STUDIO_SECRET_CREDENTIAL_SENTINEL
 export const STUDIO_E2E_PROVIDER_URL_SENTINEL = 'https://studio-provider-url-sentinel.invalid/v1';
 export const STUDIO_E2E_PROVIDER_JOB_SENTINEL = 'STUDIO_PROVIDER_JOB_SENTINEL';
 export const STUDIO_E2E_RAW_OUTPUT_BODY_SENTINEL = 'STUDIO_RAW_OUTPUT_BODY_SENTINEL';
-export const STUDIO_E2E_RAW_OUTPUT_PATH_SENTINEL = '.studio-raw-output-path-sentinel';
+export const STUDIO_E2E_RAW_OUTPUT_PATH_SENTINEL = '/private/STUDIO_RAW_OUTPUT_PATH_SENTINEL/provider-output.bin';
+export const STUDIO_E2E_BOUNDARY_SENTINELS = {
+  credential: STUDIO_E2E_CREDENTIAL_SENTINEL,
+  providerUrl: STUDIO_E2E_PROVIDER_URL_SENTINEL,
+  providerJobId: STUDIO_E2E_PROVIDER_JOB_SENTINEL,
+  rawOutputBody: STUDIO_E2E_RAW_OUTPUT_BODY_SENTINEL,
+  rawOutputPath: STUDIO_E2E_RAW_OUTPUT_PATH_SENTINEL,
+} as const;
+export const STUDIO_E2E_FAKE_FIXTURE_DIRECTORY = '.studio-raw-output-path-sentinel';
 const STUDIO_E2E_IMAGE_MODEL = 'weprompt-e2e-image';
 const STUDIO_E2E_NEXT_IMAGE_MODEL = 'weprompt-e2e-image-next';
 const STUDIO_E2E_VIDEO_MODEL = 'weprompt-e2e-video';
-const FAKE_FIXTURE_DIRECTORY = STUDIO_E2E_RAW_OUTPUT_PATH_SENTINEL;
+const FAKE_FIXTURE_DIRECTORY = STUDIO_E2E_FAKE_FIXTURE_DIRECTORY;
 const RAW_OUTPUT_SENTINEL_BYTES = Buffer.from(STUDIO_E2E_RAW_OUTPUT_BODY_SENTINEL);
 const IMAGE_BYTES = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), RAW_OUTPUT_SENTINEL_BYTES]);
 const VIDEO_BYTES = Buffer.concat([
@@ -188,7 +197,11 @@ export const createStudioE2EFakeBundle = ({
         pollCount: 0,
         cancelled: false,
       });
-      return { kind: 'remote', providerJobId };
+      return {
+        kind: 'remote',
+        providerJobId,
+        boundarySentinels: STUDIO_E2E_BOUNDARY_SENTINELS,
+      } as ProviderSubmitResult;
     },
     async poll(providerJobId, provider, signal): Promise<ProviderJobSnapshot> {
       signal.throwIfAborted();

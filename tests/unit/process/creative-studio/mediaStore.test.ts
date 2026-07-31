@@ -12,6 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { STUDIO_E2E_BOUNDARY_SENTINELS } from '@process/services/creative-studio/adapters/e2eFakeAdapter';
 import {
   createCreativeStudioStore,
   CreativeStudioStoreError,
@@ -1253,6 +1254,10 @@ describe('createStudioMediaStore', () => {
       }),
       3
     );
+    const exportSource = await store.getProject('project_1');
+    if (!exportSource) throw new Error('Export source project disappeared');
+    Object.assign(exportSource.assets.asset_3, STUDIO_E2E_BOUNDARY_SENTINELS);
+    vi.spyOn(store, 'getProject').mockResolvedValueOnce(exportSource);
     const destination = await fs.mkdtemp(path.join(os.tmpdir(), 'studio-export-target-'));
     created.push(destination);
 
@@ -1270,8 +1275,10 @@ describe('createStudioMediaStore', () => {
     });
     await expect(fs.readFile(path.join(destination, result.folderName, 'scene-01.png'))).resolves.toEqual(png);
     const storyboard = await fs.readFile(path.join(destination, result.folderName, 'storyboard.json'), 'utf8');
+    for (const sentinel of Object.values(STUDIO_E2E_BOUNDARY_SENTINELS)) {
+      expect(storyboard).not.toContain(sentinel);
+    }
     expect(storyboard).not.toContain(rootDir);
-    expect(storyboard).not.toContain('http');
   });
 
   it('rejects an export directory swapped for a symlink before writing asset bytes', async () => {

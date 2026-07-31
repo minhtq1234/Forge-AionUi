@@ -13,6 +13,7 @@ import {
   type StudioStoryboardPlannerDeps,
   type StudioStoryboardDraftInput,
 } from '@process/services/creative-studio/planning';
+import { STUDIO_E2E_BOUNDARY_SENTINELS } from '@process/services/creative-studio/adapters/e2eFakeAdapter';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const input: StudioStoryboardDraftInput = {
@@ -299,26 +300,29 @@ describe('Studio storyboard planner bounds', () => {
 
   it('emits only safe operational metadata', async () => {
     const emitAudit = vi.fn();
-    const credentialSentinel = 'STUDIO_SECRET_CREDENTIAL_SENTINEL_AUDIT';
-    const providerUrlSentinel = 'https://STUDIO_PROVIDER_URL_SENTINEL.invalid/v1';
-    const rawOutputSentinel = 'STUDIO_RAW_PROVIDER_OUTPUT_SENTINEL_AUDIT';
+    const rawProviderPayload = Object.values(STUDIO_E2E_BOUNDARY_SENTINELS).join(' | ');
     const planner = createStudioStoryboardPlanner(
       dependencies({
         emitAudit,
-        listProviders: async () => [provider({ api_key: credentialSentinel, base_url: providerUrlSentinel })],
-        createClient: async () => client(JSON.stringify({ ...validOutput, projectSummary: rawOutputSentinel })),
+        listProviders: async () => [
+          provider({
+            api_key: STUDIO_E2E_BOUNDARY_SENTINELS.credential,
+            base_url: STUDIO_E2E_BOUNDARY_SENTINELS.providerUrl,
+          }),
+        ],
+        createClient: async () => client(JSON.stringify({ ...validOutput, projectSummary: rawProviderPayload })),
       })
     );
 
-    await planner.draft(input, selected);
+    await planner.draft({ ...input, brief: rawProviderPayload }, selected);
 
     const capturedAuditMetadata = JSON.stringify(emitAudit.mock.calls);
     expect(capturedAuditMetadata).not.toMatch(
       /must-not-leak|UNTRUSTED_STUDIO_BRIEF|raw provider response|authorization/i
     );
-    expect(capturedAuditMetadata).not.toContain(credentialSentinel);
-    expect(capturedAuditMetadata).not.toContain(providerUrlSentinel);
-    expect(capturedAuditMetadata).not.toContain(rawOutputSentinel);
+    for (const sentinel of Object.values(STUDIO_E2E_BOUNDARY_SENTINELS)) {
+      expect(capturedAuditMetadata).not.toContain(sentinel);
+    }
     expect(emitAudit).toHaveBeenCalledWith(
       expect.objectContaining({
         providerId: 'provider_1',

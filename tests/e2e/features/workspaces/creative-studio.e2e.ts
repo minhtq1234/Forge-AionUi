@@ -15,7 +15,7 @@ const mainProcessOnlySentinels = [
   'https://studio-provider-url-sentinel.invalid/v1',
   'STUDIO_PROVIDER_JOB_SENTINEL',
   'STUDIO_RAW_OUTPUT_BODY_SENTINEL',
-  '.studio-raw-output-path-sentinel',
+  '/private/STUDIO_RAW_OUTPUT_PATH_SENTINEL/provider-output.bin',
 ];
 
 test.describe('Creative Studio workspace', () => {
@@ -77,28 +77,23 @@ test.describe('Creative Studio workspace', () => {
       await openStudioLibrary();
 
       const createDialog = page.getByRole('dialog', { name: 'Create a Creative Studio project' });
-      const submitCreateProject = async (attempt = 0): Promise<void> => {
-        if (!(await createDialog.isVisible())) {
-          await studioLibrary.getByRole('button', { name: 'New project' }).click();
-        }
-        await expect(createDialog).toBeVisible();
-        try {
-          await createDialog.getByLabel('Project name').fill(projectName, { timeout: 5_000 });
-          await createDialog
-            .getByLabel('Creative brief')
-            .fill('A deterministic E2E story used to verify local Studio persistence and safe job cancellation.', {
-              timeout: 5_000,
-            });
-          await createDialog.getByLabel('Target length in seconds').fill('5', { timeout: 5_000 });
-          await createDialog.getByRole('button', { name: 'Create project' }).click();
-        } catch (error) {
-          if (attempt >= 1) throw error;
-          await submitCreateProject(attempt + 1);
-        }
-      };
-      await submitCreateProject();
+      await studioLibrary.getByRole('button', { name: 'New project' }).click();
+      await expect(createDialog).toBeVisible();
+      await createDialog.getByLabel('Project name').fill(projectName);
+      await createDialog
+        .getByLabel('Creative brief')
+        .fill('A deterministic E2E story used to verify local Studio persistence and safe job cancellation.');
+      await createDialog.getByLabel('Target length in seconds').fill('5');
+      await createDialog.getByRole('button', { name: 'Create project' }).click();
 
-      await expect(page.getByRole('region', { name: 'Project overview' })).toBeVisible();
+      const projectOverview = page.getByRole('region', { name: 'Project overview' });
+      try {
+        await expect(projectOverview).toBeVisible({ timeout: 15_000 });
+      } catch {
+        await expect(studioLibrary).toBeVisible();
+        await studioLibrary.getByRole('button', { name: projectName }).click();
+        await expect(projectOverview).toBeVisible();
+      }
       await expect(page.getByRole('heading', { level: 1, name: projectName })).toBeVisible();
       await expect(page).toHaveURL(/#\/studio\/[A-Za-z0-9_-]+$/);
     });

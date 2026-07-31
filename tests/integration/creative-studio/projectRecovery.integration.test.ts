@@ -106,6 +106,7 @@ type RecoveryHarness = {
   fake: ReturnType<typeof createStudioE2EFakeBundle>;
   project: StudioProject;
   route: StudioSceneRouteSnapshot;
+  newerImageRoute: StudioSceneRouteSnapshot;
   catalog: StudioGenerationRouteCatalog;
   manager: StudioJobManager;
   clock: ControlledPollClock;
@@ -127,7 +128,7 @@ const createHarness = async (): Promise<RecoveryHarness> => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'studio-recovery-integration-'));
   const fake = createStudioE2EFakeBundle({ rootDir });
   const store = createCreativeStudioStore({ rootDir });
-  await store.saveConnection(fake.connections[0]!);
+  await Promise.all(fake.connections.map((connection) => store.saveConnection(connection)));
   const created = await store.createProject({
     name: 'Durable film',
     brief: 'A restart-safe launch story',
@@ -138,25 +139,36 @@ const createHarness = async (): Promise<RecoveryHarness> => {
   let project = await store.updateProject(created.id, (current) => ({
     ...current,
     sceneOrder: [scene.id],
-    scenes: { [scene.id]: structuredClone(scene) },
+    scenes: { [scene.id]: { ...structuredClone(scene), mediaKind: 'image' } },
   }));
   const listProviders = async () => [fake.provider];
   const providerResolver = resolverFor(store, listProviders);
   const catalog = await providerResolver.listGenerationRoutes();
-  const videoRoute = catalog.routes.find((candidate) => candidate.kind === 'video');
-  if (!videoRoute) throw new Error('E2E fake video route was not resolved');
+  const imageRoutes = catalog.routes
+    .filter((candidate) => candidate.kind === 'image')
+    .toSorted((left, right) => left.model.localeCompare(right.model));
+  const imageRoute = imageRoutes[0];
+  const newerImage = imageRoutes[1];
+  if (!imageRoute || !newerImage) throw new Error('E2E fake Image A/B routes were not resolved');
   const route: StudioSceneRouteSnapshot = {
     sceneId: scene.id,
-    providerId: videoRoute.providerId,
-    adapterId: videoRoute.adapterId,
-    model: videoRoute.model,
-    kind: videoRoute.kind,
+    providerId: imageRoute.providerId,
+    adapterId: imageRoute.adapterId,
+    model: imageRoute.model,
+    kind: imageRoute.kind,
+  };
+  const newerImageRoute: StudioSceneRouteSnapshot = {
+    sceneId: scene.id,
+    providerId: newerImage.providerId,
+    adapterId: newerImage.adapterId,
+    model: newerImage.model,
+    kind: newerImage.kind,
   };
   project = await store.updateProject(project.id, (current) => ({
     ...current,
     routing: {
       ...current.routing,
-      video: { providerId: route.providerId, adapterId: route.adapterId, model: route.model },
+      image: { providerId: route.providerId, adapterId: route.adapterId, model: route.model },
     },
   }));
   const clock = new ControlledPollClock();
@@ -171,7 +183,7 @@ const createHarness = async (): Promise<RecoveryHarness> => {
     sleep: clock.sleep,
     jitterMs: (baseMs) => baseMs,
   });
-  const harness = { rootDir, fake, project, route, catalog, manager, clock };
+  const harness = { rootDir, fake, project, route, newerImageRoute, catalog, manager, clock };
   harnesses.push(harness);
   return harness;
 };
@@ -401,7 +413,7 @@ describe('Creative Studio project recovery integration', () => {
     }
   });
 
-  it('re-polls a durable remote job in a fresh instance and restores its selected managed asset', async () => {
+  it('recovers an old Image A job after routing changes to Image B without rewriting the canonical selection', async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'studio-runtime-recovery-integration-'));
     const remoteState = createStudioE2EFakeRemoteState();
     const runtimes: FreshRuntimeHarness[] = [];
@@ -419,19 +431,23 @@ describe('Creative Studio project recovery integration', () => {
       const project = await beforeRestart.runtime.store.updateProject(created.id, (current) => ({
         ...current,
         sceneOrder: [scene.id],
-        scenes: { [scene.id]: structuredClone(scene) },
+        scenes: { [scene.id]: { ...structuredClone(scene), mediaKind: 'image' } },
       }));
       const catalog = await beforeRestart.runtime.service.listRoutes({ projectId: project.id });
-      const videoRoute = catalog.video.options.find((candidate) => candidate.kind === 'video');
-      if (!videoRoute) throw new Error('Fresh runtime did not resolve its E2E fake video route');
+      const imageRoutes = catalog.image.options
+        .filter((candidate) => candidate.kind === 'image')
+        .toSorted((left, right) => left.model.localeCompare(right.model));
+      const imageRouteA = imageRoutes[0];
+      const imageRouteB = imageRoutes[1];
+      if (!imageRouteA || !imageRouteB) throw new Error('Fresh runtime did not resolve its E2E fake Image A/B routes');
       const selectedProject = await beforeRestart.runtime.service.updateModelSelection({
         projectId: project.id,
         expectedRevision: project.revision,
-        role: 'video',
+        role: 'image',
         selection: {
-          providerId: videoRoute.providerId,
-          adapterId: videoRoute.adapterId,
-          model: videoRoute.model,
+          providerId: imageRouteA.providerId,
+          adapterId: imageRouteA.adapterId,
+          model: imageRouteA.model,
         },
       });
       await beforeRestart.runtime.service.submitScenes({
@@ -441,10 +457,10 @@ describe('Creative Studio project recovery integration', () => {
         routes: [
           {
             sceneId: scene.id,
-            providerId: videoRoute.providerId,
-            adapterId: videoRoute.adapterId,
-            model: videoRoute.model,
-            kind: videoRoute.kind,
+            providerId: imageRouteA.providerId,
+            adapterId: imageRouteA.adapterId,
+            model: imageRouteA.model,
+            kind: imageRouteA.kind,
           },
         ],
         catalogVersion: catalog.catalogVersion,
@@ -456,25 +472,20 @@ describe('Creative Studio project recovery integration', () => {
       });
       const activeProject = await beforeRestart.runtime.store.getProject(project.id);
       if (!activeProject) throw new Error('Active recovery project disappeared');
-      const withNewerImageSelection = await beforeRestart.runtime.store.updateProject(
-        project.id,
-        (current) => ({
-          ...current,
-          routing: {
-            ...current.routing,
-            image: {
-              providerId: 'newer_media_provider',
-              adapterId: 'weprompt-image-v1',
-              model: 'image-b',
-            },
-          },
-        }),
-        activeProject.revision
-      );
+      const withNewerImageSelection = await beforeRestart.runtime.service.updateModelSelection({
+        projectId: project.id,
+        expectedRevision: activeProject.revision,
+        role: 'image',
+        selection: {
+          providerId: imageRouteB.providerId,
+          adapterId: imageRouteB.adapterId,
+          model: imageRouteB.model,
+        },
+      });
       expect(withNewerImageSelection.jobs.job_runtime_recovery.provider).toEqual({
-        providerId: videoRoute.providerId,
-        adapterId: videoRoute.adapterId,
-        model: videoRoute.model,
+        providerId: imageRouteA.providerId,
+        adapterId: imageRouteA.adapterId,
+        model: imageRouteA.model,
       });
       await beforeRestart.clock.take(2_000);
       const providerJobId = persisted.providerJobId!;
@@ -515,17 +526,23 @@ describe('Creative Studio project recovery integration', () => {
         selectedAssetId,
         selectedAssetMediaKind: selectedAssetId ? recovered.assets[selectedAssetId]?.mediaKind : null,
         projectId: recovered.id,
+        jobProvider: recoveredJob.provider,
         imageSelection: recovered.routing.image,
       }).toEqual({
         providerJobId,
         outputAssetIds: [selectedAssetId],
         selectedAssetId,
-        selectedAssetMediaKind: 'video',
+        selectedAssetMediaKind: 'image',
         projectId: project.id,
+        jobProvider: {
+          providerId: imageRouteA.providerId,
+          adapterId: imageRouteA.adapterId,
+          model: imageRouteA.model,
+        },
         imageSelection: {
-          providerId: 'newer_media_provider',
-          adapterId: 'weprompt-image-v1',
-          model: 'image-b',
+          providerId: imageRouteB.providerId,
+          adapterId: imageRouteB.adapterId,
+          model: imageRouteB.model,
         },
       });
       const resolved = selectedAssetId
@@ -547,7 +564,7 @@ describe('Creative Studio project recovery integration', () => {
     }
   });
 
-  it('preserves the remote identity and requires attention when its provider disappears after restart', async () => {
+  it('retries an old Image A job after routing changes to Image B without rewriting the canonical selection', async () => {
     const harness = await createHarness();
     const beforeRestart = await submitAndStopWithRemoteIdentity(harness);
     const store = createCreativeStudioStore({ rootDir: harness.rootDir });
@@ -556,9 +573,9 @@ describe('Creative Studio project recovery integration', () => {
       routing: {
         ...current.routing,
         image: {
-          providerId: 'newer_media_provider',
-          adapterId: 'weprompt-image-v1',
-          model: 'image-b',
+          providerId: harness.newerImageRoute.providerId,
+          adapterId: harness.newerImageRoute.adapterId,
+          model: harness.newerImageRoute.model,
         },
       },
     }));
@@ -586,9 +603,9 @@ describe('Creative Studio project recovery integration', () => {
       error: { code: 'provider_unavailable' },
     });
     expect(recovered.routing.image).toEqual({
-      providerId: 'newer_media_provider',
-      adapterId: 'weprompt-image-v1',
-      model: 'image-b',
+      providerId: harness.newerImageRoute.providerId,
+      adapterId: harness.newerImageRoute.adapterId,
+      model: harness.newerImageRoute.model,
     });
     expect(recovered.scenes.scene_recovery.jobIds).toEqual(['job_recovery']);
 
@@ -626,9 +643,9 @@ describe('Creative Studio project recovery integration', () => {
       return current?.jobs.job_recovery.status === 'succeeded' ? current : null;
     });
     expect(completed.routing.image).toEqual({
-      providerId: 'newer_media_provider',
-      adapterId: 'weprompt-image-v1',
-      model: 'image-b',
+      providerId: harness.newerImageRoute.providerId,
+      adapterId: harness.newerImageRoute.adapterId,
+      model: harness.newerImageRoute.model,
     });
     expect(completed.jobs.job_recovery.provider).toEqual({
       providerId: harness.route.providerId,
