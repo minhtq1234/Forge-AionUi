@@ -482,11 +482,21 @@ describe('createStudioMediaStore', () => {
       adapterId: 'weprompt-image-v1',
       model: 'image-b',
     };
-    await store.updateProject('project_1', (project) => ({
-      ...project,
-      routing: { ...project.routing, image: newer },
-    }));
-    const media = createStudioMediaStore({ store, createId: () => 'asset_job_1' });
+    let intercepted = false;
+    const interleavingStore: CreativeStudioStore = {
+      ...store,
+      async updateProject(projectId, update, expectedRevision) {
+        if (!intercepted && expectedRevision === undefined) {
+          intercepted = true;
+          await store.updateProject(projectId, (project) => ({
+            ...project,
+            routing: { ...project.routing, image: newer },
+          }));
+        }
+        return store.updateProject(projectId, update, expectedRevision);
+      },
+    };
+    const media = createStudioMediaStore({ store: interleavingStore, createId: () => 'asset_job_1' });
 
     await media.persistProviderOutputForJob({
       projectId: 'project_1',
@@ -497,6 +507,7 @@ describe('createStudioMediaStore', () => {
       body: Readable.from([png]),
     });
 
+    expect(intercepted).toBe(true);
     expect((await store.getProject('project_1'))?.routing.image).toEqual(newer);
   });
 

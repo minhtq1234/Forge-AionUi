@@ -610,6 +610,66 @@ describe('StudioJobManager route and reference isolation', () => {
     ).rejects.toMatchObject({ code: 'invalid_route' });
   });
 
+  it('rejects a route whose media kind differs from the scene selection', async () => {
+    const harness = await createHarness(adapterWithSubmit(vi.fn()));
+
+    await expect(
+      harness.manager.submitScenes({
+        projectId: harness.project.id,
+        expectedRevision: harness.project.revision,
+        sceneIds: ['scene_1'],
+        routes: [{ ...route, kind: 'video' }],
+        catalogVersion: 'catalog_1',
+      })
+    ).rejects.toMatchObject({ code: 'invalid_route' });
+  });
+
+  it('rejects an unavailable project selection even when the submitted route matches it', async () => {
+    const harness = await createHarness(adapterWithSubmit(vi.fn()), {
+      catalog: async () => catalog([]),
+    });
+
+    await expect(
+      harness.manager.submitScenes({
+        projectId: harness.project.id,
+        expectedRevision: harness.project.revision,
+        sceneIds: ['scene_1'],
+        routes: [route],
+        catalogVersion: 'catalog_1',
+      })
+    ).rejects.toMatchObject({ code: 'invalid_route' });
+  });
+
+  it('rejects a matching selection when the submitted catalog version is stale', async () => {
+    const harness = await createHarness(adapterWithSubmit(vi.fn()), {
+      catalog: async () => ({ ...catalog(), generationCatalogVersion: 'catalog_2' }),
+    });
+
+    await expect(
+      harness.manager.submitScenes({
+        projectId: harness.project.id,
+        expectedRevision: harness.project.revision,
+        sceneIds: ['scene_1'],
+        routes: [route],
+        catalogVersion: 'catalog_1',
+      })
+    ).rejects.toMatchObject({ code: 'invalid_route' });
+  });
+
+  it('accepts a route that exactly matches the current project selection', async () => {
+    const harness = await createHarness(adapterWithSubmit(vi.fn(async () => ({ kind: 'complete', outputs: [] }))));
+
+    await expect(
+      harness.manager.submitScenes({
+        projectId: harness.project.id,
+        expectedRevision: harness.project.revision,
+        sceneIds: ['scene_1'],
+        routes: [route],
+        catalogVersion: 'catalog_1',
+      })
+    ).resolves.toMatchObject([{ provider: selectionFor(route) }]);
+  });
+
   it.each(incompatibleConstraints)(
     'rejects a canonical route with incompatible %s before submit',
     async (_, override) => {
