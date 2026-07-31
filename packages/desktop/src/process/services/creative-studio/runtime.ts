@@ -6,7 +6,6 @@
 
 import { ipcBridge } from '@/common';
 import { httpRequest } from '@/common/adapter/httpBridge';
-import { appOperationsModel } from '@/common/adapter/ipcBridge';
 import type { IProvider } from '@/common/config/storage';
 import { app, protocol } from 'electron';
 import {
@@ -30,6 +29,11 @@ import {
 import { createStudioJobManager, type StudioJobManager } from './jobManager';
 import { installCreativeStudioProtocol, type CreativeStudioProtocolInstallation } from './mediaProtocol';
 import { getCreativeStudioRootDir } from '@process/utils/initStorage';
+import {
+  createStudioStoryboardPlanner,
+  type StudioStoryboardPlanner,
+  type StudioStoryboardPlannerDeps,
+} from './planning/storyboardPlanner';
 
 type RuntimeEnvironment = {
   AIONUI_E2E_TEST?: string;
@@ -49,6 +53,7 @@ export type CreativeStudioRuntimeFactories = {
   createStore(input: { rootDir: string }): CreativeStudioStore;
   createMediaStore(input: { store: CreativeStudioStore }): StudioMediaStore;
   createAdapters(input: { rootDir: string }): GenerationProviderAdapterRegistry;
+  createPlanner(input: Pick<StudioStoryboardPlannerDeps, 'listProviders'>): StudioStoryboardPlanner;
   createProviderResolver(input: StudioProviderResolverDeps): StudioProviderResolver;
   createJobManager(input: Parameters<typeof createStudioJobManager>[0]): StudioJobManager;
   createService(input: RuntimeServiceDeps): CreativeStudioService;
@@ -61,8 +66,6 @@ export type CreativeStudioRuntimeDeps = {
   isPackaged: boolean;
   factories?: CreativeStudioRuntimeFactories;
   listProviders(): Promise<IProvider[]>;
-  getClientSettings(): Promise<Record<string, unknown>>;
-  getPlanningReadiness: StudioProviderResolverDeps['getPlanningReadiness'];
   onProjectUpdated(projectId: string): void;
   protocol: CreativeStudioRuntimeProtocol;
 };
@@ -71,6 +74,7 @@ export type CreativeStudioRuntime = {
   readonly store: CreativeStudioStore;
   readonly mediaStore: StudioMediaStore;
   readonly adapterRegistry: GenerationProviderAdapterRegistry;
+  readonly storyboardPlanner: StudioStoryboardPlanner;
   readonly providerResolver: StudioProviderResolver;
   readonly jobManager: StudioJobManager;
   readonly service: CreativeStudioService;
@@ -90,6 +94,7 @@ const defaultFactories: CreativeStudioRuntimeFactories = {
     createGenerationProviderAdapterRegistry({
       image: { workspaceDir: rootDir },
     }),
+  createPlanner: ({ listProviders }) => createStudioStoryboardPlanner({ listProviders } as StudioStoryboardPlannerDeps),
   createProviderResolver: createStudioProviderResolver,
   createJobManager: createStudioJobManager,
   createService: createCreativeStudioService,
@@ -134,10 +139,9 @@ export const createCreativeStudioRuntime = (deps: CreativeStudioRuntimeDeps): Cr
     const fakeIds = new Set(fakeBundle.connections.map((connection) => connection.id));
     return [...persisted.filter((connection) => !fakeIds.has(connection.id)), ...fakeBundle.connections];
   };
+  const storyboardPlanner = factories.createPlanner({ listProviders });
   const providerResolver = factories.createProviderResolver({
     listProviders,
-    getClientSettings: deps.getClientSettings,
-    getPlanningReadiness: deps.getPlanningReadiness,
     listConnections,
   });
   const jobManager = factories.createJobManager({
@@ -155,6 +159,7 @@ export const createCreativeStudioRuntime = (deps: CreativeStudioRuntimeDeps): Cr
     adapterRegistry,
     listProviders,
     jobManager,
+    storyboardPlanner,
     onProjectUpdated: deps.onProjectUpdated,
   });
 
@@ -190,10 +195,14 @@ export const createCreativeStudioRuntime = (deps: CreativeStudioRuntimeDeps): Cr
     disposePromise ??= (async () => {
       disposed = true;
       const errors: unknown[] = [];
-      try {
-        await jobManager.dispose();
-      } catch (error) {
-        errors.push(error);
+      for (const disposeBoundary of [storyboardPlanner.dispose, jobManager.dispose]) {
+        try {
+          // Cleanup boundaries are intentionally attempted in deterministic order.
+          // eslint-disable-next-line no-await-in-loop
+          await disposeBoundary();
+        } catch (error) {
+          errors.push(error);
+        }
       }
       if (backendReadyPromise) {
         try {
@@ -234,6 +243,7 @@ export const createCreativeStudioRuntime = (deps: CreativeStudioRuntimeDeps): Cr
     store,
     mediaStore,
     adapterRegistry,
+    storyboardPlanner,
     providerResolver,
     jobManager,
     service,
@@ -266,8 +276,6 @@ export const getCreativeStudioRuntime = (): CreativeStudioRuntime => {
     environment: process.env,
     isPackaged: app.isPackaged,
     listProviders: () => httpRequest<IProvider[]>('GET', '/api/providers'),
-    getClientSettings: async () => (await httpRequest<Record<string, unknown>>('GET', '/api/settings/client')) ?? {},
-    getPlanningReadiness: () => appOperationsModel.get.invoke(),
     onProjectUpdated: (projectId) => ipcBridge.creativeStudio.projectUpdated.emit({ projectId }),
     protocol: {
       install: (resolver) => installCreativeStudioProtocol(protocol, resolver),

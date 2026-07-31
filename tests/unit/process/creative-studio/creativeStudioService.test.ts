@@ -16,7 +16,10 @@ import type {
   StudioEditableScene,
   StudioJob,
   StudioRendererProject,
+  StudioRouteCatalogEntry,
   StudioScene,
+  StudioTextModelOption,
+  StudioUpdateModelSelectionRequest,
 } from '@/common/types/project/creativeStudioTypes';
 import type { IProvider } from '@/common/config/storage';
 import type { GenerationProviderAdapter } from '@process/services/creative-studio/adapters';
@@ -26,6 +29,10 @@ import {
   createCreativeStudioService,
   type CreativeStudioService,
 } from '@process/services/creative-studio/creativeStudioService';
+import {
+  StudioStoryboardPlannerError,
+  type StudioStoryboardPlanner,
+} from '@process/services/creative-studio/planning/storyboardPlanner';
 
 const makeInput = (overrides: Partial<CreateStudioProjectInput> = {}): CreateStudioProjectInput => ({
   name: 'Launch film',
@@ -80,6 +87,56 @@ const storyboardProposal = {
   ],
 };
 
+const storyboardOptions: StudioTextModelOption[] = [
+  {
+    providerId: 'provider_1',
+    providerName: 'Provider One',
+    model: 'gpt-4o',
+    health: 'available',
+  },
+];
+
+const routeOption = (
+  kind: 'image' | 'video',
+  overrides: Partial<StudioRouteCatalogEntry> = {}
+): StudioRouteCatalogEntry => ({
+  providerId: 'provider_1',
+  providerName: 'Provider One',
+  adapterId: kind === 'image' ? 'weprompt-image-v1' : 'weprompt-media-gateway-v1',
+  model: `${kind}-model`,
+  health: 'available',
+  kind,
+  constraints: {
+    aspectRatios: ['16:9'],
+    resolutions: ['1080p'],
+    minDurationSeconds: 1,
+    maxDurationSeconds: 12,
+    supportsFirstFrame: true,
+    silentOutput: true,
+  },
+  ...overrides,
+});
+
+type SelectionService = CreativeStudioService & {
+  updateModelSelection(input: StudioUpdateModelSelectionRequest): Promise<StudioRendererProject>;
+};
+
+const makePlanner = (overrides: Partial<StudioStoryboardPlanner> = {}): StudioStoryboardPlanner => ({
+  listModels: async () => storyboardOptions,
+  draft: async () => storyboardProposal,
+  dispose: async () => {},
+  ...overrides,
+});
+
+const selectStoryboard = (store: ReturnType<typeof createCreativeStudioStore>, project: StudioRendererProject) =>
+  store.updateProject(project.id, (current) => ({
+    ...current,
+    routing: {
+      ...current.routing,
+      storyboard: { providerId: 'provider_1', model: 'gpt-4o' },
+    },
+  }));
+
 type StoryboardService = CreativeStudioService & {
   proposeStoryboard(input: {
     projectId: string;
@@ -103,6 +160,7 @@ describe('CreativeStudioService', () => {
         createId: () => 'project_1',
       }),
       onProjectUpdated,
+      storyboardPlanner: makePlanner(),
     });
   });
 
@@ -141,9 +199,19 @@ describe('CreativeStudioService', () => {
     const cancelJob = vi.fn(async () => job);
     const retryJob = vi.fn(async () => job);
     const retryDownload = vi.fn(async () => job);
+    const generationStore = createCreativeStudioStore({ rootDir });
     const generationService = createCreativeStudioService({
-      store: createCreativeStudioStore({ rootDir }),
+      store: generationStore,
       onProjectUpdated,
+      storyboardPlanner: makePlanner(),
+      providerResolver: {
+        listConnectionCandidates: async () => [],
+        listGenerationRoutes: async () => ({
+          routes: [routeOption('video', { model: 'open-sora' })],
+          generationCatalogVersion: 'generation-v1',
+        }),
+        isGenerationRouteAvailable: async () => true,
+      },
       jobManager: {
         submitScenes,
         cancelJob,
@@ -153,11 +221,13 @@ describe('CreativeStudioService', () => {
         dispose: vi.fn(),
       },
     } as unknown as Parameters<typeof createCreativeStudioService>[0]);
+    const project = await generationService.createProject(makeInput());
+    const catalog = await generationService.listRoutes({ projectId: project.id });
     const submitInput = {
-      projectId: 'project_1',
-      expectedRevision: 1,
+      projectId: project.id,
+      expectedRevision: project.revision,
       sceneIds: ['scene_1'],
-      catalogVersion: '0123456789abcdef',
+      catalogVersion: catalog.catalogVersion,
       routes: [
         {
           sceneId: 'scene_1',
@@ -176,7 +246,10 @@ describe('CreativeStudioService', () => {
     await generationService.retryJob(retryInput);
     await generationService.retryDownload(jobInput);
 
-    expect(submitScenes).toHaveBeenCalledWith(submitInput);
+    expect(submitScenes).toHaveBeenCalledWith({
+      ...submitInput,
+      catalogVersion: 'generation-v1',
+    });
     expect(cancelJob).toHaveBeenCalledWith(jobInput);
     expect(retryJob).toHaveBeenCalledWith(retryInput);
     expect(retryDownload).toHaveBeenCalledWith(jobInput);
@@ -365,11 +438,12 @@ describe('CreativeStudioService', () => {
     const connectionService = createCreativeStudioService({
       store: createCreativeStudioStore({ rootDir }),
       onProjectUpdated,
+      storyboardPlanner: makePlanner(),
       providerResolver: {
         listConnectionCandidates: async () => {
           throw new Error('provider backend unavailable');
         },
-        listRoutes: async () => {
+        listGenerationRoutes: async () => {
           throw new Error('settings backend unavailable');
         },
         isGenerationRouteAvailable: async () => false,
@@ -380,31 +454,30 @@ describe('CreativeStudioService', () => {
     await expect(connectionService.listRoutes()).rejects.toMatchObject({ code: 'provider_error' });
   });
 
-  it('passes only a project last-successful routing hint to the fresh route resolver', async () => {
-    const listRoutes = vi.fn(async () => ({
-      catalogVersion: 'catalog_1',
-      planning: { health: 'ready' as const },
-      automatic: [],
-      providerModels: [],
-      suggestions: {
-        image: { route: null, reason: 'no_compatible_route' as const },
-        video: { route: null, reason: 'no_compatible_route' as const },
-      },
+  it('composes the fresh planner and generation catalogs for a project', async () => {
+    const listModels = vi.fn(async () => storyboardOptions);
+    const listGenerationRoutes = vi.fn(async () => ({
+      routes: [routeOption('image')],
+      generationCatalogVersion: 'generation-v1',
     }));
     const routed = createCreativeStudioService({
       store: createCreativeStudioStore({ rootDir }),
       onProjectUpdated,
+      storyboardPlanner: makePlanner({ listModels }),
       providerResolver: {
         listConnectionCandidates: async () => [],
-        listRoutes,
+        listGenerationRoutes,
         isGenerationRouteAvailable: async () => false,
       },
     });
     const project = await routed.createProject(makeInput());
 
-    await routed.listRoutes({ projectId: project.id });
+    const catalog = await routed.listRoutes({ projectId: project.id });
 
-    expect(listRoutes).toHaveBeenCalledWith({ routing: { storyboard: null, image: null, video: null } });
+    expect(catalog.storyboard.options).toEqual(storyboardOptions);
+    expect(catalog.image.options).toHaveLength(1);
+    expect(listModels).toHaveBeenCalledOnce();
+    expect(listGenerationRoutes).toHaveBeenCalledOnce();
   });
 
   it('rejects metadata outside renderer bounds instead of persisting oversized text', async () => {
@@ -727,6 +800,15 @@ describe('CreativeStudioService', () => {
     const rendererService = createCreativeStudioService({
       store: projectStore,
       onProjectUpdated,
+      storyboardPlanner: makePlanner(),
+      providerResolver: {
+        listConnectionCandidates: async () => [],
+        listGenerationRoutes: async () => ({
+          routes: [routeOption('video', { model: 'model_1' })],
+          generationCatalogVersion: 'generation-v1',
+        }),
+        isGenerationRouteAvailable: async () => true,
+      },
       jobManager: {
         submitScenes,
         cancelJob,
@@ -775,12 +857,13 @@ describe('CreativeStudioService', () => {
       expectedRevision: 2,
       name: 'Renderer-safe project',
     });
+    const catalog = await rendererService.listRoutes({ projectId: 'project_1' });
     const jobResults = [
       await rendererService.submitScenes({
         projectId: 'project_1',
-        expectedRevision: 2,
+        expectedRevision: 3,
         sceneIds: ['scene_1'],
-        catalogVersion: '0123456789abcdef',
+        catalogVersion: catalog.catalogVersion,
         routes: [
           {
             sceneId: 'scene_1',
@@ -959,62 +1042,54 @@ describe('CreativeStudioService', () => {
     expect(onProjectUpdated).not.toHaveBeenCalled();
   });
 
-  it('maps unavailable planner outcomes without calling a renderer-selected provider', async () => {
-    const runner = vi.fn(async () => ({
-      ok: false as const,
-      error: { code: 'not_configured' as const, retryable: false },
-      operation: { task_id: 'studio.storyboard-draft', prompt_version: 'studio.storyboard-draft.v1' },
-    }));
+  it('maps a freshly unavailable stored model without calling the provider', async () => {
+    const draft = vi.fn();
     const project = await service.createProject(makeInput());
-    let sceneIndex = 0;
+    const store = createCreativeStudioStore({ rootDir });
+    const selected = await selectStoryboard(store, project);
     const storyboardService = createCreativeStudioService({
-      store: createCreativeStudioStore({ rootDir }),
+      store,
       onProjectUpdated,
-      runStoryboardDraft: runner,
-      createSceneId: () => `scene_${++sceneIndex}`,
+      storyboardPlanner: makePlanner({ listModels: async () => [], draft }),
     } as unknown as Parameters<typeof createCreativeStudioService>[0]) as StoryboardService;
 
     await expect(
       storyboardService.proposeStoryboard({
         projectId: project.id,
-        expectedRevision: project.revision,
+        expectedRevision: selected.revision,
         replaceExisting: false,
       })
     ).rejects.toMatchObject({ code: 'planning_unavailable' });
-    expect(runner).toHaveBeenCalledWith(
-      expect.objectContaining({ projectId: project.id, projectRevision: project.revision, brief: project.brief })
-    );
-    expect(runner.mock.calls[0]?.[0]).not.toHaveProperty('providerId');
-    expect(runner.mock.calls[0]?.[0]).not.toHaveProperty('model');
-    expect(runner.mock.calls[0]?.[0]).not.toHaveProperty('prompt');
+    expect(draft).not.toHaveBeenCalled();
   });
 
   it.each([
     ['model_unavailable', 'planning_unavailable'],
-    ['queue_full', 'busy'],
+    ['busy', 'busy'],
     ['provider_auth_failed', 'provider_error'],
     ['provider_rate_limited', 'provider_error'],
     ['provider_timeout', 'provider_error'],
     ['provider_request_failed', 'provider_error'],
     ['canceled', 'provider_error'],
     ['invalid_output', 'provider_error'],
-  ] as const)('maps broker %s outcomes to the redacted Studio %s result', async (brokerCode, studioCode) => {
-    const runner = vi.fn(async () => ({
-      ok: false as const,
-      error: { code: brokerCode, retryable: false },
-      operation: { task_id: 'studio.storyboard-draft', prompt_version: 'studio.storyboard-draft.v1' },
-    }));
+  ] as const)('maps planner %s outcomes to the redacted Studio %s result', async (plannerCode, studioCode) => {
     const project = await service.createProject(makeInput());
+    const store = createCreativeStudioStore({ rootDir });
+    const selected = await selectStoryboard(store, project);
     const storyboardService = createCreativeStudioService({
-      store: createCreativeStudioStore({ rootDir }),
+      store,
       onProjectUpdated,
-      runStoryboardDraft: runner,
+      storyboardPlanner: makePlanner({
+        draft: async () => {
+          throw new StudioStoryboardPlannerError(plannerCode);
+        },
+      }),
     } as unknown as Parameters<typeof createCreativeStudioService>[0]) as StoryboardService;
 
     await expect(
       storyboardService.proposeStoryboard({
         projectId: project.id,
-        expectedRevision: project.revision,
+        expectedRevision: selected.revision,
         replaceExisting: false,
       })
     ).rejects.toMatchObject({ code: studioCode });
@@ -1032,7 +1107,7 @@ describe('CreativeStudioService', () => {
     const storyboardService = createCreativeStudioService({
       store: createCreativeStudioStore({ rootDir }),
       onProjectUpdated,
-      runStoryboardDraft: runner,
+      storyboardPlanner: makePlanner({ draft: runner }),
       createSceneId: () => 'scene_1',
     } as unknown as Parameters<typeof createCreativeStudioService>[0]) as StoryboardService;
 
@@ -1046,12 +1121,32 @@ describe('CreativeStudioService', () => {
     expect(runner).not.toHaveBeenCalled();
   });
 
+  it('rejects duplicate scene identities without committing a partial storyboard', async () => {
+    const project = await service.createProject(makeInput());
+    const store = createCreativeStudioStore({ rootDir });
+    const selected = await selectStoryboard(store, project);
+    const storyboardService = createCreativeStudioService({
+      store,
+      onProjectUpdated,
+      storyboardPlanner: makePlanner(),
+      createSceneId: () => 'scene_duplicate',
+    });
+
+    await expect(
+      storyboardService.proposeStoryboard({
+        projectId: selected.id,
+        expectedRevision: selected.revision,
+        replaceExisting: false,
+      })
+    ).rejects.toMatchObject({ code: 'storage_error' });
+    await expect(storyboardService.getProject(selected.id)).resolves.toMatchObject({
+      revision: selected.revision,
+      scenes: {},
+    });
+  });
+
   it('replaces an existing storyboard only after a complete replacement proposal validates', async () => {
-    const runner = vi.fn(async () => ({
-      ok: true as const,
-      output: storyboardProposal,
-      operation: { task_id: 'studio.storyboard-draft', prompt_version: 'studio.storyboard-draft.v1' },
-    }));
+    const runner = vi.fn(async () => storyboardProposal);
     const project = await service.createProject(makeInput());
     const withScene = await service.updateScene({
       projectId: project.id,
@@ -1059,17 +1154,19 @@ describe('CreativeStudioService', () => {
       sceneId: 'scene_existing',
       scene: makeScene('scene_existing'),
     });
+    const store = createCreativeStudioStore({ rootDir });
+    const selected = await selectStoryboard(store, withScene);
     let sceneIndex = 0;
     const storyboardService = createCreativeStudioService({
-      store: createCreativeStudioStore({ rootDir }),
+      store,
       onProjectUpdated,
-      runStoryboardDraft: runner,
+      storyboardPlanner: makePlanner({ draft: runner }),
       createSceneId: () => `scene_${++sceneIndex}`,
     } as unknown as Parameters<typeof createCreativeStudioService>[0]) as StoryboardService;
 
     const drafted = await storyboardService.proposeStoryboard({
       projectId: withScene.id,
-      expectedRevision: withScene.revision,
+      expectedRevision: selected.revision,
       replaceExisting: true,
     });
 
@@ -1078,24 +1175,22 @@ describe('CreativeStudioService', () => {
   });
 
   it('hydrates canonical draft scenes and emits exactly one update after a successful proposal', async () => {
-    const runner = vi.fn(async () => ({
-      ok: true as const,
-      output: storyboardProposal,
-      operation: { task_id: 'studio.storyboard-draft', prompt_version: 'studio.storyboard-draft.v1' },
-    }));
+    const runner = vi.fn(async () => storyboardProposal);
     const project = await service.createProject(makeInput());
+    const store = createCreativeStudioStore({ rootDir });
+    const selected = await selectStoryboard(store, project);
     onProjectUpdated.mockClear();
     let sceneIndex = 0;
     const storyboardService = createCreativeStudioService({
-      store: createCreativeStudioStore({ rootDir }),
+      store,
       onProjectUpdated,
-      runStoryboardDraft: runner,
+      storyboardPlanner: makePlanner({ draft: runner }),
       createSceneId: () => `scene_${++sceneIndex}`,
     } as unknown as Parameters<typeof createCreativeStudioService>[0]) as StoryboardService;
 
     const drafted = await storyboardService.proposeStoryboard({
       projectId: project.id,
-      expectedRevision: project.revision,
+      expectedRevision: selected.revision,
       replaceExisting: false,
     });
 
@@ -1110,7 +1205,7 @@ describe('CreativeStudioService', () => {
   });
 
   it('discards a late proposal when a concurrent project mutation changes the captured revision', async () => {
-    let release!: (result: unknown) => void;
+    let release!: (result: typeof storyboardProposal) => void;
     const runner = vi.fn(
       () =>
         new Promise((resolve) => {
@@ -1118,32 +1213,384 @@ describe('CreativeStudioService', () => {
         })
     );
     const project = await service.createProject(makeInput());
+    const store = createCreativeStudioStore({ rootDir });
+    const selected = await selectStoryboard(store, project);
     let sceneIndex = 0;
     const storyboardService = createCreativeStudioService({
-      store: createCreativeStudioStore({ rootDir }),
+      store,
       onProjectUpdated,
-      runStoryboardDraft: runner,
+      storyboardPlanner: makePlanner({ draft: runner }),
       createSceneId: () => `scene_${++sceneIndex}`,
     } as unknown as Parameters<typeof createCreativeStudioService>[0]) as StoryboardService;
     const proposed = storyboardService.proposeStoryboard({
       projectId: project.id,
-      expectedRevision: project.revision,
+      expectedRevision: selected.revision,
       replaceExisting: false,
     });
 
     await vi.waitFor(() => expect(runner).toHaveBeenCalledOnce());
     const edited = await service.updateProject({
       projectId: project.id,
-      expectedRevision: project.revision,
+      expectedRevision: selected.revision,
       name: 'Edited while planning',
     });
-    release({
-      ok: true,
-      output: storyboardProposal,
-      operation: { task_id: 'studio.storyboard-draft', prompt_version: 'studio.storyboard-draft.v1' },
-    });
+    release(storyboardProposal);
 
     await expect(proposed).rejects.toMatchObject({ code: 'stale_project' });
     await expect(service.getProject(project.id)).resolves.toMatchObject({ name: edited.name, scenes: {} });
+  });
+
+  describe('unified model catalog', () => {
+    const createCatalogHarness = async (
+      options: {
+        models?: StudioTextModelOption[];
+        routes?: StudioRouteCatalogEntry[];
+      } = {}
+    ) => {
+      const store = createCreativeStudioStore({ rootDir });
+      const listModels = vi.fn(async () => options.models ?? storyboardOptions);
+      const draft = vi.fn(async () => storyboardProposal);
+      const planner: StudioStoryboardPlanner = {
+        listModels,
+        draft,
+        dispose: vi.fn(async () => {}),
+      };
+      const listGenerationRoutes = vi.fn(async () => ({
+        routes: options.routes ?? [routeOption('image'), routeOption('video')],
+        generationCatalogVersion: 'generation-v1',
+      }));
+      const submitScenes = vi.fn(async () => []);
+      const catalogService = createCreativeStudioService({
+        store,
+        onProjectUpdated,
+        storyboardPlanner: planner,
+        providerResolver: {
+          listConnectionCandidates: async () => [],
+          listGenerationRoutes,
+          isGenerationRouteAvailable: async () => true,
+        },
+        jobManager: {
+          submitScenes,
+          cancelJob: vi.fn(),
+          retryJob: vi.fn(),
+          retryDownload: vi.fn(),
+          resumePendingJobs: vi.fn(),
+          dispose: vi.fn(),
+        },
+        createSceneId: (() => {
+          let index = 0;
+          return () => `draft_scene_${++index}`;
+        })(),
+      } as unknown as Parameters<typeof createCreativeStudioService>[0]) as SelectionService;
+      const project = await catalogService.createProject(makeInput());
+      return {
+        store,
+        service: catalogService,
+        project,
+        planner,
+        listModels,
+        draft,
+        listGenerationRoutes,
+        submitScenes,
+      };
+    };
+
+    it('persists only a freshly available storyboard selection', async () => {
+      const harness = await createCatalogHarness();
+      const requested = {
+        providerId: 'provider_1',
+        model: 'gpt-4o',
+        authorization: 'must-not-persist',
+      };
+
+      const updated = await harness.service.updateModelSelection({
+        projectId: harness.project.id,
+        expectedRevision: harness.project.revision,
+        role: 'storyboard',
+        selection: requested,
+      });
+
+      expect(updated.routing.storyboard).toEqual({ providerId: 'provider_1', model: 'gpt-4o' });
+    });
+
+    it('keeps a removed persisted model visible as unavailable without falling back', async () => {
+      const harness = await createCatalogHarness();
+      await harness.store.updateProject(harness.project.id, (current) => ({
+        ...current,
+        routing: {
+          ...current.routing,
+          storyboard: { providerId: 'removed', model: 'old-model' },
+        },
+      }));
+
+      const catalog = await harness.service.listRoutes({ projectId: harness.project.id });
+
+      expect(catalog.storyboard).toMatchObject({
+        status: 'unavailable',
+        selected: { providerId: 'removed', model: 'old-model' },
+      });
+    });
+
+    it('projects storyboard options to safe public fields before returning the catalog', async () => {
+      const harness = await createCatalogHarness();
+      harness.listModels.mockResolvedValue([
+        {
+          providerId: 'provider_1',
+          providerName: 'Provider\u0000 One',
+          model: 'gpt-4o',
+          health: 'available',
+          authorization: 'must-not-cross-main',
+        },
+        {
+          providerId: '../unsafe',
+          providerName: 'Unsafe',
+          model: 'unsafe-model',
+          health: 'available',
+        },
+        {
+          providerId: 'provider_2',
+          providerName: 'Unsafe model',
+          model: 'bad\nmodel',
+          health: 'available',
+        },
+      ]);
+
+      const catalog = await harness.service.listRoutes({ projectId: harness.project.id });
+
+      expect(catalog.storyboard.options).toEqual([
+        {
+          providerId: 'provider_1',
+          providerName: 'Provider One',
+          model: 'gpt-4o',
+          health: 'available',
+        },
+      ]);
+      expect(JSON.stringify(catalog)).not.toMatch(/authorization|must-not-cross-main|\.\.\/unsafe|bad\\nmodel/i);
+    });
+
+    it('rejects a media selection whose kind or exact adapter identity does not match the role', async () => {
+      const harness = await createCatalogHarness();
+
+      await expect(
+        harness.service.updateModelSelection({
+          projectId: harness.project.id,
+          expectedRevision: harness.project.revision,
+          role: 'image',
+          selection: {
+            providerId: 'provider_1',
+            adapterId: 'weprompt-media-gateway-v1',
+            model: 'video-model',
+          },
+        })
+      ).rejects.toMatchObject({ code: 'invalid_route' });
+    });
+
+    it('filters media options against every current scene before allowing selection', async () => {
+      const harness = await createCatalogHarness();
+      const withScene = await harness.service.updateScene({
+        projectId: harness.project.id,
+        expectedRevision: harness.project.revision,
+        sceneId: 'scene_long',
+        scene: makeScene('scene_long', 20),
+      });
+
+      const catalog = await harness.service.listRoutes({ projectId: withScene.id });
+      expect(catalog.video).toMatchObject({ status: 'setup_required', options: [] });
+      await expect(
+        harness.service.updateModelSelection({
+          projectId: withScene.id,
+          expectedRevision: withScene.revision,
+          role: 'video',
+          selection: {
+            providerId: 'provider_1',
+            adapterId: 'weprompt-media-gateway-v1',
+            model: 'video-model',
+          },
+        })
+      ).rejects.toMatchObject({ code: 'invalid_route' });
+    });
+
+    it('filters routes by project format, reference support, health, and silent output', async () => {
+      const harness = await createCatalogHarness({
+        routes: [
+          routeOption('video', {
+            model: 'aspect-model',
+            constraints: { ...routeOption('video').constraints, aspectRatios: ['1:1'] },
+          }),
+          routeOption('video', {
+            model: 'resolution-model',
+            constraints: { ...routeOption('video').constraints, resolutions: ['720p'] },
+          }),
+          routeOption('video', { model: 'unavailable-model', health: 'unavailable' }),
+          routeOption('video', {
+            model: 'audio-model',
+            constraints: { ...routeOption('video').constraints, silentOutput: false },
+          }),
+          routeOption('video', {
+            model: 'no-reference-model',
+            constraints: { ...routeOption('video').constraints, supportsFirstFrame: false },
+          }),
+        ],
+      });
+      const referenced = await harness.store.updateProject(harness.project.id, (current) => ({
+        ...current,
+        sceneOrder: ['scene_reference'],
+        scenes: {
+          scene_reference: {
+            id: 'scene_reference',
+            ...makeScene('scene_reference'),
+            referenceAssetId: 'asset_reference',
+            selectedAssetId: null,
+            assetIds: ['asset_reference'],
+            jobIds: [],
+            reviewState: 'ready',
+          },
+        },
+        assets: {
+          asset_reference: {
+            id: 'asset_reference',
+            projectId: current.id,
+            sceneId: 'scene_reference',
+            mediaKind: 'image',
+            mimeType: 'image/png',
+            managedAsset: { collection: 'imports', fileName: 'asset_reference.png' },
+            byteSize: 1,
+            sha256: 'a'.repeat(64),
+            createdAt: current.createdAt,
+          },
+        },
+      }));
+
+      const catalog = await harness.service.listRoutes({ projectId: referenced.id });
+
+      expect(catalog.video.options).toEqual([]);
+    });
+
+    it('clears a selection while preserving optimistic revision checks', async () => {
+      const harness = await createCatalogHarness();
+      const beforeSelection = await harness.service.listRoutes({ projectId: harness.project.id });
+      const selected = await harness.service.updateModelSelection({
+        projectId: harness.project.id,
+        expectedRevision: harness.project.revision,
+        role: 'storyboard',
+        selection: { providerId: 'provider_1', model: 'gpt-4o' },
+      });
+      const afterSelection = await harness.service.listRoutes({ projectId: selected.id });
+
+      const cleared = await harness.service.updateModelSelection({
+        projectId: selected.id,
+        expectedRevision: selected.revision,
+        role: 'storyboard',
+        selection: null,
+      });
+
+      expect(cleared.routing.storyboard).toBeNull();
+      expect(afterSelection.catalogVersion).toBe(beforeSelection.catalogVersion);
+      await expect(
+        harness.service.updateModelSelection({
+          projectId: selected.id,
+          expectedRevision: selected.revision,
+          role: 'storyboard',
+          selection: null,
+        })
+      ).rejects.toMatchObject({ code: 'stale_project' });
+    });
+
+    it('rejects a selection mutation for a missing project', async () => {
+      const harness = await createCatalogHarness();
+
+      await expect(
+        harness.service.updateModelSelection({
+          projectId: 'missing_project',
+          expectedRevision: 1,
+          role: 'storyboard',
+          selection: null,
+        })
+      ).rejects.toMatchObject({ code: 'not_found' });
+    });
+
+    it('maps planner or generation catalog failures to provider_error', async () => {
+      const harness = await createCatalogHarness();
+      harness.listModels.mockRejectedValueOnce(new Error('planner unavailable'));
+      await expect(harness.service.listRoutes({ projectId: harness.project.id })).rejects.toMatchObject({
+        code: 'provider_error',
+      });
+
+      harness.listGenerationRoutes.mockRejectedValueOnce(new Error('generation unavailable'));
+      await expect(harness.service.listRoutes({ projectId: harness.project.id })).rejects.toMatchObject({
+        code: 'provider_error',
+      });
+    });
+
+    it('rejects paid submission when the reviewed unified catalog changed', async () => {
+      const harness = await createCatalogHarness();
+      const catalog = await harness.service.listRoutes({ projectId: harness.project.id });
+      harness.listModels.mockResolvedValue([
+        ...storyboardOptions,
+        {
+          providerId: 'provider_2',
+          providerName: 'Provider Two',
+          model: 'new-model',
+          health: 'available',
+        },
+      ]);
+
+      await expect(
+        harness.service.submitScenes({
+          projectId: harness.project.id,
+          expectedRevision: harness.project.revision,
+          sceneIds: ['scene_1'],
+          routes: [
+            {
+              sceneId: 'scene_1',
+              providerId: 'provider_1',
+              adapterId: 'weprompt-image-v1',
+              model: 'image-model',
+              kind: 'image',
+            },
+          ],
+          catalogVersion: catalog.catalogVersion,
+        })
+      ).rejects.toMatchObject({ code: 'invalid_route' });
+      expect(harness.submitScenes).not.toHaveBeenCalled();
+    });
+
+    it('drafts with the canonical stored storyboard model only', async () => {
+      const harness = await createCatalogHarness();
+      const selectedProject = await harness.store.updateProject(harness.project.id, (current) => ({
+        ...current,
+        routing: {
+          ...current.routing,
+          storyboard: { providerId: 'provider_1', model: 'gpt-4o' },
+        },
+      }));
+
+      await harness.service.proposeStoryboard({
+        projectId: harness.project.id,
+        expectedRevision: selectedProject.revision,
+        replaceExisting: false,
+      });
+
+      expect(harness.draft).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: harness.project.id,
+          projectRevision: selectedProject.revision,
+        }),
+        { providerId: 'provider_1', model: 'gpt-4o' }
+      );
+    });
+
+    it('does not call a provider when the stored storyboard selection is absent', async () => {
+      const harness = await createCatalogHarness();
+
+      await expect(
+        harness.service.proposeStoryboard({
+          projectId: harness.project.id,
+          expectedRevision: harness.project.revision,
+          replaceExisting: false,
+        })
+      ).rejects.toMatchObject({ code: 'planning_unavailable' });
+      expect(harness.draft).not.toHaveBeenCalled();
+    });
   });
 });

@@ -105,12 +105,25 @@ const project = (withSelectedAssets = true): StudioRendererProject => {
 };
 
 const routes = (): StudioRouteCatalog => ({
+  storyboard: {
+    status: 'ready',
+    selected: { providerId: 'provider-1', model: 'operations-model' },
+    options: [
+      {
+        providerId: 'provider-1',
+        providerName: 'Provider',
+        model: 'operations-model',
+        health: 'available',
+      },
+    ],
+  },
+  image: { status: 'setup_required', selected: null, options: [] },
+  video: { status: 'setup_required', selected: null, options: [] },
   planning: {
     health: 'ready',
     resolvedModel: { providerId: 'provider-1', model: 'operations-model' },
   },
   automatic: [],
-  providerModels: [],
   suggestions: {
     image: { reason: 'no_compatible_route', route: null },
     video: { reason: 'no_compatible_route', route: null },

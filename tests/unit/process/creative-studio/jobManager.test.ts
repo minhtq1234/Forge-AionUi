@@ -10,11 +10,11 @@ import path from 'node:path';
 import type { IProvider } from '@/common/config/storage';
 import type {
   StudioProject,
-  StudioRouteCatalog,
   StudioRouteConstraints,
   StudioScene,
   StudioSceneRouteSnapshot,
 } from '@/common/types/project/creativeStudioTypes';
+import type { StudioGenerationRouteCatalog } from '@process/services/creative-studio/providerResolver';
 import type {
   GenerationProviderAdapter,
   ProviderJobSnapshot,
@@ -52,9 +52,8 @@ const incompatibleConstraints: Array<[string, Partial<StudioRouteConstraints>]> 
   ['maximum duration', { maxDurationSeconds: 4 }],
 ];
 
-const catalog = (routes: StudioSceneRouteSnapshot[] = [route]): StudioRouteCatalog => ({
-  planning: { health: 'ready' },
-  automatic: routes.map((candidate) => ({
+const catalog = (routes: StudioSceneRouteSnapshot[] = [route]): StudioGenerationRouteCatalog => ({
+  routes: routes.map((candidate) => ({
     providerId: candidate.providerId,
     providerName: 'Provider',
     model: candidate.model,
@@ -70,12 +69,7 @@ const catalog = (routes: StudioSceneRouteSnapshot[] = [route]): StudioRouteCatal
       silentOutput: true,
     },
   })),
-  providerModels: [],
-  suggestions: {
-    image: { reason: 'sole_compatible', route: null },
-    video: { reason: 'no_compatible_route', route: null },
-  },
-  catalogVersion: 'catalog_1',
+  generationCatalogVersion: 'catalog_1',
 });
 
 const scene = (overrides: Partial<StudioScene> = {}): StudioScene => ({
@@ -143,7 +137,7 @@ type HarnessOptions = {
   idempotencyKeys?: string[];
   sleep?: (delayMs: number, signal: AbortSignal) => Promise<void>;
   jitterMs?: (baseMs: number, attempt: number) => number;
-  catalog?: () => Promise<StudioRouteCatalog>;
+  catalog?: () => Promise<StudioGenerationRouteCatalog>;
   decorateMediaStore?: (mediaStore: StudioMediaStore) => StudioMediaStore;
   onProjectUpdated?: (projectId: string) => void;
 };
@@ -178,7 +172,7 @@ const createHarness = async (adapter: GenerationProviderAdapter, options: Harnes
     mediaStore: managerMediaStore,
     providerResolver: {
       listConnectionCandidates: async () => [],
-      listRoutes: options.catalog ?? (async () => catalog(routes)),
+      listGenerationRoutes: options.catalog ?? (async () => catalog(routes)),
       isGenerationRouteAvailable: async (candidate) =>
         routes.some(
           (available) =>
@@ -565,8 +559,8 @@ describe('StudioJobManager route and reference isolation', () => {
       const harness = await createHarness(adapterWithSubmit(submit), {
         catalog: async () => {
           const result = catalog();
-          result.automatic[0]!.constraints = {
-            ...result.automatic[0]!.constraints,
+          result.routes[0]!.constraints = {
+            ...result.routes[0]!.constraints,
             ...override,
           };
           return result;
@@ -663,7 +657,7 @@ describe('StudioJobManager route and reference isolation', () => {
     const harness = await createHarness(adapterWithSubmit(submit), {
       catalog: async () => {
         const result = catalog();
-        result.automatic[0]!.constraints.supportsFirstFrame = supportsFirstFrame;
+        result.routes[0]!.constraints.supportsFirstFrame = supportsFirstFrame;
         return result;
       },
     });
@@ -872,7 +866,7 @@ describe('StudioJobManager scheduling', () => {
       mediaStore,
       providerResolver: {
         listConnectionCandidates: async () => [],
-        listRoutes: async () => catalog(),
+        listGenerationRoutes: async () => catalog(),
         isGenerationRouteAvailable: async () => true,
       },
       adapters: new Map([['weprompt-image-v1', adapter]]),
@@ -2087,7 +2081,7 @@ describe('StudioJobManager recovery', () => {
 describe('StudioJobManager disposal fencing', () => {
   it('awaits an admitted submit and prevents persistence or provider calls after disposal begins', async () => {
     const catalogStarted = deferred<void>();
-    const catalogGate = deferred<StudioRouteCatalog>();
+    const catalogGate = deferred<StudioGenerationRouteCatalog>();
     const submit = vi.fn();
     const adapter: GenerationProviderAdapter = {
       id: 'weprompt-image-v1',

@@ -27,6 +27,7 @@ import type { StudioMediaStore } from '@process/services/creative-studio/mediaSt
 import type { StudioProviderResolver } from '@process/services/creative-studio/providerResolver';
 import type { CreativeStudioService } from '@process/services/creative-studio/creativeStudioService';
 import type { CreativeStudioStore } from '@process/services/creative-studio/store';
+import type { StudioStoryboardPlanner } from '@process/services/creative-studio/planning/storyboardPlanner';
 
 const temporaryDirectories: string[] = [];
 
@@ -53,6 +54,9 @@ type RuntimeHarness = {
       listProviders: () => Promise<IProvider[]>;
       listConnections: () => Promise<StudioConnectionBinding[]>;
     };
+    plannerInput?: {
+      listProviders: () => Promise<IProvider[]>;
+    };
     managerInput?: {
       store: CreativeStudioStore;
       mediaStore: StudioMediaStore;
@@ -66,10 +70,12 @@ type RuntimeHarness = {
       providerResolver: StudioProviderResolver;
       adapterRegistry: GenerationProviderAdapterRegistry;
       jobManager: StudioJobManager;
+      storyboardPlanner: StudioStoryboardPlanner;
     };
   };
   resumePendingJobs: ReturnType<typeof vi.fn<() => Promise<void>>>;
   disposeJobs: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  disposePlanner: ReturnType<typeof vi.fn<() => Promise<void>>>;
   uninstallProtocol: ReturnType<
     typeof vi.fn<(installation: CreativeStudioProtocolInstallation | null) => Promise<void>>
   >;
@@ -80,6 +86,7 @@ const createHarness = (
   overrides: {
     resumePendingJobs?: () => Promise<void>;
     disposeJobs?: () => Promise<void>;
+    disposePlanner?: () => Promise<void>;
     installProtocol?: (
       resolver: StudioMediaStore
     ) => Promise<CreativeStudioProtocolInstallation> | CreativeStudioProtocolInstallation;
@@ -101,6 +108,10 @@ const createHarness = (
   } as unknown as StudioMediaStore;
   const adapters = new Map() as GenerationProviderAdapterRegistry;
   const providerResolver = {} as StudioProviderResolver;
+  const disposePlanner = vi.fn(overrides.disposePlanner ?? (async () => calls.push('dispose-planner')));
+  const storyboardPlanner = {
+    dispose: disposePlanner,
+  } as unknown as StudioStoryboardPlanner;
   const resumePendingJobs = vi.fn(overrides.resumePendingJobs ?? (async () => calls.push('resume-jobs')));
   const disposeJobs = vi.fn(overrides.disposeJobs ?? (async () => calls.push('dispose-jobs')));
   const jobManager = {
@@ -126,6 +137,10 @@ const createHarness = (
       return mediaStore;
     },
     createAdapters: () => adapters,
+    createPlanner: (input) => {
+      captures.plannerInput = input;
+      return storyboardPlanner;
+    },
     createProviderResolver: (input) => {
       captures.resolverInput = input;
       return providerResolver;
@@ -151,8 +166,6 @@ const createHarness = (
     isPackaged: overrides.isPackaged ?? false,
     factories,
     listProviders: async () => [provider()],
-    getClientSettings: async () => ({}),
-    getPlanningReadiness: async () => ({ health: 'setup_required', reasonCode: 'no_eligible_model' }),
     onProjectUpdated: vi.fn(),
     protocol: {
       install:
@@ -166,7 +179,7 @@ const createHarness = (
     },
   });
 
-  return { runtime, calls, captures, resumePendingJobs, disposeJobs, uninstallProtocol };
+  return { runtime, calls, captures, resumePendingJobs, disposeJobs, disposePlanner, uninstallProtocol };
 };
 
 describe('Creative Studio runtime identity and lifecycle', () => {
@@ -186,8 +199,10 @@ describe('Creative Studio runtime identity and lifecycle', () => {
       providerResolver: runtime.providerResolver,
       adapterRegistry: runtime.adapterRegistry,
       jobManager: runtime.jobManager,
+      storyboardPlanner: runtime.storyboardPlanner,
     });
     await expect(captures.managerInput?.listProviders()).resolves.toEqual([provider()]);
+    await expect(captures.plannerInput?.listProviders()).resolves.toEqual([provider()]);
   });
 
   it('cleans stale parts before installing the protocol and starts only once', async () => {
@@ -229,14 +244,18 @@ describe('Creative Studio runtime identity and lifecycle', () => {
     expect(resumePendingJobs).toHaveBeenCalledTimes(1);
   });
 
-  it('disposes jobs and protocol references once even when cleanup rejects', async () => {
+  it('disposes planner, jobs, and protocol references once even when cleanup rejects', async () => {
     const jobFailure = new Error('job-dispose-failed');
+    const plannerFailure = new Error('planner-dispose-failed');
     const protocolFailure = new Error('protocol-uninstall-failed');
-    const { runtime, disposeJobs, uninstallProtocol } = createHarness(
+    const { runtime, disposeJobs, disposePlanner, uninstallProtocol } = createHarness(
       {},
       {
         disposeJobs: async () => {
           throw jobFailure;
+        },
+        disposePlanner: async () => {
+          throw plannerFailure;
         },
         uninstallProtocol: async () => {
           throw protocolFailure;
@@ -251,6 +270,7 @@ describe('Creative Studio runtime identity and lifecycle', () => {
     await expect(first).rejects.toBeInstanceOf(AggregateError);
     await expect(second).rejects.toBeInstanceOf(AggregateError);
     expect(disposeJobs).toHaveBeenCalledTimes(1);
+    expect(disposePlanner).toHaveBeenCalledTimes(1);
     expect(uninstallProtocol).toHaveBeenCalledTimes(1);
   });
 
@@ -404,10 +424,12 @@ describe('Creative Studio E2E fake gate', () => {
     );
 
     const providers = await captures.resolverInput?.listProviders();
+    const plannerProviders = await captures.plannerInput?.listProviders();
     const connections = await captures.resolverInput?.listConnections();
 
     expect(calls).toEqual([`fake:${rootDir}`]);
     expect(providers?.map((item) => item.id)).toEqual(['provider_1', STUDIO_E2E_FAKE_PROVIDER_ID]);
+    expect(plannerProviders?.map((item) => item.id)).toEqual(['provider_1', STUDIO_E2E_FAKE_PROVIDER_ID]);
     expect(connections).toEqual(fakeBundle.connections);
   });
 });

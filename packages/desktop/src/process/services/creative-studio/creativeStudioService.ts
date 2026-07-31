@@ -32,20 +32,27 @@ import type {
   StudioRetryDownloadRequest,
   StudioRetryJobRequest,
   StudioSubmitScenesRequest,
+  StudioModelAvailability,
+  StudioProviderRef,
+  StudioRouteCatalogEntry,
+  StudioTextModelOption,
+  StudioTextModelRef,
+  StudioUpdateModelSelectionRequest,
 } from '@/common/types/project/creativeStudioTypes';
-import type { AppOperationResult } from '@/common/types/appOperations';
-import { runStudioStoryboardDraft } from '@process/services/app-operations';
-import type {
-  StudioStoryboardDraftTaskInput,
-  StudioStoryboardDraftOutput,
-} from '@process/services/app-operations/storyboardDraftTask';
 import { CreativeStudioStoreError, type CreativeStudioStore } from '@process/services/creative-studio/store';
-import type { StudioProviderResolver } from '@process/services/creative-studio/providerResolver';
+import type {
+  StudioGenerationRouteCatalog,
+  StudioProviderResolver,
+} from '@process/services/creative-studio/providerResolver';
 import type { GenerationProviderAdapterRegistry } from '@process/services/creative-studio/adapters';
 import type { StudioJobManager } from '@process/services/creative-studio/jobManager';
 import type { IProvider } from '@/common/config/storage';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { isImagesApiModel } from '@/common/utils/imageModelAllowlist';
+import {
+  StudioStoryboardPlannerError,
+  type StudioStoryboardPlanner,
+} from '@process/services/creative-studio/planning/storyboardPlanner';
 
 const SAFE_ID = /^[A-Za-z0-9_-]{1,256}$/;
 const ASPECT_RATIOS = new Set(['16:9', '9:16', '1:1', '4:3', '3:4']);
@@ -90,14 +97,13 @@ export type CreativeStudioService = {
   saveConnection(input: StudioSaveConnectionRequest): Promise<StudioConnectionBinding>;
   removeConnection(input: StudioRemoveConnectionRequest): Promise<boolean>;
   listRoutes(input?: StudioListRoutesRequest): Promise<StudioRouteCatalog>;
+  updateModelSelection(input: StudioUpdateModelSelectionRequest): Promise<StudioRendererProject>;
 };
 
 export type CreativeStudioServiceDeps = {
   store: CreativeStudioStore;
   onProjectUpdated: (projectId: string) => void;
-  runStoryboardDraft?: (
-    input: StudioStoryboardDraftTaskInput
-  ) => Promise<AppOperationResult<StudioStoryboardDraftOutput>>;
+  storyboardPlanner: StudioStoryboardPlanner;
   createSceneId?: () => string;
   createConnectionId?: () => string;
   providerResolver?: StudioProviderResolver;
@@ -132,6 +138,28 @@ export class CreativeStudioServiceError extends Error {
 }
 
 const isSafeId = (value: unknown): value is string => typeof value === 'string' && SAFE_ID.test(value);
+
+const isUnsafeTextCharacter = (character: string): boolean => {
+  const codePoint = character.codePointAt(0)!;
+  return codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f) || (codePoint >= 0xd800 && codePoint <= 0xdfff);
+};
+
+const isSafeCatalogModel = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  value.length > 0 &&
+  value.length <= 256 &&
+  value === value.trim() &&
+  !Array.from(value).some(isUnsafeTextCharacter);
+
+const sanitizedCatalogProviderName = (value: unknown, providerId: string): string => {
+  if (typeof value !== 'string') return providerId;
+  const normalized = Array.from(value, (character) => (isUnsafeTextCharacter(character) ? ' ' : character))
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 256);
+  return normalized || providerId;
+};
 
 const isIntegerInRange = (value: unknown, minimum: number, maximum: number): value is number =>
   typeof value === 'number' &&
@@ -232,17 +260,18 @@ const sanitizedCapabilities = (
   };
 };
 
-const plannerError = (result: AppOperationResult<StudioStoryboardDraftOutput>): CreativeStudioServiceError => {
-  if (result.ok === true) throw new Error('expected_planner_error');
-  switch (result.error.code) {
-    case 'not_configured':
-    case 'model_unavailable':
-      return new CreativeStudioServiceError('planning_unavailable');
-    case 'queue_full':
-      return new CreativeStudioServiceError('busy');
-    default:
-      return new CreativeStudioServiceError('provider_error');
+const plannerError = (error: unknown): CreativeStudioServiceError => {
+  if (error instanceof StudioStoryboardPlannerError) {
+    switch (error.code) {
+      case 'model_unavailable':
+        return new CreativeStudioServiceError('planning_unavailable');
+      case 'busy':
+        return new CreativeStudioServiceError('busy');
+      default:
+        return new CreativeStudioServiceError('provider_error');
+    }
   }
+  return new CreativeStudioServiceError('provider_error');
 };
 
 const assertProjectInput = (input: CreateStudioProjectInput): void => {
@@ -376,14 +405,173 @@ const toRendererProject = (project: StudioProject): StudioRendererProject => ({
   updatedAt: project.updatedAt,
 });
 
+const modelStatus = (
+  selected: unknown | null,
+  optionsLength: number,
+  selectionIsAvailable: boolean
+): StudioModelAvailability =>
+  selected !== null
+    ? selectionIsAvailable
+      ? 'ready'
+      : 'unavailable'
+    : optionsLength === 0
+      ? 'setup_required'
+      : 'selection_required';
+
+const mediaRouteMatches = (route: StudioRouteCatalogEntry, selected: StudioProviderRef): boolean =>
+  route.providerId === selected.providerId && route.adapterId === selected.adapterId && route.model === selected.model;
+
+const textModelMatches = (option: StudioTextModelOption, selected: StudioTextModelRef): boolean =>
+  option.providerId === selected.providerId && option.model === selected.model;
+
+const sanitizedStoryboardOptions = (options: StudioTextModelOption[]): StudioTextModelOption[] => {
+  const unique = new Map<string, StudioTextModelOption>();
+  for (const option of options) {
+    if (
+      !isSafeId(option.providerId) ||
+      !isSafeCatalogModel(option.model) ||
+      !['available', 'unknown'].includes(option.health)
+    ) {
+      continue;
+    }
+    const sanitized: StudioTextModelOption = {
+      providerId: option.providerId,
+      providerName: sanitizedCatalogProviderName(option.providerName, option.providerId),
+      model: option.model,
+      health: option.health,
+    };
+    const identity = `${sanitized.providerId}\u0000${sanitized.model}`;
+    if (!unique.has(identity)) unique.set(identity, sanitized);
+  }
+  return [...unique.values()].toSorted((left, right) =>
+    `${left.providerId}\u0000${left.providerName}\u0000${left.model}`.localeCompare(
+      `${right.providerId}\u0000${right.providerName}\u0000${right.model}`
+    )
+  );
+};
+
+const routeSupportsProject = (route: StudioRouteCatalogEntry, project: StudioProject | null): boolean => {
+  if (route.health === 'unavailable' || !route.constraints.silentOutput) return false;
+  if (project === null) return true;
+  if (
+    !route.constraints.aspectRatios.includes(project.aspectRatio) ||
+    !route.constraints.resolutions.includes(project.resolution)
+  ) {
+    return false;
+  }
+  return project.sceneOrder
+    .map((sceneId) => project.scenes[sceneId])
+    .filter((scene): scene is StudioScene => scene !== undefined && scene.mediaKind === route.kind)
+    .every(
+      (scene) =>
+        scene.durationSeconds >= route.constraints.minDurationSeconds &&
+        scene.durationSeconds <= route.constraints.maxDurationSeconds &&
+        (scene.referenceAssetId === null || route.constraints.supportsFirstFrame)
+    );
+};
+
+const compatibilitySuggestion = (
+  selected: StudioProviderRef | null,
+  options: StudioRouteCatalogEntry[]
+): StudioRouteCatalog['suggestions']['image'] => {
+  const explicit = selected === null ? null : (options.find((route) => mediaRouteMatches(route, selected)) ?? null);
+  if (explicit) return { reason: 'last_successful', route: explicit };
+  if (options.length === 1) return { reason: 'sole_compatible', route: options[0]! };
+  return {
+    reason: options.length === 0 ? 'no_compatible_route' : 'manual_required',
+    route: null,
+  };
+};
+
+type BuiltStudioCatalog = {
+  catalog: StudioRouteCatalog;
+  generation: StudioGenerationRouteCatalog;
+};
+
 /** Owns bounded Creative Studio project edits and renderer-safe mutation notifications. */
 export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): CreativeStudioService => {
-  const runStoryboardDraft = deps.runStoryboardDraft ?? runStudioStoryboardDraft;
   const createSceneId = deps.createSceneId ?? randomUUID;
   const createConnectionId = deps.createConnectionId ?? randomUUID;
   const notify = (project: StudioProject): StudioRendererProject => {
     deps.onProjectUpdated(project.id);
     return toRendererProject(project);
+  };
+  const buildCatalog = async (project: StudioProject | null): Promise<BuiltStudioCatalog> => {
+    if (!deps.providerResolver) throw new CreativeStudioServiceError('invalid_route');
+    let storyboardOptions: StudioTextModelOption[];
+    let generation: StudioGenerationRouteCatalog;
+    try {
+      [storyboardOptions, generation] = await Promise.all([
+        deps.storyboardPlanner.listModels(),
+        deps.providerResolver.listGenerationRoutes(),
+      ]);
+    } catch {
+      throw new CreativeStudioServiceError('provider_error');
+    }
+    storyboardOptions = sanitizedStoryboardOptions(storyboardOptions);
+    const imageOptions = generation.routes.filter(
+      (route) => route.kind === 'image' && routeSupportsProject(route, project)
+    );
+    const videoOptions = generation.routes.filter(
+      (route) => route.kind === 'video' && routeSupportsProject(route, project)
+    );
+    const selected = project?.routing ?? { storyboard: null, image: null, video: null };
+    const storyboardSelectionAvailable =
+      selected.storyboard !== null &&
+      storyboardOptions.some((option) => textModelMatches(option, selected.storyboard!));
+    const imageSelectionAvailable =
+      selected.image !== null && imageOptions.some((route) => mediaRouteMatches(route, selected.image!));
+    const videoSelectionAvailable =
+      selected.video !== null && videoOptions.some((route) => mediaRouteMatches(route, selected.video!));
+    const storyboard = {
+      status: modelStatus(selected.storyboard, storyboardOptions.length, storyboardSelectionAvailable),
+      selected: selected.storyboard,
+      options: storyboardOptions,
+    };
+    const image = {
+      status: modelStatus(selected.image, imageOptions.length, imageSelectionAvailable),
+      selected: selected.image,
+      options: imageOptions,
+    };
+    const video = {
+      status: modelStatus(selected.video, videoOptions.length, videoSelectionAvailable),
+      selected: selected.video,
+      options: videoOptions,
+    };
+    const catalogVersion = createHash('sha256')
+      .update(
+        JSON.stringify({
+          storyboard: storyboardOptions.map(({ providerId, providerName, model, health }) => ({
+            providerId,
+            providerName,
+            model,
+            health,
+          })),
+          media: generation.routes,
+        })
+      )
+      .digest('hex')
+      .slice(0, 16);
+    return {
+      generation,
+      catalog: {
+        storyboard,
+        image,
+        video,
+        catalogVersion,
+        planning:
+          storyboard.status === 'ready' && storyboard.selected
+            ? { health: 'ready', resolvedModel: storyboard.selected }
+            : {
+                health: storyboard.status === 'selection_required' ? 'setup_required' : storyboard.status,
+              },
+        automatic: generation.routes,
+        suggestions: {
+          image: compatibilitySuggestion(selected.image, image.options),
+          video: compatibilitySuggestion(selected.video, video.options),
+        },
+      },
+    };
   };
 
   return {
@@ -413,19 +601,36 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
       if (project.sceneOrder.length > 0 && !input.replaceExisting) {
         throw new CreativeStudioServiceError('storyboard_exists');
       }
-
-      const result = await runStoryboardDraft({
-        projectId: project.id,
-        projectRevision: project.revision,
-        brief: project.brief,
-        aspectRatio: project.aspectRatio,
-        targetDurationSeconds: project.targetDurationSeconds,
-      });
-      if (!result.ok) throw plannerError(result);
+      const selected = project.routing.storyboard;
+      if (selected === null) throw new CreativeStudioServiceError('planning_unavailable');
+      let options: StudioTextModelOption[];
+      try {
+        options = await deps.storyboardPlanner.listModels();
+      } catch (error) {
+        throw plannerError(error);
+      }
+      if (!options.some((option) => textModelMatches(option, selected))) {
+        throw new CreativeStudioServiceError('planning_unavailable');
+      }
+      let result;
+      try {
+        result = await deps.storyboardPlanner.draft(
+          {
+            projectId: project.id,
+            projectRevision: project.revision,
+            brief: project.brief,
+            aspectRatio: project.aspectRatio,
+            targetDurationSeconds: project.targetDurationSeconds,
+          },
+          selected
+        );
+      } catch (error) {
+        throw plannerError(error);
+      }
 
       const sceneIds = new Set<string>();
       const scenes: Record<string, StudioScene> = {};
-      for (const draft of result.output.scenes) {
+      for (const draft of result.scenes) {
         const sceneId = createSceneId();
         if (!isSafeId(sceneId) || sceneIds.has(sceneId)) {
           throw new CreativeStudioStoreError('storage_error', 'Unable to allocate Studio scene identity');
@@ -481,6 +686,69 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
       const { projectId, expectedRevision, ...update } = input;
       return notify(
         await deps.store.updateProject(projectId, (project) => ({ ...project, ...update }), expectedRevision)
+      );
+    },
+
+    async updateModelSelection(input: StudioUpdateModelSelectionRequest): Promise<StudioRendererProject> {
+      assertSafeId(input.projectId, 'project id');
+      assertExpectedRevision(input.expectedRevision);
+      if (!['storyboard', 'image', 'video'].includes(input.role)) {
+        throw invalid('Invalid Studio model role');
+      }
+      if (input.selection !== null) {
+        assertSafeId(input.selection.providerId, 'provider id');
+        assertText(input.selection.model, 256, 'model', true);
+        if (
+          input.role !== 'storyboard' &&
+          !['weprompt-image-v1', 'byteplus-seedance-v1', 'weprompt-media-gateway-v1'].includes(
+            input.selection.adapterId
+          )
+        ) {
+          throw invalid('Invalid Studio adapter');
+        }
+      }
+      const project = await deps.store.getProject(input.projectId);
+      if (project === null) throw new CreativeStudioStoreError('not_found', 'Studio project not found');
+      if (project.revision !== input.expectedRevision) {
+        throw new CreativeStudioStoreError('stale_project', 'Studio project has changed');
+      }
+      const built = await buildCatalog(project);
+      let selection: StudioTextModelRef | StudioProviderRef | null;
+      let isAvailable: boolean;
+      if (input.selection === null) {
+        selection = null;
+        isAvailable = true;
+      } else if (input.role === 'storyboard') {
+        const storyboardSelection: StudioTextModelRef = {
+          providerId: input.selection.providerId,
+          model: input.selection.model,
+        };
+        selection = storyboardSelection;
+        isAvailable = built.catalog.storyboard.options.some((option) => textModelMatches(option, storyboardSelection));
+      } else {
+        const mediaSelection: StudioProviderRef = {
+          providerId: input.selection.providerId,
+          adapterId: input.selection.adapterId,
+          model: input.selection.model,
+        };
+        selection = mediaSelection;
+        isAvailable = built.catalog[input.role].options.some(
+          (route) => route.kind === input.role && mediaRouteMatches(route, mediaSelection)
+        );
+      }
+      if (!isAvailable) throw new CreativeStudioServiceError('invalid_route');
+      return notify(
+        await deps.store.updateProject(
+          input.projectId,
+          (current) => ({
+            ...current,
+            routing: {
+              ...current.routing,
+              [input.role]: selection,
+            },
+          }),
+          input.expectedRevision
+        )
       );
     },
 
@@ -638,7 +906,21 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
     async submitScenes(input: StudioSubmitScenesRequest): Promise<StudioRendererJob[]> {
       assertSubmitScenesInput(input);
       if (!deps.jobManager) throw new CreativeStudioServiceError('provider_error');
-      return (await deps.jobManager.submitScenes(input)).map(toRendererJob);
+      const project = await deps.store.getProject(input.projectId);
+      if (project === null) throw new CreativeStudioStoreError('not_found', 'Studio project not found');
+      if (project.revision !== input.expectedRevision) {
+        throw new CreativeStudioStoreError('stale_project', 'Studio project has changed');
+      }
+      const built = await buildCatalog(project);
+      if (input.catalogVersion !== built.catalog.catalogVersion) {
+        throw new CreativeStudioServiceError('invalid_route');
+      }
+      return (
+        await deps.jobManager.submitScenes({
+          ...input,
+          catalogVersion: built.generation.generationCatalogVersion,
+        })
+      ).map(toRendererJob);
     },
 
     async cancelJob(input: StudioJobRequest): Promise<StudioRendererJob> {
@@ -764,11 +1046,7 @@ export const createCreativeStudioService = (deps: CreativeStudioServiceDeps): Cr
       if (input.projectId !== undefined && project === null) {
         throw new CreativeStudioStoreError('not_found', 'Studio project not found');
       }
-      try {
-        return await deps.providerResolver.listRoutes({ routing: project?.routing });
-      } catch {
-        throw new CreativeStudioServiceError('provider_error');
-      }
+      return (await buildCatalog(project)).catalog;
     },
   };
 };

@@ -59,9 +59,22 @@ const imageRoute = (overrides: Partial<StudioRouteCatalogEntry> = {}): StudioRou
 const catalog = (overrides: Partial<StudioRouteCatalog> = {}): StudioRouteCatalog => {
   const suggested = imageRoute();
   return {
+    storyboard: {
+      status: 'ready',
+      selected: { providerId: 'planner', model: 'planner-model' },
+      options: [
+        {
+          providerId: 'planner',
+          providerName: 'Planner',
+          model: 'planner-model',
+          health: 'available',
+        },
+      ],
+    },
+    image: { status: 'selection_required', selected: null, options: [suggested] },
+    video: { status: 'setup_required', selected: null, options: [] },
     planning: { health: 'ready', resolvedModel: { providerId: 'planner', model: 'planner-model' } },
     automatic: [suggested],
-    providerModels: [],
     suggestions: {
       image: { reason: 'sole_compatible', route: suggested },
       video: { reason: 'no_compatible_route', route: null },

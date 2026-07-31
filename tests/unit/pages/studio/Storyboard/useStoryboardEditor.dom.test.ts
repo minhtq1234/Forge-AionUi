@@ -86,9 +86,23 @@ const routes = (
     resolvedModel: { providerId: 'provider-1', model: 'operations-model' },
   }
 ): StudioRouteCatalog => ({
+  storyboard: {
+    status: planning.health === 'ready' ? 'ready' : 'setup_required',
+    selected: planning.resolvedModel ?? null,
+    options: planning.resolvedModel
+      ? [
+          {
+            ...planning.resolvedModel,
+            providerName: 'Provider',
+            health: 'available',
+          },
+        ]
+      : [],
+  },
+  image: { status: 'setup_required', selected: null, options: [] },
+  video: { status: 'setup_required', selected: null, options: [] },
   planning,
   automatic: [],
-  providerModels: [],
   suggestions: {
     image: { reason: 'no_compatible_route', route: null },
     video: { reason: 'no_compatible_route', route: null },

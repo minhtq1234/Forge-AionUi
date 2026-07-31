@@ -409,16 +409,16 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
     if (!scene || route.sceneId !== sceneId || route.kind !== scene.mediaKind) {
       throw new StudioJobManagerError('invalid_route');
     }
-    let catalog: Awaited<ReturnType<StudioProviderResolver['listRoutes']>>;
+    let catalog: Awaited<ReturnType<StudioProviderResolver['listGenerationRoutes']>>;
     try {
-      catalog = await deps.providerResolver.listRoutes({ routing: project.routing });
+      catalog = await deps.providerResolver.listGenerationRoutes();
     } catch {
       throw new StudioJobManagerError('provider_error');
     }
-    if (catalogVersion !== undefined && catalog.catalogVersion !== catalogVersion) {
+    if (catalogVersion !== undefined && catalog.generationCatalogVersion !== catalogVersion) {
       throw new StudioJobManagerError('invalid_route');
     }
-    const catalogRoute = catalog.automatic.find((candidate) => routeMatches(candidate, route));
+    const catalogRoute = catalog.routes.find((candidate) => routeMatches(candidate, route));
     if (!catalogRoute) {
       throw new StudioJobManagerError('invalid_route');
     }

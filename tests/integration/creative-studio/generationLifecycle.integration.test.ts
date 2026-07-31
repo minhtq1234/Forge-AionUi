@@ -120,12 +120,10 @@ const createHarness = async (): Promise<Harness> => {
   const listProviders = async () => [fake.provider];
   const providerResolver = createStudioProviderResolver({
     listProviders,
-    getClientSettings: async () => ({}),
-    getPlanningReadiness: async () => ({ setting: { mode: 'auto' }, health: 'ready' }),
     listConnections: () => store.listConnections(),
   });
-  const catalog = await providerResolver.listRoutes({ routing: project.routing });
-  const videoRoute = catalog.automatic.find((candidate) => candidate.kind === 'video');
+  const catalog = await providerResolver.listGenerationRoutes();
+  const videoRoute = catalog.routes.find((candidate) => candidate.kind === 'video');
   if (!videoRoute) throw new Error('E2E fake video route was not resolved');
   const route: StudioSceneRouteSnapshot = {
     sceneId: scene.id,
@@ -198,17 +196,15 @@ describe('Creative Studio generation lifecycle integration', () => {
     const harness = await createHarness();
     const catalog = await createStudioProviderResolver({
       listProviders: async () => [harness.fake.provider],
-      getClientSettings: async () => ({}),
-      getPlanningReadiness: async () => ({ setting: { mode: 'auto' }, health: 'ready' }),
       listConnections: () => harness.store.listConnections(),
-    }).listRoutes({ routing: harness.project.routing });
+    }).listGenerationRoutes();
 
     const submitted = await harness.manager.submitScenes({
       projectId: harness.project.id,
       expectedRevision: harness.project.revision,
       sceneIds: [scene.id],
       routes: [harness.route],
-      catalogVersion: catalog.catalogVersion,
+      catalogVersion: catalog.generationCatalogVersion,
     });
 
     expect(submitted).toMatchObject([{ id: 'job_lifecycle', status: 'queued_local', providerJobId: null }]);

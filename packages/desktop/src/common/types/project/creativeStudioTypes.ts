@@ -265,13 +265,6 @@ export type StudioConnectionBinding = {
   validatedAt: string;
 };
 
-export type StudioProviderModelOption = {
-  providerId: string;
-  providerName: string;
-  model: string;
-  health: 'available' | 'unknown' | 'unavailable';
-};
-
 export type StudioRouteSuggestionReason =
   | 'last_successful'
   | 'configured_image_model'
@@ -284,23 +277,34 @@ export type StudioRouteSuggestion = {
   route: StudioRouteCatalogEntry | null;
 };
 
+export type StudioModelAvailability = 'ready' | 'selection_required' | 'setup_required' | 'unavailable';
+
 export type StudioRouteCatalog = {
+  storyboard: {
+    status: StudioModelAvailability;
+    selected: StudioTextModelRef | null;
+    options: StudioTextModelOption[];
+  };
+  image: {
+    status: StudioModelAvailability;
+    selected: StudioProviderRef | null;
+    options: StudioRouteCatalogEntry[];
+  };
+  video: {
+    status: StudioModelAvailability;
+    selected: StudioProviderRef | null;
+    options: StudioRouteCatalogEntry[];
+  };
+  catalogVersion: string;
+  /** Transitional renderer compatibility; removed in Task 10. */
   planning: {
     health: 'ready' | 'checking' | 'setup_required' | 'unavailable';
-    reasonCode?:
-      | 'no_eligible_model'
-      | 'provider_missing'
-      | 'provider_disabled'
-      | 'model_missing'
-      | 'model_disabled'
-      | 'auth_required'
-      | 'health_check_failed';
-    resolvedModel?: { providerId: string; model: string };
+    resolvedModel?: StudioTextModelRef;
   };
+  /** Transitional renderer compatibility; removed in Task 10. */
   automatic: StudioRouteCatalogEntry[];
-  providerModels: StudioProviderModelOption[];
+  /** Transitional renderer compatibility; removed in Task 10. */
   suggestions: { image: StudioRouteSuggestion; video: StudioRouteSuggestion };
-  catalogVersion: string;
 };
 
 export type StudioCommandErrorCode =

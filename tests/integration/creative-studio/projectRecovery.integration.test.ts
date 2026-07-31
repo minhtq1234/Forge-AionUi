@@ -8,12 +8,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { IProvider } from '@/common/config/storage';
-import type {
-  StudioProject,
-  StudioRouteCatalog,
-  StudioScene,
-  StudioSceneRouteSnapshot,
-} from '@/common/types/project/creativeStudioTypes';
+import type { StudioProject, StudioScene, StudioSceneRouteSnapshot } from '@/common/types/project/creativeStudioTypes';
 import {
   createStudioE2EFakeBundle,
   createStudioE2EFakeRemoteState,
@@ -25,6 +20,7 @@ import { createStudioJobManager, type StudioJobManager } from '@process/services
 import { createStudioMediaStore } from '@process/services/creative-studio/mediaStore';
 import {
   createStudioProviderResolver,
+  type StudioGenerationRouteCatalog,
   type StudioProviderResolver,
 } from '@process/services/creative-studio/providerResolver';
 import {
@@ -110,7 +106,7 @@ type RecoveryHarness = {
   fake: ReturnType<typeof createStudioE2EFakeBundle>;
   project: StudioProject;
   route: StudioSceneRouteSnapshot;
-  catalog: StudioRouteCatalog;
+  catalog: StudioGenerationRouteCatalog;
   manager: StudioJobManager;
   clock: ControlledPollClock;
 };
@@ -124,8 +120,6 @@ const resolverFor = (
 ): StudioProviderResolver =>
   createStudioProviderResolver({
     listProviders: providers,
-    getClientSettings: async () => ({}),
-    getPlanningReadiness: async () => ({ setting: { mode: 'auto' }, health: 'ready' }),
     listConnections: () => store.listConnections(),
   });
 
@@ -148,8 +142,8 @@ const createHarness = async (): Promise<RecoveryHarness> => {
   }));
   const listProviders = async () => [fake.provider];
   const providerResolver = resolverFor(store, listProviders);
-  const catalog = await providerResolver.listRoutes({ routing: project.routing });
-  const videoRoute = catalog.automatic.find((candidate) => candidate.kind === 'video');
+  const catalog = await providerResolver.listGenerationRoutes();
+  const videoRoute = catalog.routes.find((candidate) => candidate.kind === 'video');
   if (!videoRoute) throw new Error('E2E fake video route was not resolved');
   const route: StudioSceneRouteSnapshot = {
     sceneId: scene.id,
@@ -181,7 +175,7 @@ const submitAndStopWithRemoteIdentity = async (harness: RecoveryHarness): Promis
     expectedRevision: harness.project.revision,
     sceneIds: [scene.id],
     routes: [harness.route],
-    catalogVersion: harness.catalog.catalogVersion,
+    catalogVersion: harness.catalog.generationCatalogVersion,
   });
   const persisted = await waitFor(async () => {
     const project = await createCreativeStudioStore({ rootDir: harness.rootDir }).getProject(harness.project.id);
@@ -214,6 +208,13 @@ const createFreshRuntimeHarness = (
     createStore: ({ rootDir: runtimeRoot }) => createCreativeStudioStore({ rootDir: runtimeRoot }),
     createMediaStore: ({ store }) => createStudioMediaStore({ store }),
     createAdapters: () => new Map(),
+    createPlanner: () => ({
+      listModels: async () => [],
+      draft: async () => {
+        throw new Error('Storyboard drafting was not expected during recovery');
+      },
+      dispose: async () => {},
+    }),
     createProviderResolver: createStudioProviderResolver,
     createJobManager: (input) =>
       createStudioJobManager({
@@ -235,8 +236,6 @@ const createFreshRuntimeHarness = (
     isPackaged: false,
     factories,
     listProviders: async () => [],
-    getClientSettings: async () => ({}),
-    getPlanningReadiness: async () => ({ setting: { mode: 'auto' }, health: 'ready' }),
     onProjectUpdated: () => {},
     protocol: {
       install: () => ({ dispose: async () => {} }),
