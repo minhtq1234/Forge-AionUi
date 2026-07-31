@@ -15,6 +15,7 @@ import type {
   StudioProjectSummary,
   StudioProviderRef,
   StudioScene,
+  StudioTextModelRef,
 } from '@/common/types/project/creativeStudioTypes';
 import { isValidProviderJobId } from '@process/services/creative-studio/adapters/types';
 
@@ -50,6 +51,8 @@ const JOB_ERROR_CODES = new Set([
   'unknown',
 ]);
 const PROVIDER_REF_KEYS = new Set(['providerId', 'adapterId', 'model']);
+const ROUTING_KEYS = new Set(['storyboard', 'image', 'video']);
+const TEXT_MODEL_REF_KEYS = new Set(['providerId', 'model']);
 const JOB_ERROR_KEYS = new Set(['code', 'messageKey']);
 const SCENE_KEYS = new Set([
   'id',
@@ -237,6 +240,8 @@ const isSafeConnectionModel = (value: unknown): value is string => {
   });
 };
 
+const isSafeModel = isSafeConnectionModel;
+
 const isCanonicalIsoTimestamp = (value: unknown): value is string => {
   if (!isString(value) || value.length !== 24) return false;
   const timestamp = Date.parse(value);
@@ -248,14 +253,19 @@ const isSafeAssetFileName = (value: unknown): value is string =>
 
 const asArrayOfSafeIds = (value: unknown): value is string[] => Array.isArray(value) && value.every(isSafeId);
 
+const hasExactKeys = (value: Record<string, unknown>, keys: ReadonlySet<string>): boolean =>
+  Object.keys(value).length === keys.size && Object.keys(value).every((key) => keys.has(key));
+
 const validateProviderRef = (value: unknown): value is StudioProviderRef =>
   isRecord(value) &&
-  Object.keys(value).length === PROVIDER_REF_KEYS.size &&
-  Object.keys(value).every((key) => PROVIDER_REF_KEYS.has(key)) &&
+  hasExactKeys(value, PROVIDER_REF_KEYS) &&
   isSafeId(value.providerId) &&
   isString(value.adapterId) &&
   ADAPTER_IDS.has(value.adapterId) &&
   isNonEmptyString(value.model);
+
+const validateTextModelRef = (value: unknown): value is StudioTextModelRef =>
+  isRecord(value) && hasExactKeys(value, TEXT_MODEL_REF_KEYS) && isSafeId(value.providerId) && isSafeModel(value.model);
 
 const validateConnectionBinding = (value: unknown): value is StudioConnectionBinding => {
   if (!isRecord(value) || !isRecord(value.capabilities)) return false;
@@ -452,7 +462,11 @@ const migrateSchemaV1Project = (value: unknown): unknown => {
       return [jobId, job];
     })
   );
-  return changed ? { ...value, jobs } : value;
+  const routing =
+    isRecord(value.routing) && !Object.hasOwn(value.routing, 'storyboard')
+      ? { ...value.routing, storyboard: null }
+      : value.routing;
+  return changed || routing !== value.routing ? { ...value, jobs, routing } : value;
 };
 
 const retryGraphHasCycle = (jobs: Record<string, StudioJob>): boolean => {
@@ -505,6 +519,8 @@ const validateProject = (value: unknown): value is StudioProject => {
     !asArrayOfSafeIds(sceneOrder) ||
     !isNonEmptyString(value.createdAt) ||
     !isNonEmptyString(value.updatedAt) ||
+    !hasExactKeys(routing, ROUTING_KEYS) ||
+    (routing.storyboard !== null && !validateTextModelRef(routing.storyboard)) ||
     (routing.image !== null && !validateProviderRef(routing.image)) ||
     (routing.video !== null && !validateProviderRef(routing.video))
   ) {
@@ -624,7 +640,7 @@ const createProjectFromInput = (input: CreateStudioProjectInput, id: string, tim
   scenes: {},
   assets: {},
   jobs: {},
-  routing: { image: null, video: null },
+  routing: { storyboard: null, image: null, video: null },
   createdAt: timestamp,
   updatedAt: timestamp,
 });

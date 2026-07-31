@@ -404,7 +404,7 @@ describe('CreativeStudioService', () => {
 
     await routed.listRoutes({ projectId: project.id });
 
-    expect(listRoutes).toHaveBeenCalledWith({ routing: { image: null, video: null } });
+    expect(listRoutes).toHaveBeenCalledWith({ routing: { storyboard: null, image: null, video: null } });
   });
 
   it('rejects metadata outside renderer bounds instead of persisting oversized text', async () => {

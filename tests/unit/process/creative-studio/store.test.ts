@@ -178,6 +178,44 @@ describe('creative studio project store', () => {
     expect(await store.getProject(project.id)).toEqual(project);
   });
 
+  it('creates three empty project model selections', async () => {
+    const project = await store.createProject(makeInput());
+
+    expect(project.routing).toEqual({ storyboard: null, image: null, video: null });
+  });
+
+  it('loads a current schema-v1 manifest without a storyboard selection', async () => {
+    const project = await store.createProject(makeInput());
+    const file = path.join(rootDir, project.id, 'project.json');
+    const raw = JSON.parse(readFileSync(file, 'utf8')) as StudioProject;
+    writeFileSync(file, JSON.stringify({ ...raw, routing: { image: raw.routing.image, video: raw.routing.video } }));
+
+    expect((await store.getProject(project.id))?.routing).toEqual({
+      storyboard: null,
+      image: null,
+      video: null,
+    });
+
+    await store.updateProject(project.id, (current) => ({ ...current, name: 'Migrated project' }));
+    expect((JSON.parse(readFileSync(file, 'utf8')) as StudioProject).routing).toEqual({
+      storyboard: null,
+      image: null,
+      video: null,
+    });
+  });
+
+  it.each([
+    { storyboard: null, image: null, video: null, extra: true },
+    { storyboard: { providerId: '../provider', model: 'gpt-4o' }, image: null, video: null },
+    { storyboard: { providerId: 'provider_1', model: 'gpt-4o\u0000secret' }, image: null, video: null },
+  ])('rejects malformed project model selections: %o', async (routing) => {
+    const project = await store.createProject(makeInput());
+    const file = path.join(rootDir, project.id, 'project.json');
+    writeFileSync(file, JSON.stringify({ ...project, routing }));
+
+    await expect(store.getProject(project.id)).rejects.toMatchObject({ code: 'storage_error' });
+  });
+
   it('increments revision for each successful mutation instead of silently replacing a project', async () => {
     const project = await store.createProject(makeInput());
     const renamed = await store.updateProject(project.id, (current) => ({ ...current, name: 'Revised launch film' }));

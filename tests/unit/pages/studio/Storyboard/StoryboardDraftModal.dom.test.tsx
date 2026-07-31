@@ -49,7 +49,7 @@ const project = (withScene = false): StudioRendererProject => ({
   scenes: withScene ? { 'scene-1': scene() } : {},
   assets: {},
   jobs: {},
-  routing: { image: null, video: null },
+  routing: { storyboard: null, image: null, video: null },
   createdAt: '2026-07-30T00:00:00.000Z',
   updatedAt: '2026-07-30T00:00:00.000Z',
 });

@@ -67,7 +67,7 @@ const project = (id = 'project-1', overrides: Partial<StudioRendererProject> = {
   scenes: {},
   assets: {},
   jobs: {},
-  routing: { image: null, video: null },
+  routing: { storyboard: null, image: null, video: null },
   createdAt: '2026-07-30T00:00:00.000Z',
   updatedAt: '2026-07-30T00:00:00.000Z',
   ...overrides,
@@ -655,6 +655,7 @@ describe('StudioPage and useStudioProject', () => {
       sceneOrder: [opening.id],
       scenes: { [opening.id]: opening },
       routing: {
+        storyboard: null,
         image: {
           providerId: 'provider-image',
           adapterId: 'weprompt-image-v1',

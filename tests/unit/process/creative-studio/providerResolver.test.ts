@@ -48,6 +48,7 @@ describe('createStudioProviderResolver', () => {
 
     const catalog = await resolver.listRoutes({
       routing: {
+        storyboard: null,
         image: { providerId: 'provider_1', adapterId: 'weprompt-image-v1', model: 'gemini-2.5-flash-image' },
         video: null,
       },

@@ -30,6 +30,11 @@ export type StudioProviderRef = {
   model: string;
 };
 
+export type StudioTextModelRef = {
+  providerId: string;
+  model: string;
+};
+
 /** An app-managed asset identity, deliberately not a filesystem path or URL. */
 export type StudioManagedAssetRef = {
   collection: 'assets' | 'imports' | 'thumbnails';
@@ -129,6 +134,7 @@ export type StudioEditableScene = Pick<
 >;
 
 export type StudioRoutingPreferences = {
+  storyboard: StudioTextModelRef | null;
   image: StudioProviderRef | null;
   video: StudioProviderRef | null;
 };
@@ -337,6 +343,20 @@ export type StudioUpdateProjectRequest = StudioProjectRequest & {
   targetDurationSeconds?: number;
   resolution?: StudioResolution;
 };
+
+export type StudioModelSelectionChange =
+  | {
+      role: 'storyboard';
+      selection: StudioTextModelRef | null;
+    }
+  | {
+      role: 'image' | 'video';
+      selection: StudioProviderRef | null;
+    };
+
+export type StudioUpdateModelSelectionRequest = StudioProjectRequest & {
+  expectedRevision: number;
+} & StudioModelSelectionChange;
 
 export type StudioUpdateSceneRequest = StudioProjectRequest & {
   sceneId: string;
