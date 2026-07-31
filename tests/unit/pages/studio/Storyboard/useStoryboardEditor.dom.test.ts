@@ -11,13 +11,11 @@ import type {
   StudioCommandResult,
   StudioEditableScene,
   StudioRendererProject,
-  StudioRouteCatalog,
   StudioScene,
 } from '@/common/types/project/creativeStudioTypes';
 import { useStoryboardEditor } from '@renderer/pages/studio/hooks/useStoryboardEditor';
 
 const bridge = vi.hoisted(() => ({
-  listRoutes: { invoke: vi.fn() },
   updateScene: { invoke: vi.fn() },
   reorderScenes: { invoke: vi.fn() },
   proposeStoryboard: { invoke: vi.fn() },
@@ -80,36 +78,6 @@ const project = (
   ...overrides,
 });
 
-const routes = (
-  planning: StudioRouteCatalog['planning'] = {
-    health: 'ready',
-    resolvedModel: { providerId: 'provider-1', model: 'operations-model' },
-  }
-): StudioRouteCatalog => ({
-  storyboard: {
-    status: planning.health === 'ready' ? 'ready' : 'setup_required',
-    selected: planning.resolvedModel ?? null,
-    options: planning.resolvedModel
-      ? [
-          {
-            ...planning.resolvedModel,
-            providerName: 'Provider',
-            health: 'available',
-          },
-        ]
-      : [],
-  },
-  image: { status: 'setup_required', selected: null, options: [] },
-  video: { status: 'setup_required', selected: null, options: [] },
-  planning,
-  automatic: [],
-  suggestions: {
-    image: { reason: 'no_compatible_route', route: null },
-    video: { reason: 'no_compatible_route', route: null },
-  },
-  catalogVersion: 'catalog-1',
-});
-
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((resolvePromise) => {
@@ -121,7 +89,6 @@ const deferred = <T>() => {
 describe('useStoryboardEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    bridge.listRoutes.invoke.mockResolvedValue(ok(routes()));
     bridge.updateScene.invoke.mockImplementation(async () => ok(project(3)));
     bridge.reorderScenes.invoke.mockImplementation(async () => ok(project(3)));
     bridge.proposeStoryboard.invoke.mockImplementation(async () => ok(project(3)));
@@ -142,7 +109,6 @@ describe('useStoryboardEditor', () => {
     expect(result.current.durationTotalSeconds).toBe(10);
     expect(result.current.durationMatchesTarget).toBe(true);
     expect(result.current.hasUnsavedSelectedSceneDraft).toBe(false);
-    await waitFor(() => expect(result.current.planning?.health).toBe('ready'));
   });
 
   it('distinguishes the selected scene draft from unrelated dirty scene drafts', async () => {
@@ -173,7 +139,6 @@ describe('useStoryboardEditor', () => {
     expect(bridge.updateScene.invoke).not.toHaveBeenCalled();
     expect(bridge.reorderScenes.invoke).not.toHaveBeenCalled();
     expect(bridge.proposeStoryboard.invoke).not.toHaveBeenCalled();
-    expect(bridge.listRoutes.invoke).not.toHaveBeenCalled();
   });
 
   it('debounces a strict editable-scene command and adopts its canonical response', async () => {
@@ -593,7 +558,6 @@ describe('useStoryboardEditor', () => {
     const { result, unmount } = renderHook(() =>
       useStoryboardEditor({ project: project(), refetch: vi.fn(async () => project()) })
     );
-    await waitFor(() => expect(result.current.planningLoading).toBe(false));
 
     act(() => result.current.updateSceneDraft({ durationSeconds: 6 }));
 
@@ -1026,50 +990,12 @@ describe('useStoryboardEditor', () => {
     expect(result.current.project?.revision).toBe(7);
   });
 
-  it('keeps only the latest planning-catalog response', async () => {
-    const older = deferred<StudioCommandResult<StudioRouteCatalog>>();
-    const newer = deferred<StudioCommandResult<StudioRouteCatalog>>();
-    bridge.listRoutes.invoke.mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
-    const { result } = renderHook(() =>
-      useStoryboardEditor({ project: project(), refetch: vi.fn(async () => project()) })
-    );
-
-    let refresh!: Promise<void>;
-    act(() => {
-      refresh = result.current.refreshPlanning();
-    });
-    await act(async () => {
-      newer.resolve(ok(routes({ health: 'setup_required', reasonCode: 'no_eligible_model' })));
-      await refresh;
-    });
-    await act(async () => {
-      older.resolve(ok(routes({ health: 'ready', resolvedModel: { providerId: 'old', model: 'old' } })));
-      await Promise.resolve();
-    });
-
-    expect(result.current.planning?.health).toBe('setup_required');
-  });
-
-  it('surfaces planning readiness and typed route errors without changing scenes', async () => {
-    bridge.listRoutes.invoke.mockResolvedValueOnce(
-      failed('provider_error', 'conversation.creativeStudio.errors.provider')
-    );
-    const initial = project();
-    const { result } = renderHook(() => useStoryboardEditor({ project: initial, refetch: vi.fn(async () => initial) }));
-
-    await waitFor(() =>
-      expect(result.current.planningErrorMessageKey).toBe('conversation.creativeStudio.errors.provider')
-    );
-    expect(result.current.orderedScenes.map(({ id }) => id)).toEqual(['scene-1', 'scene-2']);
-  });
-
-  it('blocks planning unless ready and adopts a successful explicit replacement', async () => {
+  it('adopts a successful explicit storyboard replacement without loading routes', async () => {
     const drafted = project(3, [scene('draft-1', { title: 'Drafted scene' })]);
     bridge.proposeStoryboard.invoke.mockResolvedValueOnce(ok(drafted));
     const { result } = renderHook(() =>
       useStoryboardEditor({ project: project(), refetch: vi.fn(async () => project()) })
     );
-    await waitFor(() => expect(result.current.planning?.health).toBe('ready'));
 
     await act(async () => {
       expect(await result.current.proposeStoryboard(true)).toBe(true);
@@ -1084,20 +1010,6 @@ describe('useStoryboardEditor', () => {
     expect(result.current.selectedSceneId).toBe('draft-1');
   });
 
-  it('requires a resolved planning model even when readiness reports ready', async () => {
-    bridge.listRoutes.invoke.mockResolvedValueOnce(ok(routes({ health: 'ready' })));
-    const { result } = renderHook(() =>
-      useStoryboardEditor({ project: project(), refetch: vi.fn(async () => project()) })
-    );
-    await waitFor(() => expect(result.current.planning?.health).toBe('ready'));
-
-    await act(async () => {
-      expect(await result.current.proposeStoryboard(true)).toBe(false);
-    });
-
-    expect(bridge.proposeStoryboard.invoke).not.toHaveBeenCalled();
-  });
-
   it('does not start or park a planner call behind a non-draft conflict', async () => {
     bridge.reorderScenes.invoke.mockResolvedValueOnce(
       failed('stale_project', 'conversation.creativeStudio.errors.staleProject')
@@ -1106,7 +1018,6 @@ describe('useStoryboardEditor', () => {
     const { result } = renderHook(() =>
       useStoryboardEditor({ project: project(), refetch: vi.fn(async () => refreshed) })
     );
-    await waitFor(() => expect(result.current.planning?.health).toBe('ready'));
 
     await act(async () => {
       expect(await result.current.reorderScenes(['scene-2', 'scene-1'])).toBe(false);
@@ -1128,7 +1039,6 @@ describe('useStoryboardEditor', () => {
     const { result } = renderHook(() =>
       useStoryboardEditor({ project: project(), refetch: vi.fn(async () => refreshed) })
     );
-    await waitFor(() => expect(result.current.planning?.health).toBe('ready'));
 
     let reorderResult!: Promise<boolean>;
     act(() => {
@@ -1168,7 +1078,6 @@ describe('useStoryboardEditor', () => {
     const { result } = renderHook(() =>
       useStoryboardEditor({ project: project(), refetch: vi.fn(async () => refreshed) })
     );
-    await waitFor(() => expect(result.current.planning?.health).toBe('ready'));
 
     let firstDraft!: Promise<boolean>;
     act(() => {
@@ -1206,7 +1115,6 @@ describe('useStoryboardEditor', () => {
         scene: expect.objectContaining({ title: 'Preserved local edit' }),
       })
     );
-    expect(result.current.planningErrorMessageKey).toBe('conversation.creativeStudio.errors.provider');
     expect(result.current.conflict).toBeNull();
   });
 
@@ -1217,7 +1125,6 @@ describe('useStoryboardEditor', () => {
     const { result } = renderHook(() =>
       useStoryboardEditor({ project: project(), refetch: vi.fn(async () => project()) })
     );
-    await waitFor(() => expect(result.current.planning?.health).toBe('ready'));
 
     let drafting!: Promise<boolean>;
     act(() => {
@@ -1243,13 +1150,12 @@ describe('useStoryboardEditor', () => {
     expect(result.current.conflict).toBeNull();
   });
 
-  it('allows only one same-tick planning authorization', async () => {
+  it('allows only one same-tick storyboard authorization', async () => {
     const proposal = deferred<StudioCommandResult<StudioRendererProject>>();
     bridge.proposeStoryboard.invoke.mockReturnValueOnce(proposal.promise);
     const { result } = renderHook(() =>
       useStoryboardEditor({ project: project(), refetch: vi.fn(async () => project()) })
     );
-    await waitFor(() => expect(result.current.planning?.health).toBe('ready'));
 
     let first!: Promise<boolean>;
     let duplicate!: Promise<boolean>;
@@ -1277,7 +1183,6 @@ describe('useStoryboardEditor', () => {
     const { result } = renderHook(() =>
       useStoryboardEditor({ project: project(), refetch: vi.fn(async () => refreshed) })
     );
-    await waitFor(() => expect(result.current.planning?.health).toBe('ready'));
 
     await act(async () => {
       expect(await result.current.proposeStoryboard(true)).toBe(false);
@@ -1312,7 +1217,6 @@ describe('useStoryboardEditor', () => {
     );
     const initial = project();
     const { result } = renderHook(() => useStoryboardEditor({ project: initial, refetch: vi.fn(async () => initial) }));
-    await waitFor(() => expect(result.current.planning?.health).toBe('ready'));
 
     await act(async () => {
       expect(await result.current.proposeStoryboard(false)).toBe(false);
@@ -1323,6 +1227,5 @@ describe('useStoryboardEditor', () => {
       operation: 'draft_storyboard',
       code: 'storyboard_exists',
     });
-    expect(result.current.planningErrorMessageKey).toBe('conversation.creativeStudio.errors.storyboardExists');
   });
 });

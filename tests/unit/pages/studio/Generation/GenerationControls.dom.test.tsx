@@ -9,7 +9,6 @@ import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
-  StudioCommandResult,
   StudioRendererJob,
   StudioRouteCatalog,
   StudioRouteCatalogEntry,
@@ -20,11 +19,6 @@ import {
   type GenerationControlsProps,
 } from '@renderer/pages/studio/components/Generation/GenerationControls';
 
-const bridge = vi.hoisted(() => ({
-  listRoutes: { invoke: vi.fn() },
-}));
-
-vi.mock('@/common', () => ({ ipcBridge: { creativeStudio: bridge } }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, values?: Record<string, unknown>) =>
@@ -35,8 +29,6 @@ vi.mock('react-i18next', () => ({
         : key,
   }),
 }));
-
-const ok = <T,>(data: T): StudioCommandResult<T> => ({ ok: true, data });
 
 const imageRoute = (overrides: Partial<StudioRouteCatalogEntry> = {}): StudioRouteCatalogEntry => ({
   providerId: 'provider_image',
@@ -116,7 +108,10 @@ const job = (overrides: Partial<StudioRendererJob>): StudioRendererJob => ({
 });
 
 const createProps = (overrides: Partial<GenerationControlsProps> = {}): GenerationControlsProps => ({
-  projectId: 'project-1',
+  catalog: catalog(),
+  catalogLoading: false,
+  catalogErrorMessageKey: null,
+  onRefreshCatalog: vi.fn(),
   scene: { id: 'scene-1', mediaKind: 'image' },
   aspectRatio: '16:9',
   resolution: '720p',
@@ -143,28 +138,23 @@ const createProps = (overrides: Partial<GenerationControlsProps> = {}): Generati
 describe('GenerationControls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    bridge.listRoutes.invoke.mockResolvedValue(ok(catalog()));
   });
 
   it('does not claim a smart route or canonical reason when the catalog has no suggestion', async () => {
-    bridge.listRoutes.invoke.mockResolvedValue(
-      ok(
-        catalog({
-          automatic: [],
-          suggestions: {
-            image: { reason: 'no_compatible_route', route: null },
-            video: { reason: 'no_compatible_route', route: null },
-          },
-        })
-      )
-    );
-    const props = createProps();
+    const props = createProps({
+      catalog: catalog({
+        automatic: [],
+        suggestions: {
+          image: { reason: 'no_compatible_route', route: null },
+          video: { reason: 'no_compatible_route', route: null },
+        },
+      }),
+    });
     render(<GenerationControls {...props} />);
 
     expect(await screen.findByText('conversation.creativeStudio.routing.missingRoute')).toBeInTheDocument();
     expect(screen.queryByText('conversation.creativeStudio.routing.smartRoute')).not.toBeInTheDocument();
     expect(screen.queryByText('conversation.creativeStudio.routing.noCompatibleRoute')).not.toBeInTheDocument();
-    expect(bridge.listRoutes.invoke).toHaveBeenCalledExactlyOnceWith({ projectId: 'project-1' });
 
     fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.review.generateScene' }));
     fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.review.generateReadyScenes' }));
@@ -288,18 +278,15 @@ describe('GenerationControls', () => {
       providerName: 'Image Provider Two',
       model: 'image-model-v2',
     });
-    bridge.listRoutes.invoke.mockResolvedValue(
-      ok(
-        catalog({
-          automatic: [imageRoute(), secondRoute],
-          suggestions: {
-            image: { reason: 'manual_required', route: null },
-            video: { reason: 'no_compatible_route', route: null },
-          },
-        })
-      )
-    );
-    const props = createProps();
+    const props = createProps({
+      catalog: catalog({
+        automatic: [imageRoute(), secondRoute],
+        suggestions: {
+          image: { reason: 'manual_required', route: null },
+          video: { reason: 'no_compatible_route', route: null },
+        },
+      }),
+    });
     render(<GenerationControls {...props} />);
 
     const advanced = await screen.findByRole('radiogroup', {
@@ -426,18 +413,16 @@ describe('GenerationControls', () => {
       props: {},
     },
   ])('surfaces a suggested route incompatible with the current $name before review', async ({ route, props }) => {
-    bridge.listRoutes.invoke.mockResolvedValue(
-      ok(
-        catalog({
-          automatic: [route],
-          suggestions: {
-            image: { reason: 'sole_compatible', route },
-            video: { reason: 'no_compatible_route', route: null },
-          },
-        })
-      )
-    );
-    const componentProps = createProps(props);
+    const componentProps = createProps({
+      ...props,
+      catalog: catalog({
+        automatic: [route],
+        suggestions: {
+          image: { reason: 'sole_compatible', route },
+          video: { reason: 'no_compatible_route', route: null },
+        },
+      }),
+    });
     render(<GenerationControls {...componentProps} />);
 
     expect(await screen.findByText('conversation.creativeStudio.routing.invalidRoute')).toBeInTheDocument();

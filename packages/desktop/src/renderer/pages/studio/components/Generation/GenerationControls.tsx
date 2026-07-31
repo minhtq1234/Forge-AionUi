@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ipcBridge } from '@/common';
 import type {
   StudioAspectRatio,
   StudioCommandErrorCode,
@@ -17,7 +16,7 @@ import type {
 } from '@/common/types/project/creativeStudioTypes';
 import { Alert, Button, Progress, Radio, Spin, Tag } from '@arco-design/web-react';
 import { Attention, CheckOne, CloseOne, Loading, Refresh, Time } from '@icon-park/react';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 type ActionResult = void | Promise<unknown>;
@@ -51,7 +50,10 @@ export type GenerationJobActionIssue = {
 };
 
 export type GenerationControlsProps = {
-  projectId: string;
+  catalog: StudioRouteCatalog | null;
+  catalogLoading: boolean;
+  catalogErrorMessageKey: string | null;
+  onRefreshCatalog: () => void | Promise<void>;
   scene: GenerationControlScene | null;
   aspectRatio?: StudioAspectRatio;
   resolution?: StudioResolution;
@@ -216,7 +218,10 @@ const RouteIdentity: React.FC<{
  * it never submits paid generation directly.
  */
 export const GenerationControls: React.FC<GenerationControlsProps> = ({
-  projectId,
+  catalog,
+  catalogLoading,
+  catalogErrorMessageKey,
+  onRefreshCatalog,
   scene,
   aspectRatio,
   resolution,
@@ -240,43 +245,11 @@ export const GenerationControls: React.FC<GenerationControlsProps> = ({
   onReviewUnknownSubmission,
 }) => {
   const { t } = useTranslation();
-  const [catalog, setCatalog] = useState<StudioRouteCatalog | null>(null);
-  const [catalogLoading, setCatalogLoading] = useState(true);
-  const [catalogErrorMessageKey, setCatalogErrorMessageKey] = useState<string | null>(null);
-  const catalogRequestRef = useRef(0);
   const pendingIds = useMemo(() => new Set(pendingJobIds), [pendingJobIds]);
   const retryParentIds = useMemo(
     () => new Set(jobs.flatMap((job) => (job.retryOfJobId === null ? [] : [job.retryOfJobId]))),
     [jobs]
   );
-
-  const refreshCatalog = useCallback(async (): Promise<void> => {
-    const request = ++catalogRequestRef.current;
-    setCatalogLoading(true);
-    setCatalogErrorMessageKey(null);
-    try {
-      const result = await ipcBridge.creativeStudio.listRoutes.invoke({ projectId });
-      if (catalogRequestRef.current !== request) return;
-      if (result.ok === false) {
-        setCatalogErrorMessageKey(result.error.messageKey);
-        return;
-      }
-      setCatalog(result.data);
-    } catch {
-      if (catalogRequestRef.current === request) {
-        setCatalogErrorMessageKey('conversation.creativeStudio.errors.provider');
-      }
-    } finally {
-      if (catalogRequestRef.current === request) setCatalogLoading(false);
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    void refreshCatalog();
-    return () => {
-      catalogRequestRef.current += 1;
-    };
-  }, [refreshCatalog]);
 
   const kind = scene?.mediaKind ?? null;
   const suggestion = kind && catalog ? catalog.suggestions[kind] : null;
@@ -365,7 +338,7 @@ export const GenerationControls: React.FC<GenerationControlsProps> = ({
             }
             loading={catalogLoading}
             disabled={disabled}
-            onClick={() => void refreshCatalog()}
+            onClick={() => void onRefreshCatalog()}
           >
             {t('conversation.creativeStudio.connection.refresh')}
           </Button>

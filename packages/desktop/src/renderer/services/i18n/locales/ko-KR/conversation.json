@@ -29,7 +29,13 @@
   "projectHeader": {
     "label": "프로젝트 {{name}}",
     "eyebrow": "프로젝트",
-    "tabs": { "label": "프로젝트 보기", "chat": "채팅", "files": "파일", "context": "컨텍스트", "artifacts": "결과물" }
+    "tabs": {
+      "label": "프로젝트 보기",
+      "chat": "채팅",
+      "files": "파일",
+      "context": "컨텍스트",
+      "artifacts": "결과물"
+    }
   },
   "projectHome": {
     "newChat": "새 채팅",
@@ -846,13 +852,13 @@
       "action": "스토리보드 초안 만들기",
       "title": "스토리보드 초안 만들기",
       "body": "WePrompt가 검토할 장면, 내레이션, 화면 텍스트와 타이밍을 제안합니다.",
-      "checking": "앱 운영 모델을 확인하는 중...",
+      "checking": "선택한 스토리보드 모델을 확인하는 중...",
       "ready": "초안 생성 준비 완료",
-      "setupRequired": "AI로 초안을 만들려면 앱 운영 모델을 설정하세요.",
+      "setupRequired": "AI 초안을 만들려면 스토리보드 모델을 선택하고 설정하세요.",
       "unavailable": "현재 스토리보드 초안을 만들 수 없습니다.",
-      "providerLabel": "운영 제공업체",
-      "modelLabel": "운영 모델",
-      "chargeNotice": "이 텍스트 모델 호출은 제공업체 계정을 사용하며 제공업체 요금이 발생할 수 있습니다.",
+      "providerLabel": "스토리보드 제공자",
+      "modelLabel": "스토리보드 모델",
+      "chargeNotice": "초안 작성은 프로젝트에서 선택한 모델을 사용하며 제공자 요금이 발생할 수 있습니다.",
       "replaceTitle": "기존 스토리보드를 교체할까요?",
       "replaceBody": "다시 초안을 만들면 유효한 제안이 반환된 후에만 현재의 모든 장면이 교체됩니다.",
       "confirm": "스토리보드 초안 만들기",
@@ -1008,6 +1014,20 @@
       "busy": "이 프로젝트에서 생성 작업이 진행 중입니다.",
       "provider": "제공업체가 요청을 완료할 수 없습니다.",
       "storage": "크리에이티브 스튜디오에서 로컬 데이터를 업데이트할 수 없습니다."
+    },
+    "models": {
+      "title": "프로젝트 모델",
+      "storyboard": "스토리보드 모델",
+      "image": "이미지 모델",
+      "video": "비디오 모델",
+      "selectionRequired": "모델 선택",
+      "setupRequired": "모델 설정 필요",
+      "unavailable": "선택한 모델을 사용할 수 없습니다",
+      "suggested": "추천",
+      "openSettings": "모델 설정 열기",
+      "refresh": "모델 새로고침",
+      "loading": "모델 불러오는 중...",
+      "updateFailed": "프로젝트 모델 선택을 업데이트할 수 없습니다."
     }
   },
   "artifact": {

@@ -29,7 +29,13 @@
   "projectHeader": {
     "label": "專案 {{name}}",
     "eyebrow": "專案",
-    "tabs": { "label": "專案檢視", "chat": "聊天", "files": "檔案", "context": "上下文", "artifacts": "成果" }
+    "tabs": {
+      "label": "專案檢視",
+      "chat": "聊天",
+      "files": "檔案",
+      "context": "上下文",
+      "artifacts": "成果"
+    }
   },
   "projectHome": {
     "newChat": "新聊天",
@@ -846,13 +852,13 @@
       "action": "建立分鏡草稿",
       "title": "建立分鏡草稿",
       "body": "WePrompt 會提出場景、旁白、畫面文字與時間，供你檢視。",
-      "checking": "正在檢查應用程式操作模型...",
+      "checking": "正在檢查所選分鏡模型...",
       "ready": "可以建立草稿",
-      "setupRequired": "請設定應用程式操作模型以使用 AI 建立草稿。",
+      "setupRequired": "請選擇並設定分鏡模型以使用 AI 起草。",
       "unavailable": "目前無法使用分鏡草稿功能。",
-      "providerLabel": "操作服務供應商",
-      "modelLabel": "操作模型",
-      "chargeNotice": "此文字模型呼叫會使用你的供應商帳戶，可能產生供應商費用。",
+      "providerLabel": "分鏡供應商",
+      "modelLabel": "分鏡模型",
+      "chargeNotice": "起草會使用專案所選的分鏡模型，可能產生供應商費用。",
       "replaceTitle": "要取代現有分鏡嗎？",
       "replaceBody": "再次建立草稿只會在收到有效提案後取代所有目前場景。",
       "confirm": "建立分鏡草稿",
@@ -1008,6 +1014,20 @@
       "busy": "此專案有進行中的產生工作。",
       "provider": "服務供應商無法完成要求。",
       "storage": "創意工作室無法更新本機資料。"
+    },
+    "models": {
+      "title": "專案模型",
+      "storyboard": "分鏡模型",
+      "image": "圖像模型",
+      "video": "影片模型",
+      "selectionRequired": "請選擇模型",
+      "setupRequired": "需要設定模型",
+      "unavailable": "所選模型無法使用",
+      "suggested": "建議",
+      "openSettings": "開啟模型設定",
+      "refresh": "重新整理模型",
+      "loading": "正在載入模型...",
+      "updateFailed": "無法更新專案模型選擇。"
     }
   },
   "artifact": {

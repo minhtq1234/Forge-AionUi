@@ -10,7 +10,6 @@ import type {
   StudioCommandResult,
   StudioEditableScene,
   StudioRendererProject,
-  StudioRouteCatalog,
   StudioScene,
 } from '@/common/types/project/creativeStudioTypes';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -73,10 +72,6 @@ export type UseStoryboardEditorResult = {
   conflict: StoryboardEditorConflict | null;
   retryConflict: () => Promise<boolean>;
   discardConflict: () => void;
-  planning: StudioRouteCatalog['planning'] | null;
-  planningLoading: boolean;
-  planningErrorMessageKey: string | null;
-  refreshPlanning: () => Promise<void>;
   drafting: boolean;
   proposeStoryboard: (replaceExisting: boolean) => Promise<boolean>;
 };
@@ -168,9 +163,6 @@ export const useStoryboardEditor = ({
   const [mutationCount, setMutationCount] = useState(0);
   const [error, setError] = useState<StoryboardEditorIssue | null>(null);
   const [conflict, setConflict] = useState<StoryboardEditorConflict | null>(null);
-  const [planning, setPlanning] = useState<StudioRouteCatalog['planning'] | null>(null);
-  const [planningLoading, setPlanningLoading] = useState(Boolean(parentProject));
-  const [planningErrorMessageKey, setPlanningErrorMessageKey] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
 
   const mountedRef = useRef(true);
@@ -189,7 +181,6 @@ export const useStoryboardEditor = ({
   const pausedIntentsRef = useRef<PausedMutationIntent[]>([]);
   const projectSessionRef = useRef(0);
   const storyboardEpochRef = useRef(0);
-  const planningRequestRef = useRef(0);
   const canonicalRefetchRequestRef = useRef(0);
   const draftingTokenRef = useRef<{ projectId: string; session: number } | null>(null);
   const refetchRef = useRef(refetch);
@@ -353,7 +344,6 @@ export const useStoryboardEditor = ({
                   : currentError
               );
             }
-            if (intent.operation === 'draft_storyboard') setPlanningErrorMessageKey(null);
           }
           return true;
         }
@@ -366,9 +356,6 @@ export const useStoryboardEditor = ({
         };
         if (result.error.code !== 'stale_project') {
           publishIssue(issue);
-          if (mountedRef.current && intent.operation === 'draft_storyboard') {
-            setPlanningErrorMessageKey(issue.messageKey);
-          }
           return false;
         }
 
@@ -385,16 +372,12 @@ export const useStoryboardEditor = ({
         if (mountedRef.current) {
           setConflict(staleIssue);
           setError(null);
-          if (intent.operation === 'draft_storyboard') setPlanningErrorMessageKey(staleIssue.messageKey);
         }
         return false;
       } catch {
         if (projectRef.current?.id !== intent.projectId || projectSessionRef.current !== intent.session) return false;
         const issue = storageIssue(intent.operation, intent.sceneId);
         publishIssue(issue);
-        if (mountedRef.current && intent.operation === 'draft_storyboard') {
-          setPlanningErrorMessageKey(issue.messageKey);
-        }
         return false;
       }
     },
@@ -465,7 +448,6 @@ export const useStoryboardEditor = ({
       draftingTokenRef.current = token;
       if (mountedRef.current) {
         setDrafting(true);
-        setPlanningErrorMessageKey(null);
       }
       try {
         return await enqueueIntent(intent);
@@ -618,59 +600,16 @@ export const useStoryboardEditor = ({
         selectedSceneIdRef.current = null;
         setProject(null);
         setSelectedSceneId(null);
-        setPlanning(null);
-        setPlanningLoading(false);
-        setPlanningErrorMessageKey(null);
       }
       return;
     }
     adoptProject(parentProject);
   }, [adoptProject, clearAllDrafts, parentProject, startProjectSession]);
 
-  const refreshPlanning = useCallback(async (): Promise<void> => {
-    const current = projectRef.current;
-    if (current === null) return;
-    const request = ++planningRequestRef.current;
-    if (mountedRef.current) {
-      setPlanningLoading(true);
-      setPlanningErrorMessageKey(null);
-    }
-    try {
-      const result = await ipcBridge.creativeStudio.listRoutes.invoke({ projectId: current.id });
-      if (!mountedRef.current || planningRequestRef.current !== request) return;
-      if (result.ok === true) {
-        setPlanning(result.data.planning);
-        setPlanningErrorMessageKey(null);
-      } else {
-        setPlanning(null);
-        setPlanningErrorMessageKey(result.error.messageKey);
-      }
-    } catch {
-      if (mountedRef.current && planningRequestRef.current === request) {
-        setPlanning(null);
-        setPlanningErrorMessageKey(STORAGE_ERROR_MESSAGE_KEY);
-      }
-    } finally {
-      if (mountedRef.current && planningRequestRef.current === request) setPlanningLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    planningRequestRef.current += 1;
-    setPlanning(null);
-    setPlanningErrorMessageKey(null);
-    if (parentProject === null) {
-      setPlanningLoading(false);
-      return;
-    }
-    void refreshPlanning();
-  }, [parentProject?.id, refreshPlanning]);
-
   useEffect(
     () => () => {
       mountedRef.current = false;
       for (const sceneId of dirtySceneIdsRef.current) void flushSceneRef.current(sceneId);
-      planningRequestRef.current += 1;
       canonicalRefetchRequestRef.current += 1;
     },
     []
@@ -915,7 +854,6 @@ export const useStoryboardEditor = ({
     if (mountedRef.current) {
       setConflict(null);
       setError(null);
-      if (pending?.intent.operation === 'draft_storyboard') setPlanningErrorMessageKey(null);
     }
     resumePausedIntents();
   }, [resumePausedIntents]);
@@ -923,9 +861,7 @@ export const useStoryboardEditor = ({
   const proposeStoryboard = useCallback(
     async (replaceExisting: boolean): Promise<boolean> => {
       const current = projectRef.current;
-      if (current === null || planning?.health !== 'ready' || planning.resolvedModel === undefined) {
-        return false;
-      }
+      if (current === null) return false;
       const pendingConflict = internalConflictRef.current;
       if (pendingConflict !== null && pendingConflict.intent.operation !== 'draft_storyboard') {
         return false;
@@ -954,7 +890,7 @@ export const useStoryboardEditor = ({
       if (!drafted && internalConflictRef.current === null) resumePausedIntents();
       return drafted;
     },
-    [clearAllDrafts, discardPausedIntents, planning, resumePausedIntents, runDraftIntent]
+    [clearAllDrafts, discardPausedIntents, resumePausedIntents, runDraftIntent]
   );
 
   return {
@@ -985,10 +921,6 @@ export const useStoryboardEditor = ({
     conflict,
     retryConflict,
     discardConflict,
-    planning,
-    planningLoading,
-    planningErrorMessageKey,
-    refreshPlanning,
     drafting,
     proposeStoryboard,
   };

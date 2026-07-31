@@ -12,9 +12,9 @@ import { useTranslation } from 'react-i18next';
 
 export type StudioHeaderProps = {
   project: StudioRendererProject;
-  planning: StudioRouteCatalog['planning'] | null;
-  planningLoading: boolean;
-  planningErrorMessageKey: string | null;
+  storyboard: StudioRouteCatalog['storyboard'] | null;
+  catalogLoading: boolean;
+  catalogErrorMessageKey: string | null;
   drafting: boolean;
   draftDisabled?: boolean;
   generationDisabled?: boolean;
@@ -29,9 +29,9 @@ export type StudioHeaderProps = {
 
 const StudioHeader: React.FC<StudioHeaderProps> = ({
   project,
-  planning,
-  planningLoading,
-  planningErrorMessageKey,
+  storyboard,
+  catalogLoading,
+  catalogErrorMessageKey,
   drafting,
   draftDisabled = false,
   generationDisabled = false,
@@ -44,14 +44,21 @@ const StudioHeader: React.FC<StudioHeaderProps> = ({
   onOpenExport,
 }) => {
   const { t } = useTranslation();
-  const isChecking = planningLoading || planning?.health === 'checking';
-  const isReady = !isChecking && planning?.health === 'ready' && planning.resolvedModel !== undefined;
+  const isChecking = catalogLoading && storyboard === null;
+  const selectedModel = storyboard?.selected ?? null;
+  const selectedOption =
+    selectedModel === null
+      ? null
+      : (storyboard?.options.find(
+          (option) => option.providerId === selectedModel.providerId && option.model === selectedModel.model
+        ) ?? null);
+  const isReady = !isChecking && storyboard?.status === 'ready' && selectedModel !== null;
   const generationActionDisabled = generationDisabled || generationPending || onOpenGenerationReview === undefined;
   const readinessKey = isChecking
     ? 'conversation.creativeStudio.draft.checking'
     : isReady
       ? 'conversation.creativeStudio.draft.ready'
-      : planning?.health === 'setup_required'
+      : storyboard?.status === 'setup_required'
         ? 'conversation.creativeStudio.draft.setupRequired'
         : 'conversation.creativeStudio.draft.unavailable';
 
@@ -113,17 +120,19 @@ const StudioHeader: React.FC<StudioHeaderProps> = ({
       >
         <span className='text-12px text-t-secondary'>{t('conversation.creativeStudio.project.readiness')}</span>
         <Tag color={isReady ? 'green' : undefined}>{t(readinessKey)}</Tag>
-        {isReady && planning.resolvedModel && (
+        {isReady && selectedModel && (
           <>
             <span className='text-12px text-t-tertiary'>{t('conversation.creativeStudio.draft.providerLabel')}</span>
-            <span className='max-w-220px truncate text-12px text-t-primary'>{planning.resolvedModel.providerId}</span>
+            <span className='max-w-220px truncate text-12px text-t-primary'>
+              {selectedOption?.providerName ?? selectedModel.providerId}
+            </span>
             <span className='text-12px text-t-tertiary'>{t('conversation.creativeStudio.draft.modelLabel')}</span>
-            <span className='max-w-220px truncate text-12px text-t-primary'>{planning.resolvedModel.model}</span>
+            <span className='max-w-220px truncate text-12px text-t-primary'>{selectedModel.model}</span>
           </>
         )}
-        {planningErrorMessageKey && (
+        {catalogErrorMessageKey && (
           <span role='alert' className='text-12px text-danger'>
-            {t(planningErrorMessageKey)}
+            {t(catalogErrorMessageKey)}
           </span>
         )}
       </div>

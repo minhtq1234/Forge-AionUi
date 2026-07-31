@@ -11,7 +11,6 @@ import type {
   StudioAspectRatio,
   StudioProjectSummary,
   StudioRendererProject,
-  StudioRouteCatalog,
 } from '@/common/types/project/creativeStudioTypes';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -30,18 +29,10 @@ const aspectRatioOptions: Array<{ value: StudioAspectRatio; key: string }> = [
   { value: '3:4', key: 'aspectRatio3x4' },
 ];
 
-const planningStatusKey = (health: StudioRouteCatalog['planning']['health']): string => {
-  switch (health) {
-    case 'ready':
-      return 'conversation.creativeStudio.library.readinessReady';
-    case 'checking':
-      return 'conversation.creativeStudio.library.readinessChecking';
-    case 'setup_required':
-      return 'conversation.creativeStudio.library.readinessSetupRequired';
-    case 'unavailable':
-      return 'conversation.creativeStudio.library.readinessUnavailable';
-  }
-};
+const storyboardStatusKey = (hasOptions: boolean): string =>
+  hasOptions
+    ? 'conversation.creativeStudio.library.readinessReady'
+    : 'conversation.creativeStudio.library.readinessSetupRequired';
 
 const hasActiveWork = (jobs: Record<string, { status: string }>): boolean =>
   Object.values(jobs).some((job) => ACTIVE_JOB_STATUSES.has(job.status));
@@ -51,7 +42,7 @@ export const StudioLibrary: React.FC = () => {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<StudioProjectSummary[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
-  const [readiness, setReadiness] = useState<StudioRouteCatalog['planning']['health'] | null>(null);
+  const [readiness, setReadiness] = useState<boolean | null>(null);
   const [listErrorMessageKey, setListErrorMessageKey] = useState<string | null>(null);
   const [createErrorMessageKey, setCreateErrorMessageKey] = useState<string | null>(null);
   const [deleteErrorMessageKey, setDeleteErrorMessageKey] = useState<string | null>(null);
@@ -92,9 +83,9 @@ export const StudioLibrary: React.FC = () => {
   const refreshReadiness = useCallback(async (): Promise<void> => {
     try {
       const result = await ipcBridge.creativeStudio.listRoutes.invoke({});
-      if (result.ok) setReadiness(result.data.planning.health);
+      if (result.ok) setReadiness(result.data.storyboard.options.length > 0);
     } catch {
-      setReadiness('unavailable');
+      setReadiness(false);
     }
   }, []);
 
@@ -216,10 +207,10 @@ export const StudioLibrary: React.FC = () => {
         </Button>
       </header>
 
-      {readiness && (
+      {readiness !== null && (
         <div className={styles.readiness}>
           <span>{t('conversation.creativeStudio.library.readinessLabel')}</span>
-          <span>{t(planningStatusKey(readiness))}</span>
+          <span>{t(storyboardStatusKey(readiness))}</span>
         </div>
       )}
       {listErrorMessageKey && (

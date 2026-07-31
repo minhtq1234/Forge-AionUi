@@ -22,6 +22,7 @@ const plannedGroups = [
   'inspector',
   'jobs',
   'library',
+  'models',
   'nav',
   'preview',
   'project',

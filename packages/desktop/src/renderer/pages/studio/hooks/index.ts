@@ -17,4 +17,5 @@ export {
   type UseStudioJobsOptions,
   type UseStudioJobsResult,
 } from './useStudioJobs';
+export { useStudioModels, type UseStudioModelsOptions, type UseStudioModelsResult } from './useStudioModels';
 export { useStudioProject, type UseStudioProjectOptions, type UseStudioProjectResult } from './useStudioProject';

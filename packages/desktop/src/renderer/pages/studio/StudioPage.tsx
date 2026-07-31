@@ -33,9 +33,10 @@ import {
   StudioConnectionModal,
   StudioHeader,
   StudioLibrary,
+  StudioModelBar,
   StudioNavigationLock,
 } from './components';
-import { useStoryboardEditor, useStudioJobs, useStudioProject } from './hooks';
+import { useStoryboardEditor, useStudioJobs, useStudioModels, useStudioProject } from './hooks';
 import styles from './StudioPage.module.css';
 
 type GenerationReviewState = {
@@ -145,6 +146,15 @@ const StudioProjectShell: React.FC = () => {
     refetch,
     reconcileOnSubscribe: true,
   });
+  const project = studioJobs.project ?? editor.project ?? loadedProject;
+  const studioModels = useStudioModels({
+    project,
+    refetch,
+    beforeMutation: async () => {
+      if (editor.mutationPending) return false;
+      return editor.hasUnsavedSelectedSceneDraft ? editor.flushSceneDraft() : true;
+    },
+  });
   const [draftModalVisible, setDraftModalVisible] = useState(false);
   const [generationReview, setGenerationReview] = useState<GenerationReviewState | null>(null);
   const [connectionVisible, setConnectionVisible] = useState(false);
@@ -172,7 +182,6 @@ const StudioProjectShell: React.FC = () => {
   const generationReviewRefreshingRef = useRef(false);
   const variationPendingRef = useRef(false);
   const referenceImportSceneIdRef = useRef<string | null>(null);
-  const project = studioJobs.project ?? editor.project ?? loadedProject;
   const canonicalProjectRef = useRef<StudioRendererProject | null>(project);
   canonicalProjectRef.current = project;
   const draftConflict = editor.conflict?.operation === 'draft_storyboard' ? editor.conflict : null;
@@ -200,7 +209,7 @@ const StudioProjectShell: React.FC = () => {
       ? editor.error.messageKey
       : draftConflict
         ? draftConflict.messageKey
-        : editor.planningErrorMessageKey;
+        : studioModels.errorMessageKey;
   const canonicalOrderedScenes = useMemo(
     () =>
       project === null
@@ -381,9 +390,9 @@ const StudioProjectShell: React.FC = () => {
     const reviewedProjectId = project.id;
     const reviewedProjectRevision = project.revision;
     try {
-      const result = await ipcBridge.creativeStudio.listRoutes.invoke({ projectId: project.id });
-      if (result.ok === false) {
-        setHeaderGenerationIssue(result.error.messageKey);
+      if (studioModels.catalog === null) {
+        await studioModels.refresh();
+        setHeaderGenerationIssue('conversation.creativeStudio.models.loading');
         return;
       }
       const canonical = canonicalProjectRef.current;
@@ -392,7 +401,7 @@ const StudioProjectShell: React.FC = () => {
         return;
       }
       const suggestedRoute = (kind: 'image' | 'video') => {
-        const route = result.data.suggestions[kind].route;
+        const route = studioModels.catalog!.suggestions[kind].route;
         return route === null
           ? null
           : {
@@ -403,12 +412,12 @@ const StudioProjectShell: React.FC = () => {
             };
       };
       openBatchReview({
-        catalogVersion: result.data.catalogVersion,
+        catalogVersion: studioModels.catalog.catalogVersion,
         suggestedRoutes: {
           image: suggestedRoute('image'),
           video: suggestedRoute('video'),
         },
-        availableRoutes: result.data.automatic,
+        availableRoutes: studioModels.catalog.automatic,
       });
     } catch {
       setHeaderGenerationIssue('conversation.creativeStudio.errors.provider');
@@ -416,7 +425,7 @@ const StudioProjectShell: React.FC = () => {
       headerBatchLoadingRef.current = false;
       setHeaderBatchLoading(false);
     }
-  }, [generationBlocked, headerBatchLoading, openBatchReview, project, readyScenes.length]);
+  }, [generationBlocked, headerBatchLoading, openBatchReview, project, readyScenes.length, studioModels]);
 
   const confirmGeneration = useCallback(
     async ({ sceneIds, routes }: { sceneIds: string[]; routes: StudioSceneRouteSnapshot[] }): Promise<void> => {
@@ -436,9 +445,10 @@ const StudioProjectShell: React.FC = () => {
         studioJobs.clearIssue();
         studioJobs.clearStaleIntent();
         try {
-          const result = await ipcBridge.creativeStudio.listRoutes.invoke({ projectId: project.id });
-          if (result.ok === false) {
-            setGenerationReviewIssueMessageKey(result.error.messageKey);
+          await studioModels.refresh();
+          const catalog = studioModels.catalog;
+          if (catalog === null) {
+            setGenerationReviewIssueMessageKey('conversation.creativeStudio.models.loading');
             return;
           }
           const canonical = canonicalProjectRef.current;
@@ -449,7 +459,7 @@ const StudioProjectShell: React.FC = () => {
           const routeForScene = (scene: StudioScene): StudioSceneRouteSnapshot | null => {
             const explicitRoute = selectedRoutes[scene.id];
             if (explicitRoute !== undefined) return explicitRoute;
-            const suggestion = result.data.suggestions[scene.mediaKind].route;
+            const suggestion = catalog.suggestions[scene.mediaKind].route;
             return suggestion === null
               ? null
               : {
@@ -466,14 +476,14 @@ const StudioProjectShell: React.FC = () => {
                   const scene = project.scenes[sceneId];
                   return scene === undefined || !sceneCanOpenSingleReview(project, scene)
                     ? []
-                    : [toReviewScene(project, scene, routeForScene(scene), result.data.automatic)];
+                    : [toReviewScene(project, scene, routeForScene(scene), catalog.automatic)];
                 })
-              : readyScenes.map((scene) => toReviewScene(project, scene, routeForScene(scene), result.data.automatic));
+              : readyScenes.map((scene) => toReviewScene(project, scene, routeForScene(scene), catalog.automatic));
           setGenerationReview({
             mode: generationReview.mode,
             scenes: refreshedScenes,
-            catalogVersion: result.data.catalogVersion,
-            availableRoutes: result.data.automatic,
+            catalogVersion: catalog.catalogVersion,
+            availableRoutes: catalog.automatic,
             projectId: project.id,
             projectRevision: project.revision,
           });
@@ -494,7 +504,7 @@ const StudioProjectShell: React.FC = () => {
       });
       if (submitted) setGenerationReview(null);
     },
-    [generationReview, project, readyScenes, selectedRoutes, studioJobs]
+    [generationReview, project, readyScenes, selectedRoutes, studioJobs, studioModels]
   );
 
   useEffect(() => {
@@ -715,9 +725,9 @@ const StudioProjectShell: React.FC = () => {
       )}
       <StudioHeader
         project={project}
-        planning={editor.planning}
-        planningLoading={editor.planningLoading}
-        planningErrorMessageKey={draftErrorMessageKey}
+        storyboard={studioModels.catalog?.storyboard ?? null}
+        catalogLoading={studioModels.loading}
+        catalogErrorMessageKey={draftErrorMessageKey}
         drafting={editor.drafting}
         draftDisabled={nonDraftConflict !== null}
         generationDisabled={generationBlocked || readyScenes.length === 0}
@@ -735,6 +745,16 @@ const StudioProjectShell: React.FC = () => {
           setExportIssueMessageKey(null);
           setExportVisible(true);
         }}
+      />
+      <StudioModelBar
+        catalog={studioModels.catalog}
+        loading={studioModels.loading}
+        errorMessageKey={studioModels.errorMessageKey}
+        pendingRole={studioModels.pendingRole}
+        disabled={canonicalMutationPending || editor.drafting || studioJobs.mutationPending}
+        onRefresh={studioModels.refresh}
+        onSelectionChange={studioModels.updateSelection}
+        onOpenSettings={(path) => navigate(path)}
       />
       <div className={styles.editorGrid}>
         <StoryboardPanel
@@ -824,7 +844,10 @@ const StudioProjectShell: React.FC = () => {
           <div className={styles.generationPanel}>
             <GenerationControls
               key={`${project.id}-${routeCatalogEpoch}-${projectRoutingIdentity(project)}`}
-              projectId={project.id}
+              catalog={studioModels.catalog}
+              catalogLoading={studioModels.loading}
+              catalogErrorMessageKey={studioModels.errorMessageKey}
+              onRefreshCatalog={studioModels.refresh}
               scene={
                 selectedScene === null
                   ? null
@@ -870,9 +893,10 @@ const StudioProjectShell: React.FC = () => {
       <StoryboardDraftModal
         visible={draftModalVisible}
         project={project}
-        planning={editor.planning}
-        planningLoading={editor.planningLoading}
-        planningErrorMessageKey={draftErrorMessageKey}
+        storyboard={studioModels.catalog?.storyboard ?? null}
+        catalogLoading={studioModels.loading}
+        catalogErrorMessageKey={draftErrorMessageKey}
+        selectionPending={studioModels.pendingRole === 'storyboard'}
         draftConflict={draftConflict !== null}
         drafting={editor.drafting}
         onCancel={() => setDraftModalVisible(false)}
@@ -880,7 +904,8 @@ const StudioProjectShell: React.FC = () => {
         onDiscardDraftConflict={editor.discardConflict}
         onContinueManual={() => setDraftModalVisible(false)}
         onOpenSettings={() => setTimeout(() => navigate('/settings/model'), 0)}
-        onRefreshPlanning={editor.refreshPlanning}
+        onRefreshCatalog={studioModels.refresh}
+        onSelectStoryboardModel={(selection) => studioModels.updateSelection({ role: 'storyboard', selection })}
       />
       <GenerationReviewModal
         visible={generationReview !== null}
@@ -917,8 +942,12 @@ const StudioProjectShell: React.FC = () => {
         onSaved={() => {
           setConnectionVisible(false);
           setRouteCatalogEpoch((epoch) => epoch + 1);
+          void studioModels.refresh();
         }}
-        onRemoved={() => setRouteCatalogEpoch((epoch) => epoch + 1)}
+        onRemoved={() => {
+          setRouteCatalogEpoch((epoch) => epoch + 1);
+          void studioModels.refresh();
+        }}
       />
       <Modal
         visible={exportVisible}

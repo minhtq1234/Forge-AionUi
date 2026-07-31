@@ -24,6 +24,7 @@ import { useStudioProject } from '@renderer/pages/studio/hooks';
 const bridge = vi.hoisted(() => ({
   getProject: { invoke: vi.fn() },
   listRoutes: { invoke: vi.fn() },
+  updateModelSelection: { invoke: vi.fn() },
   updateScene: { invoke: vi.fn() },
   reorderScenes: { invoke: vi.fn() },
   proposeStoryboard: { invoke: vi.fn() },
@@ -209,6 +210,7 @@ describe('StudioPage and useStudioProject', () => {
     vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue('11111111-1111-4111-8111-111111111111');
     bridge.getProject.invoke.mockResolvedValue(ok(project()));
     bridge.listRoutes.invoke.mockResolvedValue(ok(routes()));
+    bridge.updateModelSelection.invoke.mockResolvedValue(ok(project()));
     bridge.updateScene.invoke.mockImplementation(async () => ok(project()));
     bridge.reorderScenes.invoke.mockImplementation(async () => ok(project()));
     bridge.proposeStoryboard.invoke.mockImplementation(async () => ok(project()));
@@ -647,7 +649,7 @@ describe('StudioPage and useStudioProject', () => {
     expect(bridge.submitScenes.invoke).not.toHaveBeenCalled();
   });
 
-  it('refreshes the route catalog only when the canonical routing identity changes', async () => {
+  it('keeps one project catalog owner across canonical project revisions', async () => {
     let onUpdate: ((event: { projectId: string }) => void) | undefined;
     bridge.projectUpdated.on.mockImplementation((listener: (event: { projectId: string }) => void) => {
       onUpdate = listener;
@@ -686,7 +688,7 @@ describe('StudioPage and useStudioProject', () => {
     renderRoute();
 
     await screen.findByRole('heading', { level: 1, name: 'Launch film' });
-    await waitFor(() => expect(bridge.listRoutes.invoke).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(bridge.listRoutes.invoke).toHaveBeenCalledTimes(1));
     const initialRouteRequestCount = bridge.listRoutes.invoke.mock.calls.length;
 
     await act(async () => onUpdate?.({ projectId: 'project-1' }));
@@ -694,7 +696,8 @@ describe('StudioPage and useStudioProject', () => {
     expect(bridge.listRoutes.invoke).toHaveBeenCalledTimes(initialRouteRequestCount);
 
     await act(async () => onUpdate?.({ projectId: 'project-1' }));
-    await waitFor(() => expect(bridge.listRoutes.invoke).toHaveBeenCalledTimes(initialRouteRequestCount + 1));
+    await waitFor(() => expect(bridge.getProject.invoke).toHaveBeenCalledTimes(4));
+    expect(bridge.listRoutes.invoke).toHaveBeenCalledTimes(initialRouteRequestCount);
   });
 
   it('refreshes a paid review after an external revision and requires a second confirmation', async () => {

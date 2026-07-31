@@ -54,22 +54,25 @@ const project = (withScene = false): StudioRendererProject => ({
   updatedAt: '2026-07-30T00:00:00.000Z',
 });
 
-const planning = (
-  health: StudioRouteCatalog['planning']['health'],
-  resolvedModel?: StudioRouteCatalog['planning']['resolvedModel']
-): StudioRouteCatalog['planning'] => ({
-  health,
-  ...(resolvedModel ? { resolvedModel } : {}),
+const storyboard = (
+  status: StudioRouteCatalog['storyboard']['status'],
+  selected: StudioRouteCatalog['storyboard']['selected'] = null
+): StudioRouteCatalog['storyboard'] => ({
+  status,
+  selected,
+  options: selected === null ? [] : [{ ...selected, providerName: 'Storyboard Provider', health: 'available' }],
 });
 
 const modalProps = (overrides: Partial<React.ComponentProps<typeof StoryboardDraftModal>> = {}) => ({
   visible: true,
   project: project(),
-  planning: planning('ready', { providerId: 'operations-provider', model: 'planner-model' }),
-  planningLoading: false,
-  planningErrorMessageKey: null,
+  storyboard: storyboard('ready', { providerId: 'story-provider', model: 'planner-model' }),
+  catalogLoading: false,
+  catalogErrorMessageKey: null,
+  selectionPending: false,
   draftConflict: false,
-  onRefreshPlanning: vi.fn(),
+  onRefreshCatalog: vi.fn(),
+  onSelectStoryboardModel: vi.fn(),
   drafting: false,
   proposeStoryboard: vi.fn(),
   onDiscardDraftConflict: vi.fn(),
@@ -80,15 +83,15 @@ const modalProps = (overrides: Partial<React.ComponentProps<typeof StoryboardDra
 });
 
 describe('StudioHeader', () => {
-  it('shows project identity, planning readiness, and opens the draft review', () => {
+  it('shows project identity, selected storyboard model readiness, and opens the draft review', () => {
     const onOpenDraft = vi.fn();
 
     render(
       <StudioHeader
         project={project()}
-        planning={planning('ready', { providerId: 'operations-provider', model: 'planner-model' })}
-        planningLoading={false}
-        planningErrorMessageKey={null}
+        storyboard={storyboard('ready', { providerId: 'story-provider', model: 'planner-model' })}
+        catalogLoading={false}
+        catalogErrorMessageKey={null}
         drafting={false}
         onBack={vi.fn()}
         onOpenDraft={onOpenDraft}
@@ -97,18 +100,18 @@ describe('StudioHeader', () => {
 
     expect(screen.getByRole('heading', { name: 'Launch story' })).toBeInTheDocument();
     expect(screen.getByText('conversation.creativeStudio.draft.ready')).toBeInTheDocument();
-    expect(screen.getByText('operations-provider')).toBeInTheDocument();
+    expect(screen.getByText('Storyboard Provider')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.draft.action' }));
     expect(onOpenDraft).toHaveBeenCalledTimes(1);
   });
 
-  it('reports planning failures without claiming readiness', () => {
+  it('reports catalog failures without claiming readiness', () => {
     render(
       <StudioHeader
         project={project()}
-        planning={null}
-        planningLoading={false}
-        planningErrorMessageKey='conversation.creativeStudio.errors.planningUnavailable'
+        storyboard={null}
+        catalogLoading={false}
+        catalogErrorMessageKey='conversation.creativeStudio.errors.planningUnavailable'
         drafting={false}
         onBack={vi.fn()}
         onOpenDraft={vi.fn()}
@@ -123,9 +126,9 @@ describe('StudioHeader', () => {
     render(
       <StudioHeader
         project={project()}
-        planning={planning('ready')}
-        planningLoading={false}
-        planningErrorMessageKey={null}
+        storyboard={storyboard('ready')}
+        catalogLoading={false}
+        catalogErrorMessageKey={null}
         drafting={false}
         onBack={vi.fn()}
         onOpenDraft={vi.fn()}
@@ -142,9 +145,9 @@ describe('StudioHeader', () => {
     render(
       <StudioHeader
         project={project(true)}
-        planning={planning('ready', { providerId: 'operations-provider', model: 'planner-model' })}
-        planningLoading={false}
-        planningErrorMessageKey={null}
+        storyboard={storyboard('ready', { providerId: 'story-provider', model: 'planner-model' })}
+        catalogLoading={false}
+        catalogErrorMessageKey={null}
         drafting={false}
         onBack={vi.fn()}
         onOpenDraft={vi.fn()}
@@ -166,9 +169,9 @@ describe('StudioHeader', () => {
     const view = render(
       <StudioHeader
         project={project(true)}
-        planning={planning('ready', { providerId: 'operations-provider', model: 'planner-model' })}
-        planningLoading={false}
-        planningErrorMessageKey={null}
+        storyboard={storyboard('ready', { providerId: 'story-provider', model: 'planner-model' })}
+        catalogLoading={false}
+        catalogErrorMessageKey={null}
         drafting={false}
         generationDisabled
         onBack={vi.fn()}
@@ -187,9 +190,9 @@ describe('StudioHeader', () => {
     view.rerender(
       <StudioHeader
         project={project(true)}
-        planning={planning('ready', { providerId: 'operations-provider', model: 'planner-model' })}
-        planningLoading={false}
-        planningErrorMessageKey={null}
+        storyboard={storyboard('ready', { providerId: 'story-provider', model: 'planner-model' })}
+        catalogLoading={false}
+        catalogErrorMessageKey={null}
         drafting={false}
         generationPending
         onBack={vi.fn()}
@@ -215,9 +218,9 @@ describe('StudioHeader', () => {
     render(
       <StudioHeader
         project={project(true)}
-        planning={planning('ready', { providerId: 'operations-provider', model: 'planner-model' })}
-        planningLoading={false}
-        planningErrorMessageKey={null}
+        storyboard={storyboard('ready', { providerId: 'story-provider', model: 'planner-model' })}
+        catalogLoading={false}
+        catalogErrorMessageKey={null}
         drafting={false}
         onBack={vi.fn()}
         onOpenDraft={vi.fn()}
@@ -242,7 +245,7 @@ describe('StoryboardDraftModal', () => {
     render(<StoryboardDraftModal {...props} />);
 
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('operations-provider')).toBeInTheDocument();
+    expect(within(dialog).getByText('Storyboard Provider')).toBeInTheDocument();
     expect(within(dialog).getByText('planner-model')).toBeInTheDocument();
     expect(within(dialog).getByText('conversation.creativeStudio.draft.chargeNotice')).toBeInTheDocument();
 
@@ -272,8 +275,8 @@ describe('StoryboardDraftModal', () => {
 
   it('blocks duplicate authorization while readiness is checking or drafting is pending', () => {
     const checking = modalProps({
-      planning: planning('checking'),
-      planningLoading: true,
+      storyboard: null,
+      catalogLoading: true,
     });
     const view = render(<StoryboardDraftModal {...checking} />);
 
@@ -295,25 +298,25 @@ describe('StoryboardDraftModal', () => {
     expect(checking.proposeStoryboard).not.toHaveBeenCalled();
   });
 
-  it('offers a retry only after a checking readiness request has settled', () => {
+  it('offers a retry only after a catalog request has settled', () => {
     const props = modalProps({
-      planning: planning('checking'),
-      planningLoading: true,
+      storyboard: null,
+      catalogLoading: true,
     });
     const view = render(<StoryboardDraftModal {...props} />);
 
     expect(screen.queryByRole('button', { name: 'conversation.creativeStudio.library.retry' })).not.toBeInTheDocument();
 
-    view.rerender(<StoryboardDraftModal {...props} planningLoading={false} />);
+    view.rerender(<StoryboardDraftModal {...props} catalogLoading={false} />);
     fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.library.retry' }));
 
-    expect(props.onRefreshPlanning).toHaveBeenCalledTimes(1);
+    expect(props.onRefreshCatalog).toHaveBeenCalledTimes(1);
   });
 
   it.each(['setup_required', 'unavailable'] as const)(
-    'keeps manual editing and model setup available when planning is %s',
-    (health) => {
-      const props = modalProps({ planning: planning(health) });
+    'keeps manual editing and model setup available when storyboard status is %s',
+    (status) => {
+      const props = modalProps({ storyboard: storyboard(status) });
       render(<StoryboardDraftModal {...props} />);
 
       const dialog = screen.getByRole('dialog');
@@ -340,11 +343,11 @@ describe('StoryboardDraftModal', () => {
     }
   );
 
-  it('announces a planning error, preserves the current storyboard, and offers a readiness retry', () => {
+  it('announces a catalog error, preserves the current storyboard, and offers a readiness retry', () => {
     const props = modalProps({
       project: project(true),
-      planning: null,
-      planningErrorMessageKey: 'conversation.creativeStudio.errors.planningUnavailable',
+      storyboard: null,
+      catalogErrorMessageKey: 'conversation.creativeStudio.errors.planningUnavailable',
     });
     render(<StoryboardDraftModal {...props} />);
 
@@ -353,20 +356,20 @@ describe('StoryboardDraftModal', () => {
     expect(failure).toHaveTextContent('conversation.creativeStudio.errors.planningUnavailable');
     fireEvent.click(screen.getByRole('button', { name: 'conversation.creativeStudio.library.retry' }));
 
-    expect(props.onRefreshPlanning).toHaveBeenCalledTimes(1);
+    expect(props.onRefreshCatalog).toHaveBeenCalledTimes(1);
     expect(props.proposeStoryboard).not.toHaveBeenCalled();
   });
 
   it('keeps charged draft conflict recovery inside the disclosure modal', () => {
     const props = modalProps({
       project: project(true),
-      planningErrorMessageKey: 'conversation.creativeStudio.errors.staleProject',
+      catalogErrorMessageKey: 'conversation.creativeStudio.errors.staleProject',
       draftConflict: true,
     });
     render(<StoryboardDraftModal {...props} />);
 
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('operations-provider')).toBeInTheDocument();
+    expect(within(dialog).getByText('Storyboard Provider')).toBeInTheDocument();
     expect(within(dialog).getByText('planner-model')).toBeInTheDocument();
     expect(within(dialog).getByText('conversation.creativeStudio.draft.chargeNotice')).toBeInTheDocument();
     fireEvent.click(
