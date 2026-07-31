@@ -304,6 +304,103 @@ afterEach(async () => {
 });
 
 describe('Creative Studio project recovery integration', () => {
+  it('reloads the three explicit project model selections without fallback', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'studio-routing-restart-integration-'));
+    try {
+      const store = createCreativeStudioStore({ rootDir });
+      const project = await store.createProject({
+        name: 'Explicit routing film',
+        brief: 'Keep every selected model across restart',
+        aspectRatio: '16:9',
+        targetDurationSeconds: 5,
+        resolution: '720p',
+      });
+      await store.updateProject(project.id, (current) => ({
+        ...current,
+        routing: {
+          storyboard: { providerId: 'text_provider', model: 'gpt-test' },
+          image: { providerId: 'media_provider', adapterId: 'weprompt-image-v1', model: 'image-a' },
+          video: { providerId: 'media_provider', adapterId: 'weprompt-media-gateway-v1', model: 'video-a' },
+        },
+      }));
+
+      const reloaded = await createCreativeStudioStore({ rootDir }).getProject(project.id);
+
+      expect(reloaded?.routing).toEqual({
+        storyboard: { providerId: 'text_provider', model: 'gpt-test' },
+        image: { providerId: 'media_provider', adapterId: 'weprompt-image-v1', model: 'image-a' },
+        video: { providerId: 'media_provider', adapterId: 'weprompt-media-gateway-v1', model: 'video-a' },
+      });
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it('drafts a storyboard from the stored text model without App Operations availability', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'studio-storyboard-independent-integration-'));
+    try {
+      const store = createCreativeStudioStore({ rootDir });
+      const project = await store.createProject({
+        name: 'Independent storyboard film',
+        brief: 'Draft without an App Operations resolver',
+        aspectRatio: '16:9',
+        targetDurationSeconds: 5,
+        resolution: '720p',
+      });
+      const selected = await store.updateProject(project.id, (current) => ({
+        ...current,
+        routing: {
+          ...current.routing,
+          storyboard: { providerId: 'text_provider', model: 'gpt-test' },
+        },
+      }));
+      let draftedWith: { providerId: string; model: string } | null = null;
+      const service = createCreativeStudioService({
+        store,
+        onProjectUpdated: () => {},
+        createSceneId: () => 'scene_storyboard',
+        storyboardPlanner: {
+          listModels: async () => [
+            {
+              providerId: 'text_provider',
+              providerName: 'Text provider',
+              model: 'gpt-test',
+              health: 'available',
+            },
+          ],
+          draft: async (_input, model) => {
+            draftedWith = model;
+            return {
+              scenes: [
+                {
+                  title: 'Opening',
+                  purpose: 'Introduce the product',
+                  visualPrompt: 'A paper airplane crossing a sunrise',
+                  narration: '',
+                  onScreenText: '',
+                  mediaKind: 'video',
+                  durationSeconds: 5,
+                },
+              ],
+            };
+          },
+          dispose: async () => {},
+        },
+      });
+
+      const drafted = await service.proposeStoryboard({
+        projectId: selected.id,
+        expectedRevision: selected.revision,
+        replaceExisting: false,
+      });
+
+      expect(draftedWith).toEqual({ providerId: 'text_provider', model: 'gpt-test' });
+      expect(drafted.sceneOrder).toEqual(['scene_storyboard']);
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
   it('re-polls a durable remote job in a fresh instance and restores its selected managed asset', async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'studio-runtime-recovery-integration-'));
     const remoteState = createStudioE2EFakeRemoteState();
@@ -357,6 +454,28 @@ describe('Creative Studio project recovery integration', () => {
         const job = current?.jobs.job_runtime_recovery;
         return job?.status === 'queued_remote' && job.providerJobId ? job : null;
       });
+      const activeProject = await beforeRestart.runtime.store.getProject(project.id);
+      if (!activeProject) throw new Error('Active recovery project disappeared');
+      const withNewerImageSelection = await beforeRestart.runtime.store.updateProject(
+        project.id,
+        (current) => ({
+          ...current,
+          routing: {
+            ...current.routing,
+            image: {
+              providerId: 'newer_media_provider',
+              adapterId: 'weprompt-image-v1',
+              model: 'image-b',
+            },
+          },
+        }),
+        activeProject.revision
+      );
+      expect(withNewerImageSelection.jobs.job_runtime_recovery.provider).toEqual({
+        providerId: videoRoute.providerId,
+        adapterId: videoRoute.adapterId,
+        model: videoRoute.model,
+      });
       await beforeRestart.clock.take(2_000);
       const providerJobId = persisted.providerJobId!;
       beforeRestart.clock.releaseAll();
@@ -396,12 +515,18 @@ describe('Creative Studio project recovery integration', () => {
         selectedAssetId,
         selectedAssetMediaKind: selectedAssetId ? recovered.assets[selectedAssetId]?.mediaKind : null,
         projectId: recovered.id,
+        imageSelection: recovered.routing.image,
       }).toEqual({
         providerJobId,
         outputAssetIds: [selectedAssetId],
         selectedAssetId,
         selectedAssetMediaKind: 'video',
         projectId: project.id,
+        imageSelection: {
+          providerId: 'newer_media_provider',
+          adapterId: 'weprompt-image-v1',
+          model: 'image-b',
+        },
       });
       const resolved = selectedAssetId
         ? await afterRestart.runtime.mediaStore.resolveAsset(recovered.id, selectedAssetId)
@@ -426,6 +551,17 @@ describe('Creative Studio project recovery integration', () => {
     const harness = await createHarness();
     const beforeRestart = await submitAndStopWithRemoteIdentity(harness);
     const store = createCreativeStudioStore({ rootDir: harness.rootDir });
+    await store.updateProject(harness.project.id, (current) => ({
+      ...current,
+      routing: {
+        ...current.routing,
+        image: {
+          providerId: 'newer_media_provider',
+          adapterId: 'weprompt-image-v1',
+          model: 'image-b',
+        },
+      },
+    }));
     const clock = new ControlledPollClock();
     const manager = createStudioJobManager({
       store,
@@ -449,6 +585,55 @@ describe('Creative Studio project recovery integration', () => {
       status: 'needs_attention',
       error: { code: 'provider_unavailable' },
     });
+    expect(recovered.routing.image).toEqual({
+      providerId: 'newer_media_provider',
+      adapterId: 'weprompt-image-v1',
+      model: 'image-b',
+    });
     expect(recovered.scenes.scene_recovery.jobIds).toEqual(['job_recovery']);
+
+    const retryClock = new ControlledPollClock();
+    const retryManager = createStudioJobManager({
+      store,
+      mediaStore: createStudioMediaStore({ store }),
+      providerResolver: resolverFor(store, async () => [harness.fake.provider]),
+      adapters: harness.fake.adapters,
+      listProviders: async () => [harness.fake.provider],
+      sleep: retryClock.sleep,
+      jitterMs: (baseMs) => baseMs,
+    });
+    extraManagers.add({ manager: retryManager, clock: retryClock });
+    const retried = await retryManager.retryJob({
+      projectId: harness.project.id,
+      jobId: 'job_recovery',
+      expectedRevision: recovered.revision,
+    });
+    expect(retried).toMatchObject({
+      id: 'job_recovery',
+      provider: {
+        providerId: harness.route.providerId,
+        adapterId: harness.route.adapterId,
+        model: harness.route.model,
+      },
+      providerJobId: beforeRestart.providerJobId,
+      status: 'queued_remote',
+    });
+    (await retryClock.take(2_000)).release();
+    (await retryClock.take(4_000)).release();
+    (await retryClock.take(8_000)).release();
+    const completed = await waitFor(async () => {
+      const current = await store.getProject(harness.project.id);
+      return current?.jobs.job_recovery.status === 'succeeded' ? current : null;
+    });
+    expect(completed.routing.image).toEqual({
+      providerId: 'newer_media_provider',
+      adapterId: 'weprompt-image-v1',
+      model: 'image-b',
+    });
+    expect(completed.jobs.job_recovery.provider).toEqual({
+      providerId: harness.route.providerId,
+      adapterId: harness.route.adapterId,
+      model: harness.route.model,
+    });
   });
 });

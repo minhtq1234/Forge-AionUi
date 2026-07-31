@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { StudioProject, StudioScene, StudioSceneRouteSnapshot } from '@/common/types/project/creativeStudioTypes';
@@ -99,12 +99,13 @@ type Harness = {
 };
 
 const activeHarnesses: Harness[] = [];
+const activeManagers: StudioJobManager[] = [];
 
 const createHarness = async (): Promise<Harness> => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'studio-generation-integration-'));
   const fake = createStudioE2EFakeBundle({ rootDir });
   const store = createCreativeStudioStore({ rootDir });
-  await store.saveConnection(fake.connections[0]!);
+  await Promise.all(fake.connections.map((connection) => store.saveConnection(connection)));
   const created = await store.createProject({
     name: 'Launch film',
     brief: 'A concise launch story',
@@ -188,6 +189,7 @@ const collectForbiddenDtoKeys = (value: unknown, found: string[] = []): string[]
 };
 
 afterEach(async () => {
+  await Promise.all(activeManagers.splice(0).map((manager) => manager.dispose().catch((): undefined => undefined)));
   await Promise.all(
     activeHarnesses.splice(0).map(async (harness) => {
       harness.clock.releaseAll();
@@ -199,6 +201,148 @@ afterEach(async () => {
 });
 
 describe('Creative Studio generation lifecycle integration', () => {
+  it('uses one selected model per kind across a batch and only applies changes to later submissions', async () => {
+    const harness = await createHarness();
+    const providerResolver = createStudioProviderResolver({
+      listProviders: async () => [harness.fake.provider],
+      listConnections: () => harness.store.listConnections(),
+    });
+    const catalog = await providerResolver.listGenerationRoutes();
+    const imageRoutes = catalog.routes
+      .filter((candidate) => candidate.kind === 'image')
+      .toSorted((left, right) => left.model.localeCompare(right.model));
+    const videoRoute = catalog.routes.find((candidate) => candidate.kind === 'video');
+    expect(imageRoutes.map((candidate) => candidate.model)).toEqual(['weprompt-e2e-image', 'weprompt-e2e-image-next']);
+    if (!imageRoutes[0] || !imageRoutes[1] || !videoRoute) throw new Error('Acceptance routes were not resolved');
+
+    const imageSceneOne = { ...structuredClone(scene), id: 'scene_image_one', mediaKind: 'image' as const };
+    const imageSceneTwo = { ...structuredClone(scene), id: 'scene_image_two', mediaKind: 'image' as const };
+    const videoScene = { ...structuredClone(scene), id: 'scene_video' };
+    const configured = await harness.store.updateProject(harness.project.id, (current) => ({
+      ...current,
+      sceneOrder: [imageSceneOne.id, imageSceneTwo.id, videoScene.id],
+      scenes: {
+        [imageSceneOne.id]: imageSceneOne,
+        [imageSceneTwo.id]: imageSceneTwo,
+        [videoScene.id]: videoScene,
+      },
+      routing: {
+        ...current.routing,
+        image: {
+          providerId: imageRoutes[0].providerId,
+          adapterId: imageRoutes[0].adapterId,
+          model: imageRoutes[0].model,
+        },
+        video: {
+          providerId: videoRoute.providerId,
+          adapterId: videoRoute.adapterId,
+          model: videoRoute.model,
+        },
+      },
+    }));
+    let jobIndex = 0;
+    let idempotencyIndex = 0;
+    const manager = createStudioJobManager({
+      store: harness.store,
+      mediaStore: harness.mediaStore,
+      providerResolver,
+      adapters: harness.fake.adapters,
+      listProviders: async () => [harness.fake.provider],
+      createJobId: () => `job_acceptance_${++jobIndex}`,
+      createIdempotencyKey: () => `idempotency_acceptance_${++idempotencyIndex}`,
+      sleep: harness.clock.sleep,
+      jitterMs: (baseMs) => baseMs,
+    });
+    activeManagers.push(manager);
+
+    const submittedBatch = await manager.submitScenes({
+      projectId: configured.id,
+      expectedRevision: configured.revision,
+      sceneIds: [imageSceneOne.id, videoScene.id],
+      routes: [
+        {
+          sceneId: imageSceneOne.id,
+          providerId: imageRoutes[0].providerId,
+          adapterId: imageRoutes[0].adapterId,
+          model: imageRoutes[0].model,
+          kind: 'image',
+        },
+        {
+          sceneId: videoScene.id,
+          providerId: videoRoute.providerId,
+          adapterId: videoRoute.adapterId,
+          model: videoRoute.model,
+          kind: 'video',
+        },
+      ],
+      catalogVersion: catalog.generationCatalogVersion,
+    });
+    expect(submittedBatch.map(({ sceneId: submittedSceneId, provider }) => [submittedSceneId, provider])).toEqual([
+      [
+        imageSceneOne.id,
+        {
+          providerId: imageRoutes[0].providerId,
+          adapterId: imageRoutes[0].adapterId,
+          model: imageRoutes[0].model,
+        },
+      ],
+      [
+        videoScene.id,
+        {
+          providerId: videoRoute.providerId,
+          adapterId: videoRoute.adapterId,
+          model: videoRoute.model,
+        },
+      ],
+    ]);
+
+    const activeProject = await waitFor(async () => {
+      const current = await harness.store.getProject(configured.id);
+      return current?.jobs.job_acceptance_1.status === 'queued_remote' &&
+        current.jobs.job_acceptance_2.status === 'queued_remote'
+        ? current
+        : null;
+    });
+    const changed = await harness.store.updateProject(
+      configured.id,
+      (current) => ({
+        ...current,
+        routing: {
+          ...current.routing,
+          image: {
+            providerId: imageRoutes[1].providerId,
+            adapterId: imageRoutes[1].adapterId,
+            model: imageRoutes[1].model,
+          },
+        },
+      }),
+      activeProject.revision
+    );
+    const later = await manager.submitScenes({
+      projectId: changed.id,
+      expectedRevision: changed.revision,
+      sceneIds: [imageSceneTwo.id],
+      routes: [
+        {
+          sceneId: imageSceneTwo.id,
+          providerId: imageRoutes[1].providerId,
+          adapterId: imageRoutes[1].adapterId,
+          model: imageRoutes[1].model,
+          kind: 'image',
+        },
+      ],
+      catalogVersion: catalog.generationCatalogVersion,
+    });
+    expect(later[0]?.provider).toEqual({
+      providerId: imageRoutes[1].providerId,
+      adapterId: imageRoutes[1].adapterId,
+      model: imageRoutes[1].model,
+    });
+    const persisted = await harness.store.getProject(configured.id);
+    expect(persisted?.jobs.job_acceptance_1.provider.model).toBe('weprompt-e2e-image');
+    expect(persisted?.jobs.job_acceptance_3.provider.model).toBe('weprompt-e2e-image-next');
+  });
+
   it('moves a remote video through queued and running states before selecting a managed output', async () => {
     const harness = await createHarness();
     const catalog = await createStudioProviderResolver({
@@ -263,6 +407,9 @@ describe('Creative Studio generation lifecycle integration', () => {
     expect(serialized).not.toContain(harness.rootDir);
     expect(serialized).not.toContain(harness.fake.provider.api_key);
     expect(serialized).not.toContain(harness.fake.provider.base_url);
+    const connectionManifest = await readFile(path.join(harness.rootDir, 'connections.json'), 'utf8');
+    expect(connectionManifest).not.toContain(harness.fake.provider.api_key);
+    expect(connectionManifest).not.toContain(harness.fake.provider.base_url);
   });
 
   it('rejects a stale route catalog without persisting or submitting a job', async () => {

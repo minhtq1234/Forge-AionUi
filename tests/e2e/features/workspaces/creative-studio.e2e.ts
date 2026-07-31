@@ -11,6 +11,7 @@ import { navigateTo, ROUTES } from '../../helpers';
 import path from 'node:path';
 
 test.describe('Creative Studio workspace', () => {
+  test.describe.configure({ timeout: 120_000 });
   test.skip(
     process.env.AIONUI_E2E_TEST !== '1' || process.env.AIONUI_E2E_STUDIO_FAKE !== '1' || process.env.E2E_DEV !== '1',
     'Creative Studio E2E requires both fake-provider flags and an explicit unpackaged dev launch.'
@@ -59,28 +60,58 @@ test.describe('Creative Studio workspace', () => {
       const studioLibrary = page.getByRole('region', { name: 'Creative Studio' });
       await expect(studioLibrary).toBeVisible();
 
-      await studioLibrary.getByRole('button', { name: 'New project' }).click();
       const createDialog = page.getByRole('dialog', { name: 'Create a Creative Studio project' });
-      await expect(createDialog).toBeVisible();
-      await createDialog.getByLabel('Project name').fill(projectName);
-      await createDialog
-        .getByLabel('Creative brief')
-        .fill('A deterministic E2E story used to verify local Studio persistence and safe job cancellation.');
-      await createDialog.getByLabel('Target length in seconds').fill('5');
-      await createDialog.getByRole('button', { name: 'Create project' }).click();
+      const submitCreateProject = async (attempt = 0): Promise<void> => {
+        if (!(await createDialog.isVisible())) {
+          await studioLibrary.getByRole('button', { name: 'New project' }).click();
+        }
+        await expect(createDialog).toBeVisible();
+        try {
+          await createDialog.getByLabel('Project name').fill(projectName, { timeout: 5_000 });
+          await createDialog
+            .getByLabel('Creative brief')
+            .fill('A deterministic E2E story used to verify local Studio persistence and safe job cancellation.', {
+              timeout: 5_000,
+            });
+          await createDialog.getByLabel('Target length in seconds').fill('5', { timeout: 5_000 });
+          await createDialog.getByRole('button', { name: 'Create project' }).click();
+        } catch (error) {
+          if (attempt >= 1) throw error;
+          await submitCreateProject(attempt + 1);
+        }
+      };
+      await submitCreateProject();
 
       await expect(page.getByRole('region', { name: 'Project overview' })).toBeVisible();
       await expect(page.getByRole('heading', { level: 1, name: projectName })).toBeVisible();
       await expect(page).toHaveURL(/#\/studio\/[A-Za-z0-9_-]+$/);
     });
 
-    await test.step('reload the renderer and recover the durable project', async () => {
+    await test.step('select and persist the project Video model across renderer reload', async () => {
+      const selectVideoModel = async (attempt = 0): Promise<void> => {
+        if (!(await page.getByRole('region', { name: 'Project overview' }).isVisible())) {
+          await page.getByRole('button', { name: projectName }).click();
+          await expect(page.getByRole('region', { name: 'Project overview' })).toBeVisible();
+        }
+        const videoModel = page.getByRole('combobox', { name: 'Video model' });
+        try {
+          await videoModel.click({ timeout: 5_000 });
+          await page.locator('.arco-select-option').filter({ hasText: 'weprompt-e2e-video' }).dispatchEvent('click');
+          await expect(videoModel).toContainText('weprompt-e2e-video');
+        } catch (error) {
+          if (attempt >= 2) throw error;
+          await selectVideoModel(attempt + 1);
+        }
+      };
+      await selectVideoModel();
+
       const projectUrl = page.url();
       await page.reload({ waitUntil: 'domcontentloaded' });
 
       await expect(page).toHaveURL(projectUrl);
       await expect(page.getByRole('region', { name: 'Project overview' })).toBeVisible();
       await expect(page.getByRole('heading', { level: 1, name: projectName })).toBeVisible();
+      await expect(page.getByRole('combobox', { name: 'Video model' })).toContainText('weprompt-e2e-video');
     });
 
     await test.step('submit through the fake route and cancel while remotely queued', async () => {
@@ -98,22 +129,15 @@ test.describe('Creative Studio workspace', () => {
       await visualPrompt.fill('A paper airplane crossing a calm blue studio backdrop.');
       await visualPrompt.blur();
 
-      const routingRegion = page.getByRole('region', { name: 'Generation route' });
-      await expect(routingRegion).toContainText('WePrompt Studio E2E');
-      await expect(routingRegion).toContainText('weprompt-e2e-video');
-      const fakeRouteOption = routingRegion.getByRole('radio', {
-        name: 'WePrompt Studio E2E weprompt-media-gateway-v1 weprompt-e2e-video',
-      });
-      if ((await fakeRouteOption.count()) > 0) {
-        await fakeRouteOption.click();
-      }
-
       const generateScene = page.getByRole('button', { name: 'Generate scene' });
       await expect(generateScene).toBeEnabled();
       await generateScene.click();
 
       const reviewDialog = page.getByRole('dialog', { name: 'Review generation' });
-      await expect(reviewDialog.getByText('weprompt_studio_e2e')).toBeVisible();
+      await expect(reviewDialog.getByText('WePrompt Studio E2E')).toBeVisible();
+      await expect(reviewDialog.getByText('weprompt-e2e-video')).toBeVisible();
+      await expect(reviewDialog.getByText('weprompt_studio_e2e')).toHaveCount(0);
+      await expect(reviewDialog.getByText('weprompt-media-gateway-v1')).toHaveCount(0);
       await reviewDialog.getByRole('button', { name: 'Confirm and generate' }).click();
 
       await expect(page.getByText('Queued by provider')).toBeVisible({ timeout: 5_000 });

@@ -23,6 +23,7 @@ import type {
 
 export const STUDIO_E2E_FAKE_PROVIDER_ID = 'weprompt_studio_e2e';
 const STUDIO_E2E_IMAGE_MODEL = 'weprompt-e2e-image';
+const STUDIO_E2E_NEXT_IMAGE_MODEL = 'weprompt-e2e-image-next';
 const STUDIO_E2E_VIDEO_MODEL = 'weprompt-e2e-video';
 const FAKE_FIXTURE_DIRECTORY = '.e2e-studio';
 const IMAGE_BYTES = Buffer.from('89504e470d0a1a0a', 'hex');
@@ -30,6 +31,7 @@ const VIDEO_BYTES = Buffer.from('000000186674797069736f6d0000000069736f6d69736f3
 
 export type StudioE2EFakeTask = {
   mediaKind: StudioMediaKind;
+  model: string;
   pollCount: number;
   cancelled: boolean;
 };
@@ -67,8 +69,10 @@ class StudioE2EFakeAdapterError extends Error {
   }
 }
 
-const expectedModel = (mediaKind: StudioMediaKind): string =>
-  mediaKind === 'image' ? STUDIO_E2E_IMAGE_MODEL : STUDIO_E2E_VIDEO_MODEL;
+const expectedModels = (mediaKind: StudioMediaKind): readonly string[] =>
+  mediaKind === 'image' ? [STUDIO_E2E_IMAGE_MODEL, STUDIO_E2E_NEXT_IMAGE_MODEL] : [STUDIO_E2E_VIDEO_MODEL];
+
+const acceptsModel = (mediaKind: StudioMediaKind, model: string): boolean => expectedModels(mediaKind).includes(model);
 
 const validateRequest = (
   request: StudioGenerationRequest,
@@ -78,7 +82,7 @@ const validateRequest = (
   const issues: StudioRouteIssue[] = [];
   if (
     provider.id !== STUDIO_E2E_FAKE_PROVIDER_ID ||
-    provider.use_model !== expectedModel(mediaKind) ||
+    !acceptsModel(mediaKind, provider.use_model) ||
     request.mediaKind !== mediaKind
   ) {
     issues.push({ code: 'provider_unavailable' });
@@ -147,7 +151,7 @@ export const createStudioE2EFakeBundle = ({
     id,
     async validateConnection(input, provider, signal) {
       signal.throwIfAborted();
-      return provider.id === STUDIO_E2E_FAKE_PROVIDER_ID && input.model === expectedModel(mediaKind)
+      return provider.id === STUDIO_E2E_FAKE_PROVIDER_ID && acceptsModel(mediaKind, input.model)
         ? {
             ok: true,
             capabilities: {
@@ -169,16 +173,23 @@ export const createStudioE2EFakeBundle = ({
       if (!validateRequest(request, provider, mediaKind).ok) throw new StudioE2EFakeAdapterError('unsupported');
       remoteState.taskCounter += 1;
       const providerJobId = `e2e_job_${remoteState.taskCounter}`;
-      remoteState.tasks.set(providerJobId, { mediaKind, pollCount: 0, cancelled: false });
+      remoteState.tasks.set(providerJobId, {
+        mediaKind,
+        model: provider.use_model,
+        pollCount: 0,
+        cancelled: false,
+      });
       return { kind: 'remote', providerJobId };
     },
     async poll(providerJobId, provider, signal): Promise<ProviderJobSnapshot> {
       signal.throwIfAborted();
-      if (provider.id !== STUDIO_E2E_FAKE_PROVIDER_ID || provider.use_model !== expectedModel(mediaKind)) {
+      if (provider.id !== STUDIO_E2E_FAKE_PROVIDER_ID || !acceptsModel(mediaKind, provider.use_model)) {
         throw new StudioE2EFakeAdapterError('unsupported');
       }
       const task = remoteState.tasks.get(providerJobId);
-      if (!task || task.mediaKind !== mediaKind) throw new StudioE2EFakeAdapterError('unknown');
+      if (!task || task.mediaKind !== mediaKind || task.model !== provider.use_model) {
+        throw new StudioE2EFakeAdapterError('unknown');
+      }
       if (task.cancelled) return { status: 'cancelled', error: { code: 'unknown' } };
       task.pollCount += 1;
       if (task.pollCount === 1) return { status: 'queued' };
@@ -187,11 +198,13 @@ export const createStudioE2EFakeBundle = ({
     },
     async cancel(providerJobId, provider, signal) {
       signal.throwIfAborted();
-      if (provider.id !== STUDIO_E2E_FAKE_PROVIDER_ID || provider.use_model !== expectedModel(mediaKind)) {
+      if (provider.id !== STUDIO_E2E_FAKE_PROVIDER_ID || !acceptsModel(mediaKind, provider.use_model)) {
         throw new StudioE2EFakeAdapterError('unsupported');
       }
       const task = remoteState.tasks.get(providerJobId);
-      if (!task || task.mediaKind !== mediaKind) throw new StudioE2EFakeAdapterError('unknown');
+      if (!task || task.mediaKind !== mediaKind || task.model !== provider.use_model) {
+        throw new StudioE2EFakeAdapterError('unknown');
+      }
       if (task.cancelled) return { kind: 'cancelled' };
       if (task.pollCount >= 2) return { kind: 'refused', error: { code: 'cancellation_refused' } };
       task.cancelled = true;
@@ -205,14 +218,16 @@ export const createStudioE2EFakeBundle = ({
     name: 'WePrompt Studio E2E',
     base_url: 'https://weprompt.invalid/e2e-studio',
     api_key: 'e2e-memory-only',
-    models: [STUDIO_E2E_IMAGE_MODEL, STUDIO_E2E_VIDEO_MODEL],
+    models: [STUDIO_E2E_IMAGE_MODEL, STUDIO_E2E_NEXT_IMAGE_MODEL, STUDIO_E2E_VIDEO_MODEL],
     enabled: true,
     model_enabled: {
       [STUDIO_E2E_IMAGE_MODEL]: true,
+      [STUDIO_E2E_NEXT_IMAGE_MODEL]: true,
       [STUDIO_E2E_VIDEO_MODEL]: true,
     },
     model_health: {
       [STUDIO_E2E_IMAGE_MODEL]: { status: 'healthy' },
+      [STUDIO_E2E_NEXT_IMAGE_MODEL]: { status: 'healthy' },
       [STUDIO_E2E_VIDEO_MODEL]: { status: 'healthy' },
     },
   };
@@ -226,6 +241,40 @@ export const createStudioE2EFakeBundle = ({
       capabilities: {
         mediaKinds: ['video'],
         audioModes: ['none'],
+        aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
+        resolutions: ['720p', '1080p'],
+        minDurationSeconds: 1,
+        maxDurationSeconds: 60,
+        supportsFirstFrame: true,
+        cancellation: true,
+      },
+      validatedAt: '1970-01-01T00:00:00.000Z',
+    },
+    {
+      schemaVersion: 1,
+      id: 'weprompt_studio_e2e_image',
+      providerId: STUDIO_E2E_FAKE_PROVIDER_ID,
+      adapterId: 'weprompt-image-v1',
+      model: STUDIO_E2E_IMAGE_MODEL,
+      capabilities: {
+        mediaKinds: ['image'],
+        aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
+        resolutions: ['720p', '1080p'],
+        minDurationSeconds: 1,
+        maxDurationSeconds: 60,
+        supportsFirstFrame: true,
+        cancellation: true,
+      },
+      validatedAt: '1970-01-01T00:00:00.000Z',
+    },
+    {
+      schemaVersion: 1,
+      id: 'weprompt_studio_e2e_image_next',
+      providerId: STUDIO_E2E_FAKE_PROVIDER_ID,
+      adapterId: 'weprompt-image-v1',
+      model: STUDIO_E2E_NEXT_IMAGE_MODEL,
+      capabilities: {
+        mediaKinds: ['image'],
         aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
         resolutions: ['720p', '1080p'],
         minDurationSeconds: 1,
