@@ -274,6 +274,8 @@ describe('StudioMediaModelsSection', () => {
     render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('settings.mediaModels.loadFailed');
+    expect(screen.queryByText('settings.mediaModels.empty')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'settings.mediaModels.addProvider' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'settings.mediaModels.refresh' }));
     expect(await screen.findByText('open-sora')).toBeInTheDocument();
     expect(bridge.listConnections.invoke).toHaveBeenCalledTimes(2);
@@ -417,7 +419,8 @@ describe('StudioMediaModelsSection', () => {
     expect(calls).toEqual(['validate', 'save', 'remove']);
   });
 
-  it('revalidates and saves the same safe tuple', async () => {
+  it('revalidates to one canonical visible row when save returns a replacement ID', async () => {
+    bridge.saveConnection.invoke.mockResolvedValue(ok(binding({ id: 'binding_revalidated' })));
     render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
     const row = await screen.findByRole('listitem', { name: 'open-sora' });
     fireEvent.click(within(row).getByRole('button', { name: 'settings.mediaModels.revalidate' }));
@@ -429,6 +432,21 @@ describe('StudioMediaModelsSection', () => {
 
     await waitFor(() => expect(bridge.validateConnection.invoke).toHaveBeenCalledExactlyOnceWith(request));
     await waitFor(() => expect(bridge.saveConnection.invoke).toHaveBeenCalledExactlyOnceWith(request));
+    await waitFor(() => expect(screen.getAllByRole('listitem', { name: 'open-sora' })).toHaveLength(1));
+  });
+
+  it('same-tuple edit replaces the visible row instead of duplicating it', async () => {
+    bridge.saveConnection.invoke.mockResolvedValue(ok(binding({ id: 'binding_edited' })));
+    render(<StudioMediaModelsSection providerRefreshToken={0} onAddProvider={vi.fn()} />);
+    const row = await screen.findByRole('listitem', { name: 'open-sora' });
+    fireEvent.click(within(row).getByRole('button', { name: 'settings.mediaModels.edit' }));
+    const dialog = screen.getByRole('dialog', { name: 'settings.mediaModels.editTitle' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'settings.mediaModels.validate' }));
+    const save = within(dialog).getByRole('button', { name: 'settings.mediaModels.save' });
+    await waitFor(() => expect(save).toBeEnabled());
+    fireEvent.click(save);
+
+    await waitFor(() => expect(screen.getAllByRole('listitem', { name: 'open-sora' })).toHaveLength(1));
   });
 
   it('removes a binding with only its safe connection ID', async () => {

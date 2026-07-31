@@ -97,6 +97,11 @@ const tupleMatches = (binding: SafeBinding, request: StudioSaveConnectionRequest
 const sameTuple = (left: SafeBinding, right: StudioSaveConnectionRequest): boolean =>
   left.providerId === right.providerId && left.adapterId === right.adapterId && left.model === right.model;
 
+const replaceCanonicalBinding = (current: SafeBinding[], saved: SafeBinding): SafeBinding[] => [
+  ...current.filter((item) => item.id !== saved.id && !sameTuple(item, saved)),
+  saved,
+];
+
 const emptyEditor = (): EditorState => ({
   visible: false,
   original: null,
@@ -271,7 +276,7 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
     }
 
     const original = editor.original;
-    setBindings((current) => [...current.filter((item) => item.id !== saved.id), saved]);
+    setBindings((current) => replaceCanonicalBinding(current, saved));
     if (original && !sameTuple(original, request)) {
       try {
         const removeResult = await ipcBridge.creativeStudio.removeConnection.invoke({
@@ -315,7 +320,7 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
       setMutationFailed(true);
       await refresh();
     } else {
-      setBindings((current) => [...current.filter((item) => item.id !== saved.id), saved]);
+      setBindings((current) => replaceCanonicalBinding(current, saved));
     }
     setBusyConnectionIds((current) => current.filter((id) => id !== binding.id));
   };
@@ -380,7 +385,7 @@ export const StudioMediaModelsSection: React.FC<StudioMediaModelsSectionProps> =
       )}
       {mutationFailed && <Alert type='error' content={t('settings.mediaModels.validationFailed')} />}
 
-      {loading && bindings.length === 0 ? (
+      {listFailed && bindings.length === 0 ? null : loading && bindings.length === 0 ? (
         <div className='flex min-h-80px items-center justify-center'>
           <Spin />
         </div>
