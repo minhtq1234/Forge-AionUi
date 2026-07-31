@@ -135,7 +135,7 @@ const createHarness = async (): Promise<RecoveryHarness> => {
     targetDurationSeconds: 5,
     resolution: '720p',
   });
-  const project = await store.updateProject(created.id, (current) => ({
+  let project = await store.updateProject(created.id, (current) => ({
     ...current,
     sceneOrder: [scene.id],
     scenes: { [scene.id]: structuredClone(scene) },
@@ -152,6 +152,13 @@ const createHarness = async (): Promise<RecoveryHarness> => {
     model: videoRoute.model,
     kind: videoRoute.kind,
   };
+  project = await store.updateProject(project.id, (current) => ({
+    ...current,
+    routing: {
+      ...current.routing,
+      video: { providerId: route.providerId, adapterId: route.adapterId, model: route.model },
+    },
+  }));
   const clock = new ControlledPollClock();
   const manager = createStudioJobManager({
     store,
@@ -320,9 +327,19 @@ describe('Creative Studio project recovery integration', () => {
       const catalog = await beforeRestart.runtime.service.listRoutes({ projectId: project.id });
       const videoRoute = catalog.automatic.find((candidate) => candidate.kind === 'video');
       if (!videoRoute) throw new Error('Fresh runtime did not resolve its E2E fake video route');
-      await beforeRestart.runtime.service.submitScenes({
+      const selectedProject = await beforeRestart.runtime.service.updateModelSelection({
         projectId: project.id,
         expectedRevision: project.revision,
+        role: 'video',
+        selection: {
+          providerId: videoRoute.providerId,
+          adapterId: videoRoute.adapterId,
+          model: videoRoute.model,
+        },
+      });
+      await beforeRestart.runtime.service.submitScenes({
+        projectId: selectedProject.id,
+        expectedRevision: selectedProject.revision,
         sceneIds: [scene.id],
         routes: [
           {

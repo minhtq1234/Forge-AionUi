@@ -1064,7 +1064,6 @@ export const createStudioMediaStore = (deps: StudioMediaStoreDeps): StudioMediaS
       job.error = null;
       delete job.progress;
       job.updatedAt = now();
-      current.routing[input.mediaKind] = job.provider;
       return current;
     });
   };

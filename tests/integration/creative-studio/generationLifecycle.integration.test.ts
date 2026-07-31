@@ -112,7 +112,7 @@ const createHarness = async (): Promise<Harness> => {
     targetDurationSeconds: 5,
     resolution: '720p',
   });
-  const project = await store.updateProject(created.id, (current) => ({
+  let project = await store.updateProject(created.id, (current) => ({
     ...current,
     sceneOrder: [scene.id],
     scenes: { [scene.id]: structuredClone(scene) },
@@ -132,6 +132,13 @@ const createHarness = async (): Promise<Harness> => {
     model: videoRoute.model,
     kind: videoRoute.kind,
   };
+  project = await store.updateProject(project.id, (current) => ({
+    ...current,
+    routing: {
+      ...current.routing,
+      video: { providerId: route.providerId, adapterId: route.adapterId, model: route.model },
+    },
+  }));
   const mediaStore = createStudioMediaStore({ store });
   const clock = new ControlledPollClock();
   const manager = createStudioJobManager({

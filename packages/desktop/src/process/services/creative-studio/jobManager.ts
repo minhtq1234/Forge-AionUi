@@ -985,6 +985,16 @@ export const createStudioJobManager = (deps: StudioJobManagerDeps): StudioJobMan
       const route = routeByScene.get(sceneId);
       if (!route) invalidRequest();
       const scene = project.scenes[sceneId];
+      if (!scene) throw new StudioJobManagerError('invalid_route');
+      const selected = project.routing[scene.mediaKind];
+      if (
+        selected === null ||
+        selected.providerId !== route.providerId ||
+        selected.adapterId !== route.adapterId ||
+        selected.model !== route.model
+      ) {
+        throw new StudioJobManagerError('invalid_route');
+      }
       const sceneJobs =
         scene?.jobIds.flatMap((jobId) => {
           const job = project.jobs[jobId];

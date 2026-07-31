@@ -45,6 +45,12 @@ const route: StudioSceneRouteSnapshot = {
   kind: 'image',
 };
 
+const selectionFor = (candidate: StudioSceneRouteSnapshot) => ({
+  providerId: candidate.providerId,
+  adapterId: candidate.adapterId,
+  model: candidate.model,
+});
+
 const incompatibleConstraints: Array<[string, Partial<StudioRouteConstraints>]> = [
   ['aspect ratio', { aspectRatios: ['1:1'] }],
   ['resolution', { resolutions: ['1080p'] }],
@@ -153,6 +159,10 @@ const createHarness = async (adapter: GenerationProviderAdapter, options: Harnes
   const scenes = options.scenes ?? [scene()];
   const routes = options.routes ?? [route];
   const selectedProvider = options.provider ?? provider;
+  const selectedRoute = (kind: StudioSceneRouteSnapshot['kind']) => {
+    const candidate = routes.find((routeCandidate) => routeCandidate.kind === kind);
+    return candidate ? selectionFor(candidate) : null;
+  };
   const created = await store.createProject({
     name: 'Launch film',
     brief: 'A concise launch story',
@@ -164,6 +174,11 @@ const createHarness = async (adapter: GenerationProviderAdapter, options: Harnes
     ...current,
     sceneOrder: scenes.map((candidate) => candidate.id),
     scenes: Object.fromEntries(scenes.map((candidate) => [candidate.id, candidate])),
+    routing: {
+      storyboard: selectedRoute('storyboard'),
+      image: selectedRoute('image'),
+      video: selectedRoute('video'),
+    },
   }));
   const mediaStore = createStudioMediaStore({ store });
   const managerMediaStore = options.decorateMediaStore?.(mediaStore) ?? mediaStore;
@@ -552,6 +567,49 @@ describe('StudioJobManager route and reference isolation', () => {
     submit,
   });
 
+  it('rejects a submitted route that differs from the project model selection', async () => {
+    const selected = { providerId: provider.id, adapterId: route.adapterId, model: 'image-a' };
+    const selectedRoute = { sceneId: route.sceneId, kind: route.kind, ...selected };
+    const submitted = { ...selectedRoute, model: 'image-b' };
+    const selectedProvider = { ...provider, models: ['image-a', 'image-b'] };
+    const harness = await createHarness(adapterWithSubmit(vi.fn()), {
+      routes: [selectedRoute, submitted],
+      provider: selectedProvider,
+    });
+    const project = await harness.store.updateProject(harness.project.id, (current) => ({
+      ...current,
+      routing: { ...current.routing, image: selected },
+    }));
+
+    await expect(
+      harness.manager.submitScenes({
+        projectId: project.id,
+        expectedRevision: project.revision,
+        sceneIds: ['scene_1'],
+        routes: [submitted],
+        catalogVersion: 'catalog_1',
+      })
+    ).rejects.toMatchObject({ code: 'invalid_route' });
+  });
+
+  it('rejects a new submission when its scene media kind has no project selection', async () => {
+    const harness = await createHarness(adapterWithSubmit(vi.fn()));
+    const project = await harness.store.updateProject(harness.project.id, (current) => ({
+      ...current,
+      routing: { ...current.routing, image: null },
+    }));
+
+    await expect(
+      harness.manager.submitScenes({
+        projectId: project.id,
+        expectedRevision: project.revision,
+        sceneIds: ['scene_1'],
+        routes: [route],
+        catalogVersion: 'catalog_1',
+      })
+    ).rejects.toMatchObject({ code: 'invalid_route' });
+  });
+
   it.each(incompatibleConstraints)(
     'rejects a canonical route with incompatible %s before submit',
     async (_, override) => {
@@ -838,6 +896,7 @@ describe('StudioJobManager scheduling', () => {
         ...project,
         sceneOrder: ['scene_1'],
         scenes: { scene_1: scene() },
+        routing: { ...project.routing, image: selectionFor(route) },
       }));
     };
     const [firstProject, secondProject] = await Promise.all([createProject('First'), createProject('Second')]);
@@ -1290,6 +1349,65 @@ describe('StudioJobManager cancellation', () => {
 });
 
 describe('StudioJobManager retries', () => {
+  it('retries with the immutable failed-job provider after the project default changes', async () => {
+    const changedSelection = { ...route, model: 'image-b' };
+    const adapter: GenerationProviderAdapter = {
+      id: route.adapterId,
+      validateConnection: async () => ({ ok: true }),
+      validateRequest: (request) => ({
+        ok: true,
+        normalized: {
+          aspectRatio: request.aspectRatio,
+          resolution: request.resolution,
+          durationSeconds: request.durationSeconds,
+        },
+      }),
+      submit: vi.fn(async () => ({ kind: 'complete' as const, outputs: [] })),
+    };
+    const harness = await createHarness(adapter, {
+      routes: [route, changedSelection],
+      provider: { ...provider, models: [route.model, changedSelection.model] },
+      jobIds: ['job_2'],
+      idempotencyKeys: ['key_2'],
+    });
+    const failed = await harness.store.updateProject(harness.project.id, (project) => {
+      const next = structuredClone(project);
+      next.jobs.job_1 = {
+        id: 'job_1',
+        projectId: project.id,
+        sceneId: 'scene_1',
+        status: 'failed',
+        provider: selectionFor(route),
+        idempotencyKey: 'key_1',
+        providerJobId: null,
+        outputAssetIds: [],
+        error: {
+          code: 'no_output',
+          messageKey: 'conversation.creativeStudio.jobs.errors.noOutput',
+        },
+        retryOfJobId: null,
+        retryReason: null,
+        duplicateChargeAcknowledged: false,
+        duplicateChargeAcknowledgedAt: null,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+      };
+      next.scenes.scene_1.jobIds.push('job_1');
+      next.scenes.scene_1.reviewState = 'blocked';
+      next.routing.image = selectionFor(changedSelection);
+      return next;
+    });
+
+    const retry = await harness.manager.retryJob({
+      projectId: failed.id,
+      jobId: 'job_1',
+      expectedRevision: failed.revision,
+    });
+
+    expect(retry.provider.model).toBe(route.model);
+    expect((await harness.store.getProject(failed.id))?.routing.image).toEqual(selectionFor(changedSelection));
+  });
+
   it('returns unsupported when a successful provider output has no durable remote task to re-download', async () => {
     const adapter: GenerationProviderAdapter = {
       id: 'weprompt-image-v1',

@@ -471,7 +471,33 @@ describe('createStudioMediaStore', () => {
       selectedAssetId: asset.id,
       reviewState: 'complete',
     });
-    expect(project?.routing.image).toEqual(project?.jobs.job_1.provider);
+    expect(project?.routing.image).toBeNull();
+  });
+
+  it('attaches a completed asset without overwriting a newer project model selection', async () => {
+    const { store } = await makeStore();
+    await addActiveImageJob(store);
+    const newer = {
+      providerId: 'provider_1',
+      adapterId: 'weprompt-image-v1',
+      model: 'image-b',
+    };
+    await store.updateProject('project_1', (project) => ({
+      ...project,
+      routing: { ...project.routing, image: newer },
+    }));
+    const media = createStudioMediaStore({ store, createId: () => 'asset_job_1' });
+
+    await media.persistProviderOutputForJob({
+      projectId: 'project_1',
+      sceneId: 'scene_1',
+      jobId: 'job_1',
+      mediaKind: 'image',
+      declaredMimeType: 'image/png',
+      body: Readable.from([png]),
+    });
+
+    expect((await store.getProject('project_1'))?.routing.image).toEqual(newer);
   });
 
   it('atomically appends one poster thumbnail without replacing a newly selected video variation', async () => {
