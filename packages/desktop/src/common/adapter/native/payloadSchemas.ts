@@ -178,6 +178,64 @@ const studioProjectInputSchema = z
   })
   .strict();
 const studioProjectRequestSchema = z.object({ projectId: safeIdSchema }).strict();
+const isUnsafeStudioTextCharacter = (character: string): boolean => {
+  const codePoint = character.codePointAt(0)!;
+  return codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f) || (codePoint >= 0xd800 && codePoint <= 0xdfff);
+};
+const studioModelSchema = z
+  .string()
+  .min(1)
+  .max(256)
+  .refine((value) => value === value.trim() && !Array.from(value).some(isUnsafeStudioTextCharacter));
+const studioTextModelSelectionSchema = z
+  .object({
+    providerId: safeIdSchema,
+    model: studioModelSchema,
+  })
+  .strict();
+const studioImageModelSelectionSchema = z
+  .object({
+    providerId: safeIdSchema,
+    adapterId: z.literal('weprompt-image-v1'),
+    model: studioModelSchema,
+  })
+  .strict();
+const studioVideoModelSelectionSchema = z
+  .object({
+    providerId: safeIdSchema,
+    adapterId: z.enum(['byteplus-seedance-v1', 'weprompt-media-gateway-v1']),
+    model: studioModelSchema,
+  })
+  .strict();
+const storyboardSelectionSchema = z
+  .object({
+    projectId: safeIdSchema,
+    expectedRevision: studioExpectedRevisionSchema,
+    role: z.literal('storyboard'),
+    selection: studioTextModelSelectionSchema.nullable(),
+  })
+  .strict();
+const imageSelectionSchema = z
+  .object({
+    projectId: safeIdSchema,
+    expectedRevision: studioExpectedRevisionSchema,
+    role: z.literal('image'),
+    selection: studioImageModelSelectionSchema.nullable(),
+  })
+  .strict();
+const videoSelectionSchema = z
+  .object({
+    projectId: safeIdSchema,
+    expectedRevision: studioExpectedRevisionSchema,
+    role: z.literal('video'),
+    selection: studioVideoModelSelectionSchema.nullable(),
+  })
+  .strict();
+const studioUpdateModelSelectionSchema = z.discriminatedUnion('role', [
+  storyboardSelectionSchema,
+  imageSelectionSchema,
+  videoSelectionSchema,
+]);
 const studioProviderAdapterSchema = z.enum(['weprompt-image-v1', 'byteplus-seedance-v1', 'weprompt-media-gateway-v1']);
 const studioConnectionSchema = z
   .object({
@@ -332,6 +390,7 @@ export const nativeBridgePayloadSchemas = {
       replaceExisting: z.boolean(),
     })
     .strict(),
+  'creative-studio.update-model-selection': studioUpdateModelSelectionSchema,
   'creative-studio.update-project': studioUpdateProjectSchema,
   'creative-studio.delete-project': z
     .object({ projectId: safeIdSchema, expectedRevision: studioExpectedRevisionSchema })

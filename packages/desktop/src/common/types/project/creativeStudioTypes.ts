@@ -451,6 +451,7 @@ export type StudioDesktopApi = {
   createProject(input: CreateStudioProjectInput): Promise<StudioCommandResult<StudioRendererProject>>;
   getProject(input: StudioProjectRequest): Promise<StudioCommandResult<StudioRendererProject | null>>;
   proposeStoryboard(input: ProposeStudioStoryboardInput): Promise<StudioCommandResult<StudioRendererProject>>;
+  updateModelSelection(input: StudioUpdateModelSelectionRequest): Promise<StudioCommandResult<StudioRendererProject>>;
   updateProject(input: StudioUpdateProjectRequest): Promise<StudioCommandResult<StudioRendererProject>>;
   deleteProject(input: StudioDeleteProjectRequest): Promise<StudioCommandResult<boolean>>;
   updateScene(input: StudioUpdateSceneRequest): Promise<StudioCommandResult<StudioRendererProject>>;

@@ -85,6 +85,7 @@ import type {
   StudioRetryJobRequest,
   StudioSelectAssetRequest,
   StudioSubmitScenesRequest,
+  StudioUpdateModelSelectionRequest,
   StudioUpdateProjectRequest,
   StudioUpdateSceneRequest,
 } from '../types/project/creativeStudioTypes';
@@ -1027,6 +1028,10 @@ export const creativeStudio = {
   proposeStoryboard: bridge.buildProvider<StudioCommandResult<StudioRendererProject>, ProposeStudioStoryboardInput>(
     'creative-studio.propose-storyboard'
   ),
+  updateModelSelection: bridge.buildProvider<
+    StudioCommandResult<StudioRendererProject>,
+    StudioUpdateModelSelectionRequest
+  >('creative-studio.update-model-selection'),
   updateProject: bridge.buildProvider<StudioCommandResult<StudioRendererProject>, StudioUpdateProjectRequest>(
     'creative-studio.update-project'
   ),

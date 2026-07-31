@@ -5,7 +5,11 @@
  */
 
 import { ipcBridge } from '@/common';
-import type { StudioCommandErrorCode, StudioCommandResult } from '@/common/types/project/creativeStudioTypes';
+import type {
+  StudioCommandErrorCode,
+  StudioCommandResult,
+  StudioUpdateModelSelectionRequest,
+} from '@/common/types/project/creativeStudioTypes';
 import {
   CreativeStudioServiceError,
   type CreativeStudioService,
@@ -92,6 +96,9 @@ export function initCreativeStudioBridge(dependencies: CreativeStudioBridgeDepen
   );
   ipcBridge.creativeStudio.proposeStoryboard.provider((input) =>
     command(() => dependencies.getService().proposeStoryboard(input))
+  );
+  ipcBridge.creativeStudio.updateModelSelection.provider((input: StudioUpdateModelSelectionRequest) =>
+    command(() => dependencies.getService().updateModelSelection(input))
   );
   ipcBridge.creativeStudio.updateProject.provider((input) =>
     command(() => dependencies.getService().updateProject(input))

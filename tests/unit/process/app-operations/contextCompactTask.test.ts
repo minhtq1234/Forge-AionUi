@@ -450,6 +450,17 @@ describe('runContextCompact', () => {
     expect(result).toMatchObject({ ok: true, output: { through_turn_id: 'turn-previous' } });
     if (result.ok) expect(result.output.through_turn_id).not.toBe('message-2');
   });
+
+  it('keeps Studio storyboard planning outside the App Operations registry', async () => {
+    const retiredStudioTaskId = ['studio', 'storyboard-draft'].join('.');
+    const result = await appOperationsBroker.runTask(retiredStudioTaskId, {});
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_input' },
+      operation: { task_id: retiredStudioTaskId, prompt_version: 'unknown' },
+    });
+  });
 });
 
 describe('buildSystemPrompt', () => {

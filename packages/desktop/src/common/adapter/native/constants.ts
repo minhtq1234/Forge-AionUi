@@ -48,6 +48,7 @@ export const NATIVE_BRIDGE_PROVIDER_KEYS = [
   'creative-studio.create-project',
   'creative-studio.get-project',
   'creative-studio.propose-storyboard',
+  'creative-studio.update-model-selection',
   'creative-studio.update-project',
   'creative-studio.delete-project',
   'creative-studio.update-scene',

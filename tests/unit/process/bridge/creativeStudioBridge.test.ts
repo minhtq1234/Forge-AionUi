@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   createProjectProvider: vi.fn(),
   getProjectProvider: vi.fn(),
   proposeStoryboardProvider: vi.fn(),
+  updateModelSelectionProvider: vi.fn(),
   updateProjectProvider: vi.fn(),
   deleteProjectProvider: vi.fn(),
   updateSceneProvider: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock('@/common', () => ({
       createProject: { provider: mocks.createProjectProvider },
       getProject: { provider: mocks.getProjectProvider },
       proposeStoryboard: { provider: mocks.proposeStoryboardProvider },
+      updateModelSelection: { provider: mocks.updateModelSelectionProvider },
       updateProject: { provider: mocks.updateProjectProvider },
       deleteProject: { provider: mocks.deleteProjectProvider },
       updateScene: { provider: mocks.updateSceneProvider },
@@ -100,6 +102,7 @@ describe('initCreativeStudioBridge', () => {
         createProject: vi.fn(async () => project),
         getProject: vi.fn(async () => project),
         proposeStoryboard: vi.fn(async () => project),
+        updateModelSelection: vi.fn(async () => project),
         updateProject: vi.fn(async () => project),
         deleteProject: vi.fn(async () => true),
         updateScene: vi.fn(async () => project),
@@ -128,6 +131,7 @@ describe('initCreativeStudioBridge', () => {
     expect(mocks.createProjectProvider).toHaveBeenCalledOnce();
     expect(mocks.getProjectProvider).toHaveBeenCalledOnce();
     expect(mocks.proposeStoryboardProvider).toHaveBeenCalledOnce();
+    expect(mocks.updateModelSelectionProvider).toHaveBeenCalledOnce();
     expect(mocks.updateProjectProvider).toHaveBeenCalledOnce();
     expect(mocks.deleteProjectProvider).toHaveBeenCalledOnce();
     expect(mocks.updateSceneProvider).toHaveBeenCalledOnce();
@@ -145,6 +149,58 @@ describe('initCreativeStudioBridge', () => {
     expect(mocks.saveConnectionProvider).toHaveBeenCalledOnce();
     expect(mocks.removeConnectionProvider).toHaveBeenCalledOnce();
     expect(mocks.listRoutesProvider).toHaveBeenCalledOnce();
+  });
+
+  it('delegates one exact model-selection mutation', async () => {
+    const service = dependencies.getService();
+    initCreativeStudioBridge({ getService: () => service });
+    const handler = mocks.updateModelSelectionProvider.mock.calls[0]?.[0] as ProviderHandler;
+    const input = {
+      projectId: 'project_1',
+      expectedRevision: 4,
+      role: 'storyboard',
+      selection: { providerId: 'provider_1', model: 'gpt-4o' },
+    } as const;
+
+    await handler(input);
+
+    expect(service.updateModelSelection).toHaveBeenCalledExactlyOnceWith(input);
+  });
+
+  it.each([
+    [
+      new CreativeStudioServiceError('invalid_route'),
+      'invalid_route',
+      'conversation.creativeStudio.errors.invalidRoute',
+    ],
+    [
+      new CreativeStudioStoreError('stale_project', 'raw compare-and-set failure'),
+      'stale_project',
+      'conversation.creativeStudio.errors.staleProject',
+    ],
+    [
+      new CreativeStudioStoreError('storage_error', 'raw storage path'),
+      'storage_error',
+      'conversation.creativeStudio.errors.storage',
+    ],
+  ] as const)('maps model-selection service failures without exposing details', async (failure, code, messageKey) => {
+    const service = {
+      ...dependencies.getService(),
+      updateModelSelection: vi.fn(async () => {
+        throw failure;
+      }),
+    };
+    initCreativeStudioBridge({ getService: () => service });
+    const handler = mocks.updateModelSelectionProvider.mock.calls[0]?.[0] as ProviderHandler;
+
+    await expect(
+      handler({
+        projectId: 'project_1',
+        expectedRevision: 4,
+        role: 'storyboard',
+        selection: { providerId: 'provider_1', model: 'gpt-4o' },
+      })
+    ).resolves.toEqual({ ok: false, error: { code, messageKey } });
   });
 
   it('delegates generation mutations with their route, revision, and acknowledgement contracts intact', async () => {
@@ -499,6 +555,15 @@ describe('initCreativeStudioBridge', () => {
       ],
       [mocks.getProjectProvider, { projectId: 'project_1' }],
       [mocks.proposeStoryboardProvider, { projectId: 'project_1', expectedRevision: 1, replaceExisting: false }],
+      [
+        mocks.updateModelSelectionProvider,
+        {
+          projectId: 'project_1',
+          expectedRevision: 1,
+          role: 'storyboard',
+          selection: { providerId: 'provider_1', model: 'gpt-4o' },
+        },
+      ],
       [mocks.updateProjectProvider, { projectId: 'project_1', expectedRevision: 1, name: 'Changed' }],
       [mocks.deleteProjectProvider, { projectId: 'project_1', expectedRevision: 1 }],
       [mocks.updateSceneProvider, sceneInput],
@@ -520,6 +585,7 @@ describe('initCreativeStudioBridge', () => {
     expect(service.createProject).toHaveBeenCalledOnce();
     expect(service.getProject).toHaveBeenCalledOnce();
     expect(service.proposeStoryboard).toHaveBeenCalledOnce();
+    expect(service.updateModelSelection).toHaveBeenCalledOnce();
     expect(service.updateProject).toHaveBeenCalledOnce();
     expect(service.deleteProject).toHaveBeenCalledOnce();
     expect(service.updateScene).toHaveBeenCalledOnce();

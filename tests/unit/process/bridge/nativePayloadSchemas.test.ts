@@ -96,6 +96,16 @@ const VALID_PAYLOADS = {
   },
   'creative-studio.get-project': { projectId: 'project_1' },
   'creative-studio.propose-storyboard': { projectId: 'project_1', expectedRevision: 1, replaceExisting: false },
+  'creative-studio.update-model-selection': {
+    projectId: 'project_1',
+    expectedRevision: 2,
+    role: 'video',
+    selection: {
+      providerId: 'provider_1',
+      adapterId: 'weprompt-media-gateway-v1',
+      model: 'open-sora',
+    },
+  },
   'creative-studio.update-project': { projectId: 'project_1', expectedRevision: 1, name: 'Changed launch film' },
   'creative-studio.delete-project': { projectId: 'project_1', expectedRevision: 1 },
   'creative-studio.update-scene': {
@@ -546,6 +556,111 @@ const INVALID_PAYLOADS = [
     { projectId: 'project_1', name: 'Changed launch film' },
   ],
   [
+    'creative-studio.update-model-selection',
+    'project id traversal',
+    { ...VALID_PAYLOADS['creative-studio.update-model-selection'], projectId: '../project_1' },
+  ],
+  [
+    'creative-studio.update-model-selection',
+    'provider id traversal',
+    {
+      ...VALID_PAYLOADS['creative-studio.update-model-selection'],
+      selection: {
+        ...VALID_PAYLOADS['creative-studio.update-model-selection'].selection,
+        providerId: '../provider_1',
+      },
+    },
+  ],
+  [
+    'creative-studio.update-model-selection',
+    'missing expected revision',
+    { ...VALID_PAYLOADS['creative-studio.update-model-selection'], expectedRevision: undefined },
+  ],
+  [
+    'creative-studio.update-model-selection',
+    'zero expected revision',
+    { ...VALID_PAYLOADS['creative-studio.update-model-selection'], expectedRevision: 0 },
+  ],
+  [
+    'creative-studio.update-model-selection',
+    'fractional expected revision',
+    { ...VALID_PAYLOADS['creative-studio.update-model-selection'], expectedRevision: 1.5 },
+  ],
+  [
+    'creative-studio.update-model-selection',
+    'storyboard adapter',
+    {
+      projectId: 'project_1',
+      expectedRevision: 2,
+      role: 'storyboard',
+      selection: {
+        providerId: 'provider_1',
+        adapterId: 'weprompt-media-gateway-v1',
+        model: 'gpt-4o',
+      },
+    },
+  ],
+  [
+    'creative-studio.update-model-selection',
+    'media selection without adapter',
+    {
+      projectId: 'project_1',
+      expectedRevision: 2,
+      role: 'video',
+      selection: { providerId: 'provider_1', model: 'open-sora' },
+    },
+  ],
+  [
+    'creative-studio.update-model-selection',
+    'image role with video adapter',
+    {
+      projectId: 'project_1',
+      expectedRevision: 2,
+      role: 'image',
+      selection: {
+        providerId: 'provider_1',
+        adapterId: 'weprompt-media-gateway-v1',
+        model: 'image-model',
+      },
+    },
+  ],
+  [
+    'creative-studio.update-model-selection',
+    'video role with image adapter',
+    {
+      projectId: 'project_1',
+      expectedRevision: 2,
+      role: 'video',
+      selection: {
+        providerId: 'provider_1',
+        adapterId: 'weprompt-image-v1',
+        model: 'video-model',
+      },
+    },
+  ],
+  [
+    'creative-studio.update-model-selection',
+    'overlong model',
+    {
+      ...VALID_PAYLOADS['creative-studio.update-model-selection'],
+      selection: {
+        ...VALID_PAYLOADS['creative-studio.update-model-selection'].selection,
+        model: 'x'.repeat(257),
+      },
+    },
+  ],
+  [
+    'creative-studio.update-model-selection',
+    'control character in model',
+    {
+      ...VALID_PAYLOADS['creative-studio.update-model-selection'],
+      selection: {
+        ...VALID_PAYLOADS['creative-studio.update-model-selection'].selection,
+        model: 'open\u0000sora',
+      },
+    },
+  ],
+  [
     'creative-studio.update-project',
     'non-positive expected revision',
     { projectId: 'project_1', expectedRevision: 0, name: 'Changed launch film' },
@@ -808,6 +923,15 @@ const INVALID_PAYLOADS = [
 ] satisfies ReadonlyArray<InvalidPayloadCase>;
 
 describe('native bridge payload schemas', () => {
+  it('accepts the exact revisioned Studio video model-selection payload', () => {
+    expect(
+      parseNativeBridgePayload(
+        'creative-studio.update-model-selection',
+        VALID_PAYLOADS['creative-studio.update-model-selection']
+      )
+    ).toEqual(VALID_PAYLOADS['creative-studio.update-model-selection']);
+  });
+
   it('keeps the native manifest equal to adapter provider string literals', () => {
     const providerKeys = collectBridgeBuildProviderKeys(readFileSync(IPC_BRIDGE_PATH, 'utf8'));
 
